@@ -1,0 +1,58 @@
+#!/usr/bin/env zsh
+usage='visible [secs]   run a public command from stdin in Terminal; return complete stdout, stderr
+and its original exit status (default 60 s). Command and output must contain no secrets.
+visible --collect <id>   collect a completed job without executing it again
+visible --execute <id>   internal Terminal runner, single-use
+On timeout exits 124, retains private ~/apm/state/visible/<id> and prints the collect command.
+Other failures exit 1; usage errors exit 2. A completed job is removed after collection.'
+usage_error() { print -u2 -r -- 'visible: usage: visible [secs] | --collect <id>'; exit 2; }
+die() { print -u2 -r -- "visible: $1"; exit 1; }
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+mode=run; secs=60
+if [[ $# -eq 2 && $1 == (--collect|--execute) && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]]; then
+  mode=${1#--}; id=$2
+elif [[ $# -eq 1 && $1 == <-> ]]; then secs=$1
+elif [[ $# -ne 0 ]]; then usage_error
+fi
+umask 077
+root=~/apm/state/visible
+if [[ $mode == run ]]; then
+  input=$(cat; print x); input=${input%x}
+  [[ -n ${input//[[:space:]]/} ]] || usage_error
+  id=$(date +%s)-$$-$RANDOM
+  mkdir -p $root && mkdir $root/$id || die 'cannot create job'
+  print -rn -- "$input" > $root/$id/command || die 'cannot write command'
+fi
+job=$root/$id
+[[ -d $job ]] || die "no job $id"
+if [[ $mode == execute ]]; then
+  mkdir $job/running 2>/dev/null || die "job $id already started"
+  cat $job/command || die "cannot read command for $id"
+  print
+  mkfifo $job/out.pipe $job/err.pipe || die "cannot make pipes for $id"
+  tee $job/stdout < $job/out.pipe & out_pid=$!
+  tee $job/stderr < $job/err.pipe >&2 & err_pid=$!
+  zsh -f $job/command </dev/null > $job/out.pipe 2> $job/err.pipe; rc=$?
+  wait $out_pid; out_rc=$?
+  wait $err_pid; err_rc=$?
+  (( out_rc == 0 && err_rc == 0 )) || die "capture failed for $id"
+  print -r -- $rc > $job/rc.tmp && mv -f $job/rc.tmp $job/rc || die "cannot complete $id"
+  exit 0
+fi
+if [[ $mode == run ]]; then
+  print -r -- "~/apm/bin/visible --execute $id" | ~/apm/bin/ans $secs >/dev/null; wait_rc=$?
+  if [[ ! -e $job/rc && $wait_rc != 0 && $wait_rc != 124 ]]; then
+    die "Terminal launch failed; retained $id"
+  fi
+fi
+if [[ ! -e $job/rc ]]; then
+  print -u2 -r -- "visible: still running or launch uncertain: $id; recover with mini exec --collect $id"
+  exit 124
+fi
+rc=$(<$job/rc)
+[[ $rc == <-> && ${#rc} -le 3 ]] && (( rc <= 255 )) &&
+  [[ -f $job/stdout && -f $job/stderr ]] || die "invalid result for $id; retained"
+cat $job/stdout || die "cannot read stdout for $id"
+cat $job/stderr >&2 || die "cannot read stderr for $id"
+rm -rf -- "${job:?}"
+exit $rc

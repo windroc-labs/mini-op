@@ -50,7 +50,7 @@ export const ALLOWLIST = [
   ..."sh bash zsh env cat cp mv rm mkdir rmdir ln ls chmod touch printf echo sed grep awk cut tr".split(
     " ",
   ),
-  ..."head tail sort uniq wc tee date sleep dirname basename readlink realpath mktemp stat find".split(
+  ..."head tail sort uniq wc tee date sleep dirname basename readlink realpath mktemp mkfifo stat find".split(
     " ",
   ),
   ..."xargs tar gzip od base64 diff cmp id uname true false kill perl shasum sha256sum git node jq".split(

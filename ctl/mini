@@ -1,6 +1,8 @@
 #!/usr/bin/env zsh
 setopt pipefail
-usage="mini run [secs] [--to <id>]   type stdin into the Terminal and wait; not for secrets: use mini pw
+usage="mini exec [secs]             run public stdin in Terminal; complete stdout/stderr and original rc
+mini exec --collect <id>      collect a retained job; never starts another command
+mini run [secs] [--to <id>]   type stdin into the Terminal and wait; not for secrets: use mini pw
                               (~/apm/bin/ans on the mini: secs default 60; --to <id> answers that
                               command's prompt)
 mini pw [--lock | --sa]       type the mini account's password into the mini's front Terminal, its
@@ -88,6 +90,34 @@ password_file() {
   print -r -- $file
 }
 
+exec_mini() {
+  local args=60
+  if [[ $# -eq 1 && $1 =~ '^[0-9]+$' ]]; then args=$1
+  elif [[ $# -eq 2 && $1 == --collect && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]]; then
+    args="--collect $2"
+  elif [[ $# -ne 0 ]]; then usage_error 'mini exec [secs] | --collect <id>'
+  fi
+  local transport frame bytes footer rc
+  exec_err=$(mktemp) || die 'exec: cannot make a temp file'
+  trap 'rm -f -- "${exec_err:?}"' EXIT
+  mini_ssh -o BatchMode=yes mini "~/apm/bin/visible $args; rc=\$?; printf '\\nmini-exec-rc:%s\\n' \$rc >&2; exit 0" 2>$exec_err
+  transport=$?
+  if (( transport != 0 )); then
+    cat $exec_err >&2
+    print -u2 -r -- 'mini: exec: ssh to the mini failed; completion unknown'
+    exit 255
+  fi
+  frame=$(tail -n 1 $exec_err)
+  rc=${frame#mini-exec-rc:}
+  [[ $frame == mini-exec-rc:* && $rc == <-> && ${#rc} -le 3 ]] && (( rc <= 255 )) ||
+    { cat $exec_err >&2; die 'exec: missing result status; completion unknown'; }
+  bytes=$(wc -c < $exec_err)
+  footer=$(( ${#frame} + 2 ))
+  (( bytes >= footer )) || die 'exec: missing result status; completion unknown'
+  head -c $((bytes - footer)) $exec_err >&2
+  exit $rc
+}
+
 run_mini() {
   local secs=60 to=""
   [[ $# -gt 0 && $1 =~ '^[0-9]+$' ]] && { secs=$1; shift; }
@@ -148,9 +178,10 @@ chord_mini() {
   on_mini chord "$(timed chord 10 'the chord' "$chord"); exit \$rc"
 }
 
-synopsis='mini run|pw|sudo|chord|sync …; mini -h for each'
+synopsis='mini exec|run|pw|sudo|chord|sync …; mini -h for each'
 case $1 in
   -h) [[ $# -eq 1 ]] || usage_error $synopsis; print -r -- $usage ;;
+  exec) shift; exec_mini "$@" ;;
   run) shift; run_mini "$@" ;;
   pw) shift; pw_mini "$@" ;;
   sudo) shift; sudo_mini "$@" ;;
