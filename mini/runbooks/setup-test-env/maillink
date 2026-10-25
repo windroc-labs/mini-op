@@ -29,6 +29,7 @@ rows(){
 case $cmd in
   mark)
     mkdir -p ~/apm/state 2>/dev/null || { print -u2 -r -- 'maillink: cannot make ~/apm/state'; exit 1; }
+    rm -f -- "${S:?}" || { print -u2 -r -- 'maillink: cannot remove old mark; marked nothing'; exit 1; }
     seen=()
     for f in $folders; do
       rows $f || { print -u2 -r -- "maillink: $f did not render in 15 s; marked nothing"; exit 1; }

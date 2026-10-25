@@ -132,13 +132,28 @@ test("mark remembers the Linear mails of both folders once listed, opening none"
 });
 
 test("mark exits 1 and marks nothing when a folder never lists", async (t) => {
-  const { sb, run, sleeps } = await sandbox(t, { inbox: [["c1"]], junk: ["-"] });
+  const { sb, run, sleeps, mark } = await sandbox(t, { inbox: [["c1"]], junk: ["-"] });
+  mark(["stale"]);
   const r = await run(["mark", EMAIL]);
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
   assert.equal(r.stderr, `maillink: ${JUNK} did not render in 15 s; marked nothing\n`);
   assert.equal(sleeps(), Array(15).fill("1").join(" "));
   assert.ok(!fs.existsSync(path.join(sb.dir, MARK)));
+});
+
+test("mark deletes the previous baseline before the first folder read", async (t) => {
+  const { sb, run, mark } = await sandbox(t, { inbox: [["new"]], junk: [[]] });
+  mark(["stale"]);
+  sb.fake("o", [
+    {
+      shell: `[[ ! -e $HOME/apm/state/maillink.role_1_x_com ]] || exit 1\n${O}`,
+      ignoresStdin: true,
+    },
+  ]);
+  const r = await run(["mark", EMAIL]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(sb.dir, MARK), "utf8"), "new\n");
 });
 
 test("follow opens the link of a Linear mail not marked, in Junk Email too", async (t) => {
