@@ -17,6 +17,7 @@ print -r -- "$rc" > "$HOME/apm/state/done/$ID.tmp" && mv "$HOME/apm/state/done/$
 
 async function sandbox(t: Parameters<typeof Sandbox.create>[0]) {
   const sb = await Sandbox.create(t);
+  sb.mini();
   const done = path.join(sb.home, "apm/state/done");
   fs.mkdirSync(done, { recursive: true });
   const wait = async (args: string[], opts: { screen?: string; finish?: string } = {}) => {

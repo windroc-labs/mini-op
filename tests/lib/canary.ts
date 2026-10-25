@@ -303,6 +303,7 @@ export const SECRET_SCRIPTS: Scenario[] = [
     title: "prints the screen with every secret pattern hidden",
     args: () => ["1", "--after", ID],
     setup(sb) {
+      sb.mini();
       const { text, secrets } = screen();
       fs.mkdirSync(path.join(sb.home, "apm/state/done"), { recursive: true });
       fs.writeFileSync(path.join(sb.home, "apm/state/done", ID), "0\n");

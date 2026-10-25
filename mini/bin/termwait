@@ -17,8 +17,7 @@ q=$1; id=$3; dir=~/apm/state/done; marker=$dir/$id
 for f in $dir/<->-<->-<->(N.mh+24) $dir/<->-<->-<->.tmp(N.mh+24); do rm -f -- "${f:?}"; done
 # One check per second of <secs> plus the one before the first sleep.
 poll $((q + 1)) 1 test -e $marker
-osascript -l JavaScript ~/apm/js/terminal.js contents 2>/dev/null |
-  secrets_redact | sed -E '/^[[:space:]]*$/d' | tail -25
+~/apm/bin/termtail
 if [[ ! -e $marker ]]; then
   print -u2 -r -- \
     "termwait: still running: $id (after $q s); keep waiting with termwait <secs> --after $id"

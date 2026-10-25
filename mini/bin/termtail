@@ -1,0 +1,17 @@
+#!/usr/bin/env zsh
+usage='termtail [N | --all]   read the last N nonblank Terminal lines (default 25), secrets redacted before
+truncation. Read-only: never activates, scrolls or types. Exits 0, 1 (unreadable), 2 (usage)
+or 124 (the Terminal read timed out after 5 s). --all returns the full redacted snapshot.'
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+[[ $# -eq 0 || ($# -eq 1 && ($1 == <1-> || $1 == --all)) ]] ||
+  { print -u2 -r -- 'termtail: usage: termtail [N]'; exit 2; }
+source ${0:A:h}/../lib/secrets.zsh || exit 1
+source ${0:A:h}/../lib/timeout.zsh || exit 1
+text=$(with_timeout 5 osascript -l JavaScript ~/apm/js/terminal.js contents 2>/dev/null); rc=$?
+if (( rc != 0 )); then
+  if (( rc == 124 )); then print -u2 -r -- 'termtail: killed after 5 s: reading Terminal'; exit 124; fi
+  print -u2 -r -- 'termtail: cannot read Terminal'; exit 1
+fi
+if [[ $1 == --all ]]; then print -r -- "$text" | secrets_redact
+else print -r -- "$text" | secrets_redact | sed -E '/^[[:space:]]*$/d' | tail -n ${1:-25}
+fi
