@@ -92,7 +92,7 @@ async function sandbox(
       .map((c) =>
         c.argv[0] === "eval"
           ? `eval go ${goTo(c.argv[1]).join(" ")}`
-          : c.argv.slice(0, -4).join(" "),
+          : c.argv.slice(0, -2).join(" "),
       );
   return { sb, run, sleeps, actions };
 }
@@ -117,6 +117,7 @@ test("a logged-out tab gets the login link for the email and lands past the logi
     ],
   );
   assert.deepEqual(sb.calls("osascript")[0]?.argv.slice(-2), ["close", "linear.app/logout"]);
+  assert.ok(sb.calls("o").every((c) => !c.argv.some((arg) => arg.startsWith("--window"))));
   assert.equal(sleeps(), "3 1");
 });
 

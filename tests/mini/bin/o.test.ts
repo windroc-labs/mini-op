@@ -58,13 +58,11 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
   assert.deepEqual(sb.calls(), []);
 });
 
-test("foreground is enforced once and background or missing values are refused", async (t) => {
+test("caller window options are refused before any browser action", async (t) => {
   const sb = await Sandbox.create(t);
-  sb.fake("opencli", [{}]);
-  const r = await sb.run(["zsh", O, "state", "--window", "foreground"]);
-  assert.equal(r.code, 0);
-  assert.deepEqual(sb.calls("opencli")[0]?.argv, ["browser", "state", "--window", "foreground"]);
   for (const args of [
+    ["state", "--window", "foreground"],
+    ["state", "--window=foreground"],
     ["state", "--window", "background"],
     ["state", "--window"],
     ["state", "--window=background"],
@@ -72,7 +70,7 @@ test("foreground is enforced once and background or missing values are refused",
     const bad = await sb.run(["zsh", O, ...args]);
     assert.equal(bad.code, 2);
   }
-  assert.equal(sb.calls("opencli").length, 1);
+  assert.deepEqual(sb.calls(), []);
 });
 
 test("private mode hides Chrome before OpenCLI and never adds foreground", async (t) => {

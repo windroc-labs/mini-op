@@ -56,7 +56,7 @@ Files sit by where they run.
 | `mini/js/terminal.js activate\|front\|history [--all]\|contents\|bottom`, `mini/js/chrome.js activate\|close <url-substring>\|hide\|auth` | JXA: Terminal (activate hides Chrome; bottom is Cmd+End); Chrome hide verifies it is hidden; auth consumes a trusted page program on stdin, never a token argv, and fails safely unless one Linear tab and JavaScript from Apple Events are available |
 | `mini/bin/dialogs [click <button>]` | lists on-screen windows with buttons, or presses the named button (`mini/js/dialogs.js`) |
 | `mini/bin/front <url-substring>` | brings the Chrome tab whose URL matches to the front (`mini/js/front.js`); exits 1 when none matches |
-| `mini/bin/o` | foreground wrapper for `opencli browser` (e.g. `role`, `mail`); `--private` hides Chrome and selects background for secret-bearing pages; conflicts with `--window` |
+| `mini/bin/o` | foreground wrapper for `opencli browser` (e.g. `role`, `mail`); `--private` hides Chrome and selects background for secret-bearing pages; window placement is automatic; caller `--window` options are unsupported |
 | `mini/bin/secfield <session> <css>` | masks the field, real-clicks it and verifies focus and password type before typing stdin; prints no secret |
 | `mini/bin/shot [out.png]` | screenshots the mini, refused while a Terminal window holds a secret (a pattern in `mini/lib/secrets.zsh`) or cannot be read |
 | `ctl/mini sync [--check]` | run on this Mac or in mini-op: copy `mini/` to the mini's `~/apm/` with its `VERSION` stamp, keeping `~/apm/state/`; `--check` exits 1 unless the mini's `~/apm/VERSION` matches |
