@@ -56,6 +56,7 @@ export const violation = {
     "Then `mini chord command 40`; the old `~/apm/.done/<id>`.",
     "Run `mini sync --bogus`, `mini pw --lock -x` and `mini sudo -k rm x`.",
     "Edit `plugin/.claude-plugin/gone.json` and `/opt/windroc/plugins/mini-op/skills/gone/SKILL.md`.",
+    "Not baked: `/opt/windroc/plugins/mini-op/status.md`, `/opt/windroc/plugins/mini-op/skillsfoo`.",
     "",
   ].join("\n"),
   "ctl/CLAUDE.md": [
@@ -96,7 +97,7 @@ export const clean = {
     "",
   ].join("\n"),
   "ctl/CLAUDE.md": [
-    "Read `README.md`, `runbooks/setup.md`, `/opt/windroc/plugins/mini-op/CLAUDE.md`, `/opt/windroc/plugins/mini-op/mini/bin`, `/opt/windroc/plugins/mini-op/ctl/`.",
+    "Read `README.md`, `runbooks/setup.md`, `/opt/windroc/plugins/mini-op/CLAUDE.md`, `/opt/windroc/plugins/mini-op/mini/bin`, `/opt/windroc/plugins/mini-op/ctl/`, `/opt/windroc/plugins/mini-op/ctl/mini`.",
     "| Task | `status.md` › Machine (built 1) |",
     "| Other | `status.md` › Deep |",
     "",
@@ -134,7 +135,9 @@ export const expected = [
   "README.md:5: `plugin/.claude-plugin/gone.json` does not exist",
   "ctl/CLAUDE.md:1: `../README.md` does not exist",
   "README.md:5: `/opt/windroc/plugins/mini-op/skills/gone/SKILL.md` does not exist",
-  "ctl/CLAUDE.md:1: `/opt/windroc/plugins/mini-op/scripts` does not exist",
+  "README.md:6: `/opt/windroc/plugins/mini-op/status.md` is not in the image's plugin root",
+  "README.md:6: `/opt/windroc/plugins/mini-op/skillsfoo` is not in the image's plugin root",
+  "ctl/CLAUDE.md:1: `/opt/windroc/plugins/mini-op/scripts` is not in the image's plugin root",
   "ctl/CLAUDE.md:2: `/opt/mini-op/ctl/mini` is retired: the image's plugin root is /opt/windroc/plugins/mini-op",
   "ctl/CLAUDE.md:3: `status.md` › Machine (built 2): status.md has no such heading",
   "ctl/CLAUDE.md:4: `runbooks/setup.md` › setup: runbooks/setup.md has no such heading",

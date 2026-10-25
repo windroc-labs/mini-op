@@ -23,13 +23,27 @@ export function apmPath(file: string): string | undefined {
 // The image's plugin root (host/Dockerfile): plugin/, ctl/, mini/, README.md and runbooks/.
 export const PLUGIN_ROOT = "/opt/windroc/plugins/mini-op";
 
-// The repo path a plugin-root path names ("" for the root itself), or undefined outside the root:
-// its CLAUDE.md is ctl/CLAUDE.md, its skills/ and .claude-plugin/ come from plugin/.
-export function containerToRepo(file: string): string | undefined {
+// The plugin root's top-level entries the image bakes, each with the repo path it comes from.
+export const BAKED = new Map([
+  ["CLAUDE.md", "ctl/CLAUDE.md"],
+  ["README.md", "README.md"],
+  ["ctl", "ctl"],
+  ["mini", "mini"],
+  ["runbooks", "runbooks"],
+  ["skills", "plugin/skills"],
+  [".claude-plugin", "plugin/.claude-plugin"],
+]);
+
+// The repo path a plugin-root path names: undefined outside the root, "" for the root itself, null
+// for a path the image does not bake (ctl/CLAUDE.md is moved to the root).
+export function containerToRepo(file: string): string | null | undefined {
   if (file !== PLUGIN_ROOT && !file.startsWith(`${PLUGIN_ROOT}/`)) return undefined;
   const rest = file.slice(PLUGIN_ROOT.length + 1);
-  if (rest === "CLAUDE.md") return "ctl/CLAUDE.md";
-  return /^(?:skills|\.claude-plugin)(?:\/|$)/.test(rest) ? `plugin/${rest}` : rest;
+  if (!rest) return "";
+  const [top = "", ...below] = rest.split("/");
+  const from = BAKED.get(top);
+  if (from === undefined || rest === "ctl/CLAUDE.md") return null;
+  return [from, ...below].join("/");
 }
 
 // Guard samples hold deliberate violations; guards scanning the repo skip them.

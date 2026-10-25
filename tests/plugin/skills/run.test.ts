@@ -37,8 +37,10 @@ test("the skill names its rules and tools by absolute plugin-root paths to repo 
   const paths = [...text.matchAll(/\/opt\/windroc\/plugins\/mini-op\/([\w./-]*)/g)];
   assert.ok(paths.length > 0);
   for (const [, rest] of paths) {
-    const file = (containerToRepo(ROOT + rest) ?? "").replace(/\/$/, "");
-    assert.ok(fs.existsSync(path.join(REPO, file)), `${ROOT}${rest}: no ${file} in the repo`);
+    const file = containerToRepo(ROOT + rest);
+    assert.ok(typeof file === "string", `${ROOT}${rest} is not in the image's plugin root`);
+    const repo = file.replace(/\/$/, "");
+    assert.ok(fs.existsSync(path.join(REPO, repo)), `${ROOT}${rest}: no ${repo} in the repo`);
   }
   for (const match of text.matchAll(/(?<![\w.-])(?:\.\.?\/)?(?:ctl|mini|runbooks)\/[\w./-]*/g)) {
     const before = text.slice(0, match.index);

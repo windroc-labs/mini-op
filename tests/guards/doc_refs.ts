@@ -49,9 +49,13 @@ function exists(view: RepoView, file: string): boolean {
   return view.files.some((f) => f === target || f.startsWith(target + "/"));
 }
 
-function repoPath(doc: string, token: string): string[] | null {
+// The repo paths a backticked token may name; null: not a path to check; UNBAKED: a plugin-root
+// path the image does not have.
+const UNBAKED = "unbaked";
+function repoPath(doc: string, token: string): string[] | null | typeof UNBAKED {
   const word = (token.split(/\s/)[0] ?? "").replace(/\*+$/, "");
   const container = containerToRepo(word);
+  if (container === null) return UNBAKED;
   if (container !== undefined) return container ? [container] : null;
   if (!PATH.test(word) || ELSEWHERE.has(word)) return null;
   if (!(word.startsWith("../") || TOP.has(word.split("/")[0] ?? "") || word.endsWith(".md"))) {
@@ -155,6 +159,8 @@ export const guard: Guard = {
         if (RETIRED.test(span)) {
           const word = span.split(/\s/)[0];
           at(match.index, `\`${word}\` is retired: the image's plugin root is ${PLUGIN_ROOT}`);
+        } else if (candidates === UNBAKED) {
+          at(match.index, `\`${span.split(/\s/)[0]}\` is not in the image's plugin root`);
         } else if (candidates && !candidates.some((c) => exists(view, c))) {
           at(match.index, `\`${span.split(/\s/)[0]}\` does not exist`);
         } else if (candidates) {
