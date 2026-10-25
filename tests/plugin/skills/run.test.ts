@@ -8,6 +8,14 @@ import { containerToRepo, PLUGIN_ROOT, REPO } from "../../lib/repo.ts";
 const ROOT = `${PLUGIN_ROOT}/`;
 const read = (file: string) => fs.readFileSync(path.join(REPO, file), "utf8");
 const skill = () => read("plugin/skills/run/SKILL.md");
+const SECTIONS = [
+  "Rules",
+  "Driving the mini",
+  "Browser",
+  "Waiting and answering",
+  "Scripts",
+  "Gotchas",
+];
 
 test("plugin.json names the plugin mini-op, with a version and a description", () => {
   const manifest = JSON.parse(read("plugin/.claude-plugin/plugin.json"));
@@ -65,4 +73,58 @@ test("the connectivity runbook is read-only: ssh mini echo ok and mini sync --ch
   assert.ok(spans.includes(`${ROOT}ctl/mini sync --check`));
   assert.doesNotMatch(text, /mini sync(?! --check)/);
   assert.match(read("ctl/CLAUDE.md"), /^\| [^|]+ \| `runbooks\/check-connection\.md` \|$/m);
+});
+
+test("the plugin has one skill", () => {
+  assert.deepEqual(fs.readdirSync(path.join(REPO, "plugin/skills")), ["run"]);
+});
+
+test("the skill reads CLAUDE.md and the README sections before the lookup", () => {
+  const text = skill();
+  const readme = read("README.md");
+  for (const named of ["CLAUDE.md", "README.md"]) assert.ok(text.includes(ROOT + named), named);
+  for (const section of SECTIONS) {
+    assert.ok(text.includes(section), `the skill does not name README › ${section}`);
+    assert.match(readme, new RegExp(`^#{2,3} ${section}$`, "m"), `README has no ${section}`);
+  }
+  assert.ok(text.indexOf(`${ROOT}README.md`) < text.indexOf(`${ROOT}ctl/runbook`));
+});
+
+test("the skill finds the runbook in order with ctl/runbook", () => {
+  const text = skill().slice(skill().indexOf("Find the runbook"));
+  const order = [
+    "steps inline",
+    `${ROOT}ctl/runbook path <name>`,
+    `${ROOT}ctl/runbook list`,
+    "one-off runbook",
+  ];
+  const at = order.map((s) => text.indexOf(s));
+  assert.ok(
+    at.every((i) => i >= 0),
+    `missing one of ${order.join(", ")}`,
+  );
+  assert.deepEqual(
+    [...at].sort((a, b) => a - b),
+    at,
+  );
+  assert.match(text, /--project <project>/);
+  assert.match(text, /`when` values alone/);
+  assert.match(text, /open only the chosen runbook/);
+  assert.match(text, /Exit 3[^\n]*ask the user which project[^\n]*run nothing/);
+  assert.match(text, /no runbook named <name>/);
+});
+
+test("every result names the runbook's source and path", () => {
+  const text = skill();
+  for (const line of [
+    "`Runbook: inline (request)`",
+    "`Runbook: plugin <path>`",
+    "`Runbook: project:<name> <path>`",
+    "`Runbook: one-off (full text below)`",
+  ]) {
+    assert.ok(text.includes(line), `no ${line}`);
+  }
+  assert.match(text, /success or failure/);
+  assert.match(text, /`runbook: skipped …`/);
+  assert.match(text, /full text in a fenced block/);
 });
