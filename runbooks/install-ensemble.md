@@ -6,6 +6,34 @@ Visible routing and protected exceptions: `visible-operations.md`. Public setup,
 
 ## 6. Then
 
+### OpenCode-only install
+
+Pick `--ref <branch-or-commit>` (`REF` is also supported; CLI wins; default main). Both wrappers fetch from `windroc-labs/ensemble`; install-test also passes that ref to install.sh. clean-test uses it only for the download: upstream cleanup has no --ref. Pin the same ref for install and cleanup.
+
+Pass decisions before starting: `--clients opencode`, `--board local` (or the chosen Linear board), `--no-docker`, `--no-launchd`, `--opencode-provider/url/model/context` (`OC=1` supplies the existing Strata settings), `--password-stdin`, and `--opencode-key-stdin`. Prepare a private input file by protected stdin/keychain pipes: account password on the first line, Strata key on the second. Never pipe the downloaded script through that credential stdin. Remove the input after the installer ends.
+
+```sh
+printf '%s\n' 'umask 077; OC=1 ~/apm/runbooks/install-ensemble/install-test --ref <branch-or-commit> -- --clients opencode --board local --no-docker --no-launchd --password-stdin --opencode-key-stdin < ~/apm/state/install.input > ~/apm/state/install.log 2>&1' | mini run 30
+```
+
+Observed prompt order from the user's WDRC-99 report; existing state can skip a row. A 75 means inspect, never blindly send the next answer. Use `mini run 30 --to <id>` only for the confirmed prompt. Do not display the protected install log; read only explicit nonsecret progress/prompt fields.
+
+| Order | Prompt/stage | Answer or upfront choice |
+| --- | --- | --- |
+| 1 | sudo password | `--password-stdin` consumes the first private stdin line; otherwise confirmed no-echo prompt → mini pw |
+| 2 | Write `.zprofile` | y |
+| 3 | Write ensemble config | y; `--board` decides the board type |
+| 4 | gh “Authenticate Git”, then Enter to open device login | Y, then Enter; keep device code private; existing Chrome tab, each code character through masked secfield; GitHub sudo mode uses keychain → secfield → Confirm, then real-focus Authorize |
+| 5 | Plugin write/install | y |
+| 6 | Provider config write | y; set `--opencode-provider`, `--opencode-url`, `--opencode-model`, `--opencode-context` first |
+| 7 | `opencode auth login` | without `--opencode-key-stdin`: Other → strata → key by protected stdin at a confirmed hidden prompt; with it, consume the second private stdin line |
+| 8 | First PATH write | y |
+| 9 | Second PATH write | y |
+
+Flags verified against [install.sh](https://github.com/windroc-labs/ensemble/blob/1fc016e7f878ab197b6f73902795c9ab935b057c/scripts/install.sh) and [cleanup](https://github.com/windroc-labs/ensemble/blob/1fc016e7f878ab197b6f73902795c9ab935b057c/scripts/install-cleanup.sh). Non-main installer refs currently require OpenCode-only clients. Keep browser login visible where it contains no secrets; credential generation/output remains the protected exception above.
+
+### Other test sequences
+
 1. Put the ids and keychain names into the mini's `~/.ensemble/config.local.toml` (docs/credentials.md › Linear presets).
 2. Install script tests (TASK-812), in the mini's real Terminal; public phases are visible, credential output is protected as above:
    1. Trim the Dock to Terminal, Chrome, iTerm and System Settings (`defaults write com.apple.dock persistent-apps …`, `killall Dock`).

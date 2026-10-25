@@ -46,8 +46,8 @@ Files sit by where they run.
 
 | Script | What it does |
 | --- | --- |
-| `mini/runbooks/install-ensemble/install-test [-- <install.sh flags>]` | runs PR #547's `install.sh` as a user would, in the Terminal, sudo password typed at its prompt by mini-op's `mini pw`; `OC=1` adds the Strata OpenCode flags from `mini/runbooks/install-ensemble/strata.conf` |
-| `mini/runbooks/clean-ensemble/clean-test [-- <install-cleanup.sh flags>]` | same for PR #547's `install-cleanup.sh` |
+| `mini/runbooks/install-ensemble/install-test [--ref <ref>] [-- <install.sh flags>]` | runs PR #547's `install.sh` as a user would, in the Terminal, sudo password typed at its prompt by mini-op's `mini pw`; `OC=1` adds the Strata OpenCode flags from `mini/runbooks/install-ensemble/strata.conf` |
+| `mini/runbooks/clean-ensemble/clean-test [--ref <ref>] [-- <install-cleanup.sh flags>]` | same for PR #547's `install-cleanup.sh` |
 | `mini/bin/ans [secs] [--to <id>]` | types stdin into the mini's Terminal plus Enter (a command with an exit-code marker; with `--to`, an answer to command `<id>` as is), scrolls to bottom, then runs `termwait` (Waiting and answering) |
 | `mini/bin/termwait <secs> --after <id>` | marker proves completion; unchanged readable contents for 3 s returns 75 (look now, never completion); limit is 124; last lines redacted (Waiting and answering) |
 | `mini/bin/termtail [N \| --all]` | read-only redacted Terminal tail (default 25 nonblank lines); --all reads the full snapshot; never types, activates or scrolls |

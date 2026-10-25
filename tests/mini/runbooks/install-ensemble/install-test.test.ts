@@ -6,7 +6,7 @@ import { REPO, Sandbox } from "../../../lib/sandbox.ts";
 
 const INSTALL_TEST = path.join(REPO, "mini/runbooks/install-ensemble/install-test");
 const URL = (ref: string) =>
-  `https://raw.githubusercontent.com/windroc/ensemble/${ref}/scripts/install.sh`;
+  `https://raw.githubusercontent.com/windroc-labs/ensemble/${ref}/scripts/install.sh`;
 const OC = [
   "--opencode-provider",
   "strata",
@@ -61,6 +61,16 @@ test("REF, CLIENTS and OC pick the ref, the clients and the Strata OpenCode flag
     "claude,opencode",
     ...OC,
   ]);
+});
+
+test("--ref selects a branch or commit for both download and installer", async (t) => {
+  for (const ref of ["feature/visible", "1fc016e7f878ab197b6f73902795c9ab935b057c"]) {
+    const { sb, args, run } = await sandbox(t);
+    const r = await run(["--ref", ref, "--", "--clients", "opencode"], { REF: "ignored" });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(sb.calls("curl")[0]?.argv.at(-1), URL(ref));
+    assert.deepEqual(args(), ["install.sh", "--ref", ref, "--clients", "opencode"]);
+  }
 });
 
 // FR-56: a copy of install-test beside its own strata.conf, so a test can change the settings.
@@ -140,10 +150,22 @@ test("a failed download exits 1 and runs nothing", async (t) => {
 
 test("flags before -- and stray words are usage errors that fetch nothing", async (t) => {
   const { sb, run } = await sandbox(t);
-  for (const argv of [["--docker"], ["--no-such-option"], ["-x", "--"], ["x"], ["-h", "x"]]) {
+  for (const argv of [
+    ["--docker"],
+    ["--no-such-option"],
+    ["-x", "--"],
+    ["x"],
+    ["-h", "x"],
+    ["--ref"],
+    ["--ref", ""],
+    ["--ref", "--docker"],
+  ]) {
     const r = await run(argv);
     assert.equal(r.code, 2, argv.join(" "));
-    assert.equal(r.stderr, "install-test: usage: install-test [-- <install.sh flags>]\n");
+    assert.equal(
+      r.stderr,
+      "install-test: usage: install-test [--ref <ref>] [-- <install.sh flags>]\n",
+    );
     assert.equal(r.stdout, "");
   }
   assert.deepEqual(sb.calls(), []);
@@ -154,6 +176,6 @@ test("-h prints the usage to stdout and fetches nothing", async (t) => {
   const r = await run(["-h"]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stderr, "");
-  assert.match(r.stdout, /^install-test \[-- <install\.sh flags>\] /);
+  assert.match(r.stdout, /^install-test \[--ref <ref>\] \[-- <install\.sh flags>\] /);
   assert.deepEqual(sb.calls(), []);
 });
