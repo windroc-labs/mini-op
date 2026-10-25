@@ -70,21 +70,22 @@ test("with ssh_config.container the same host goes through mini-op-proxy", async
 test("the image installs the proxy hop into ssh's config dir, and nc for the ProxyCommand", () => {
   const dockerfile = fs.readFileSync(path.join(REPO, "host/Dockerfile"), "utf8");
   const copies = [
-    ...dockerfile.matchAll(/^COPY (ssh_config\S*) (\/etc\/ssh\/ssh_config\.d\/\S+\.conf)$/gm),
+    ...dockerfile.matchAll(
+      /^COPY (?:--\S+ )*(\S*ssh_config\S*) (\/etc\/ssh\/ssh_config\.d\/\S+\.conf)$/gm,
+    ),
   ];
-  // Host mini (address, account) is not baked in: host/update installs it at this path, where
-  // ctl/lib/ssh.zsh's mini_user reads it.
-  assert.deepEqual(
-    copies.map((m) => m[1]),
-    ["ssh_config.container"],
-  );
+  // Host mini (address, account) comes only from host/start's generated context, in the last
+  // stage, at the path where ctl/lib/ssh.zsh's mini_user reads it.
   const mini = "/etc/ssh/ssh_config.d/mini.conf";
-  for (const file of ["host/update", "ctl/lib/ssh.zsh"]) {
-    assert.ok(fs.readFileSync(path.join(REPO, file), "utf8").includes(mini), file);
-  }
-  assert.ok(
-    copies.some((c) => c[1] === "ssh_config.container" && c[2]?.endsWith("/mini-proxy.conf")),
+  assert.deepEqual(
+    copies.map((m) => [m[1], m[2]]),
+    [
+      ["host/ssh_config.container", "/etc/ssh/ssh_config.d/mini-proxy.conf"],
+      ["ssh_config", mini],
+    ],
   );
+  assert.match(dockerfile, /^COPY --from=mini .*ssh_config\.d\/mini\.conf$/m);
+  assert.ok(fs.readFileSync(path.join(REPO, "ctl/lib/ssh.zsh"), "utf8").includes(mini));
   const install = /apt-get install -y --no-install-recommends \\\n\s*"claude-code=[^;]*/.exec(
     dockerfile,
   )?.[0];

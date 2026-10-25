@@ -1,10 +1,16 @@
 [
   {
     "file": "host/Dockerfile",
-    "reason": "the mini-op image: base digest, claude-code pin, PATH, ssh config",
+    "reason": "the mini-op image: base digest, claude-code pin, npm checksum, user agent, plugin root, PATH, ssh config",
     "tests": [
-      "tests/host/Dockerfile.test.ts",
-      "tests/host/update.test.ts"
+      "tests/host/Dockerfile.test.ts"
+    ]
+  },
+  {
+    "file": "host/Dockerfile.dockerignore",
+    "reason": "the image's build context from the repo root: only the files the image takes",
+    "tests": [
+      "tests/host/Dockerfile.test.ts"
     ]
   },
   {

@@ -103,11 +103,11 @@ smoke() {
   done
   in_op sh -c 'command -v nc' && r=PASS || r=FAIL
   row "nc on PATH" "$r"
-  # The account the container's ctl/ reads (host/update installed the ssh config) is the
+  # The account the container's ctl/ reads (host/start built the ssh config in) is the
   # definition's.
   expected=$(mini_value mini_user) || expected=
-  account=$(docker exec mini-op zsh -fc 'source /opt/mini-op/ctl/lib/ssh.zsh && mini_user' \
-    2>/dev/null)
+  account=$(docker exec mini-op zsh -fc \
+    'source /opt/windroc/plugins/mini-op/ctl/lib/ssh.zsh && mini_user' 2>/dev/null)
   [[ -n $expected && $account == "$expected" ]] && r=PASS || r=FAIL
   row "mini_user is host/config's mini_user" "$r"
   return "$failed"

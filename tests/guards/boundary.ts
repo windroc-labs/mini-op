@@ -1,10 +1,10 @@
 import { lineAt, type Guard, type Violation } from "../lib/guard.ts";
-import { scanned, shellKind } from "../lib/repo.ts";
+import { containerToRepo, PLUGIN_ROOT, scanned, shellKind } from "../lib/repo.ts";
 import { shellCode } from "../lib/shell.ts";
 
 // mini/ runs on the mini: it never names the container, its secrets dir, docker or the other dirs.
 const MINI_NAMES: [RegExp, string][] = [
-  [/\/opt\/mini-op\b/g, "/opt/mini-op"],
+  [new RegExp(`${PLUGIN_ROOT}(?![\\w.-])`, "g"), PLUGIN_ROOT],
   [new RegExp("/run/" + "secrets\\b", "g"), "the container's secrets dir"],
   [/(?<![\w.-])docker(?![\w-])/g, "docker"],
   [/(?<![\w.-])ctl\//g, "ctl/"],
@@ -15,7 +15,6 @@ const LOCAL = /(?<![\w.-])(osascript|security)(?![\w.-])/g;
 // `scp … <dest>` with the mini as the last argument; option values are not sources.
 const SCP = /(?<![\w.-])scp((?:[ \t]+[^\s`'"|;&()]+)+)/g;
 const VALUED = new Set(["-F", "-i", "-o", "-P", "-S", "-c", "-l", "-J", "-D", "-X"]);
-const FROM_MINI = /^(?:\/opt\/mini-op\/)?mini\//;
 
 function copies(file: string, text: string, found: Violation[]): void {
   for (const match of text.matchAll(SCP)) {
@@ -27,7 +26,7 @@ function copies(file: string, text: string, found: Violation[]): void {
       if (VALUED.has(arg)) i++;
       else if (!arg.startsWith("-")) sources.push(arg);
     }
-    for (const source of sources.filter((s) => !FROM_MINI.test(s))) {
+    for (const source of sources.filter((s) => !(containerToRepo(s) ?? s).startsWith("mini/"))) {
       found.push({
         file,
         line: lineAt(text, match.index),

@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage="start   run host/config (exits 1 before anything else when it fails), build image
-mini-op:<claude-code version> and the proxy image mini-op-proxy:v0.1.0 (proxy/, with the generated
-~/.mini-op/proxy/ files as its config, labelled with their policy hash), make the internal network
-mini-op-net if missing, check both images (claude runs; the proxy loads its config and keeps
-running), then (re)create container mini-op-proxy (default bridge + mini-op-net) and container
-mini-op (mini-op-net only, so the proxy is its only way out), copy the test-env docs and scripts and
-the generated ssh config in (host/update), make op's ssh key if the home volume has none (prints its
-public key), and set promptSuggestionEnabled false in op's ~/.claude/settings.json, keeping its
-other keys. No host path is mounted; op's home is the named volume mini-op-home; /run/secrets is an
-empty tmpfs. Exits 0, 1 (a step failed; a failed build or check leaves the existing containers as
-they were) or 2 (usage error)."
+usage="start   run host/config (exits 1 before anything else when it fails), stamp this checkout
+(its commit, -dirty when anything is uncommitted; not a git checkout, or untracked files under
+ctl/, mini/, runbooks/ or plugin/: exits 1 before any build), build image mini-op:env from the repo
+root (host/Dockerfile: plugin/, ctl/, mini/, README.md and runbooks/ in the plugin root
+/opt/windroc/plugins/mini-op, versioned with the stamp; the generated ~/.mini-op/ssh_config as its
+ssh config) and the proxy image mini-op-proxy:v0.1.0 (proxy/, with the generated ~/.mini-op/proxy/
+files as its config, labelled with their policy hash), make the internal network mini-op-net if
+missing, check both images (claude runs; the proxy loads its config and keeps running), then
+(re)create container mini-op-proxy (default bridge + mini-op-net) and container mini-op
+(mini-op-net only, so the proxy is its only way out), make agent's ssh key if the home volume has
+none (prints its public key), and set promptSuggestionEnabled false in agent's
+~/.claude/settings.json, keeping its other keys. No host path is mounted; agent's home is the named
+volume mini-op-home; /run/secrets is an empty tmpfs. Exits 0, 1 (a step failed; a failed build or
+check leaves the existing containers as they were) or 2 (usage error)."
 if [ $# -eq 1 ] && [ "$1" = -h ]; then
   printf '%s\n' "$usage"
   exit 0
@@ -21,13 +24,32 @@ fi
 }
 trap 'echo "start: failed (exit $?): $BASH_COMMAND" >&2; exit 1' ERR
 here=$(cd "$(dirname "$0")" && pwd)
+repo=$(dirname "$here")
 if ! "$here/config" >/dev/null || ! policy=$("$here/config" policy-hash); then
   echo "start: host/config failed; nothing built or changed" >&2
   exit 1
 fi
-version=$(sed -n 's/^ARG CLAUDE_CODE_VERSION=//p' "$here/Dockerfile")
-uid=$(sed -n 's/^ARG OP_UID=//p' "$here/Dockerfile")
-image=mini-op:$version
+# shellcheck source=/dev/null
+. "$repo/ctl/lib/version.sh"
+stamp=$(apm_version "$repo") || {
+  echo "start: $repo is not a git checkout; cannot stamp the plugin version" >&2
+  exit 1
+}
+untracked=$(git -C "$repo" status --porcelain --untracked-files=all -- ctl mini runbooks plugin |
+  sed -n 's/^?? //p' | tr '\n' ' ')
+if [[ -n $untracked ]]; then
+  echo "start: untracked files would be built into the image: ${untracked% }; commit or remove" \
+    "them" >&2
+  exit 1
+fi
+# The build's named context mini: what the image's last stage adds about the mini.
+umask 077
+context=$(mktemp -d)
+trap 'rm -rf -- "${context:?}"' EXIT
+cp "$HOME/.mini-op/ssh_config" "$context/ssh_config"
+
+uid=$(sed -n 's/^ARG AGENT_UID=//p' "$here/Dockerfile")
+image=mini-op:env
 net=mini-op-net
 proxy=mini-op-proxy
 proxy_image=mini-op-proxy:v0.1.0
@@ -50,7 +72,8 @@ fail() {
   echo "start: $*; existing containers left as they were" >&2
   exit 1
 }
-docker build -q -t "$image" "$here" >/dev/null || fail "building $image failed"
+docker build -q -t "$image" -f "$here/Dockerfile" --build-arg "MINI_OP_VERSION=$stamp" \
+  --build-context "mini=$context" "$repo" >/dev/null || fail "building $image failed"
 docker build -q -t "$proxy_image" --label "mini-op.proxy-policy=$policy" \
   --build-context "generated=$HOME/.mini-op/proxy" "$here/proxy" >/dev/null ||
   fail "building $proxy_image failed"
@@ -86,11 +109,9 @@ docker run -d --name mini-op --hostname mini-op --init --restart unless-stopped 
   -e HTTPS_PROXY="$proxy_url" -e HTTP_PROXY="$proxy_url" \
   -e https_proxy="$proxy_url" -e http_proxy="$proxy_url" \
   -e NO_PROXY="$no_proxy" -e no_proxy="$no_proxy" -e NODE_USE_ENV_PROXY=1 \
-  --mount type=volume,src=mini-op-home,dst=/home/op \
+  --mount type=volume,src=mini-op-home,dst=/home/agent \
   --tmpfs "/run/secrets:size=64k,mode=0700,uid=$uid,gid=$uid" \
   "$image" >/dev/null
-
-"$here/update"
 
 docker exec mini-op sh -c 'mkdir -p ~/.claude && f=~/.claude/settings.json &&
   { test -s "$f" || echo "{}" > "$f"; } &&
@@ -98,5 +119,6 @@ docker exec mini-op sh -c 'mkdir -p ~/.claude && f=~/.claude/settings.json &&
 docker exec mini-op sh -c 'mkdir -p -m 700 ~/.ssh &&
   { test -f ~/.ssh/id_ed25519 ||
     ssh-keygen -q -t ed25519 -N "" -C "mini-op container" -f ~/.ssh/id_ed25519; }'
-echo "mini-op running from $image on $net, out only via $proxy ($proxy_image); op's public key:"
-docker exec mini-op cat /home/op/.ssh/id_ed25519.pub
+echo "mini-op running from $image ($stamp) on $net, out only via $proxy ($proxy_image);" \
+  "agent's public key:"
+docker exec mini-op cat /home/agent/.ssh/id_ed25519.pub

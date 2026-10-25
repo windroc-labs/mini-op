@@ -19,7 +19,7 @@ const MINI_USER_CMD = [
   "mini-op",
   "zsh",
   "-fc",
-  "source /opt/mini-op/ctl/lib/ssh.zsh && mini_user",
+  "source /opt/windroc/plugins/mini-op/ctl/lib/ssh.zsh && mini_user",
 ];
 const GIT_ENV = {
   GIT_AUTHOR_NAME: "t",

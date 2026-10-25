@@ -1,10 +1,18 @@
 import * as path from "node:path";
 import { lineAt, type Guard, type Violation } from "../lib/guard.ts";
-import { isShipped, scanned, SHIPPED_DIRS, type RepoView } from "../lib/repo.ts";
+import {
+  containerToRepo,
+  isShipped,
+  PLUGIN_ROOT,
+  scanned,
+  SHIPPED_DIRS,
+  type RepoView,
+} from "../lib/repo.ts";
 
-// The container's operator reads ctl/CLAUDE.md as /opt/mini-op/CLAUDE.md, beside the repo's
-// other copied files: its paths resolve from the repo root only.
+// The container's operator reads ctl/CLAUDE.md as the plugin root's CLAUDE.md, beside the other
+// baked files: its paths resolve from the repo root only. The root before it is retired.
 const CLAUDE = "ctl/CLAUDE.md";
+const RETIRED = /^\/opt\/mini-op(?:\/|$)/;
 // Paths in other repos, named as such in the docs.
 const ELSEWHERE = new Set(["docs/credentials.md"]);
 // README.md › Start here: the records and the five runbooks stay, even without a reference to them.
@@ -43,8 +51,8 @@ function exists(view: RepoView, file: string): boolean {
 
 function repoPath(doc: string, token: string): string[] | null {
   const word = (token.split(/\s/)[0] ?? "").replace(/\*+$/, "");
-  const container = /^\/opt\/mini-op\/(.+)$/.exec(word)?.[1];
-  if (container !== undefined) return [container === "CLAUDE.md" ? CLAUDE : container];
+  const container = containerToRepo(word);
+  if (container !== undefined) return container ? [container] : null;
   if (!PATH.test(word) || ELSEWHERE.has(word)) return null;
   if (!(word.startsWith("../") || TOP.has(word.split("/")[0] ?? "") || word.endsWith(".md"))) {
     return null;
@@ -144,7 +152,10 @@ export const guard: Guard = {
       for (const match of text.matchAll(SPAN)) {
         const span = match[1] ?? "";
         const candidates = repoPath(file, span);
-        if (candidates && !candidates.some((c) => exists(view, c))) {
+        if (RETIRED.test(span)) {
+          const word = span.split(/\s/)[0];
+          at(match.index, `\`${word}\` is retired: the image's plugin root is ${PLUGIN_ROOT}`);
+        } else if (candidates && !candidates.some((c) => exists(view, c))) {
           at(match.index, `\`${span.split(/\s/)[0]}\` does not exist`);
         } else if (candidates) {
           const tail = text.slice(match.index + match[0].length);

@@ -20,6 +20,18 @@ export function apmPath(file: string): string | undefined {
   return file.startsWith("mini/") ? `~/apm/${file.slice("mini/".length)}` : undefined;
 }
 
+// The image's plugin root (host/Dockerfile): plugin/, ctl/, mini/, README.md and runbooks/.
+export const PLUGIN_ROOT = "/opt/windroc/plugins/mini-op";
+
+// The repo path a plugin-root path names ("" for the root itself), or undefined outside the root:
+// its CLAUDE.md is ctl/CLAUDE.md, its skills/ and .claude-plugin/ come from plugin/.
+export function containerToRepo(file: string): string | undefined {
+  if (file !== PLUGIN_ROOT && !file.startsWith(`${PLUGIN_ROOT}/`)) return undefined;
+  const rest = file.slice(PLUGIN_ROOT.length + 1);
+  if (rest === "CLAUDE.md") return "ctl/CLAUDE.md";
+  return /^(?:skills|\.claude-plugin)(?:\/|$)/.test(rest) ? `plugin/${rest}` : rest;
+}
+
 // Guard samples hold deliberate violations; guards scanning the repo skip them.
 export const SAMPLES_DIR = "tests/guards/samples/";
 

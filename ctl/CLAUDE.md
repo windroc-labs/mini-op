@@ -20,7 +20,7 @@
 | What each script does | `README.md` › Scripts |
 | Deploying `mini/` and the smoke check | `host/README.md` › Deploy to the mini |
 | The container, its network, the password file | `host/README.md` › Steps |
-| The current environment, where work stopped | `status.md` |
+| The current environment, where work stopped (it stays on the Mac: ask the user) | `status.md` |
 
 ## Hard rules
 

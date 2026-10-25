@@ -22,7 +22,8 @@ export const clean = {
     { file: "mini/bin/o", reason: "appends opencli's install dirs to PATH" },
   ]),
   "mini/bin/o": "#!/bin/zsh\nexport PATH=$PATH:/usr/local/bin\n",
-  "host/Dockerfile": "ENV PATH=/opt/mini-op/ctl:$PATH\nCOPY ssh_config /etc/ssh/ssh_config.d/\n",
+  "host/Dockerfile":
+    "ENV PATH=/opt/windroc/plugins/mini-op/ctl:$PATH\nCOPY ssh_config /etc/ssh/ssh_config.d/\n",
   "ctl/ok": "#!/bin/zsh\n# never /usr/bin/ssh here\nssh -F ~/.ssh/config mini true\n",
   "mini/bin/env": "#!/bin/zsh\nenv LANG=C sort\n",
 };

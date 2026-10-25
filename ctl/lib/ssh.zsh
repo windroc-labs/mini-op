@@ -1,7 +1,7 @@
 # mini_ssh <ssh args>: ssh to Host mini. When this ctl/ sits in a checkout beside host/ (the
 # MacBook), through ~/.mini-op/ssh_config, which host/config generates from
-# ~/.mini-op/config.local.yaml. The container has no host/: host/update installs that file, and the
-# image the proxy hop, into ssh's own config.
+# ~/.mini-op/config.local.yaml. The container has no host/: host/start builds that file, and the
+# proxy hop, into the image's own ssh config.
 _mini_ssh_config=
 if [[ -e ${${(%):-%x}:A:h:h:h}/host/config ]]; then _mini_ssh_config=$HOME/.mini-op/ssh_config; fi
 mini_ssh() {

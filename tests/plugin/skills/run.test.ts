@@ -2,15 +2,12 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
-import { REPO } from "../../lib/repo.ts";
+import { containerToRepo, PLUGIN_ROOT, REPO } from "../../lib/repo.ts";
 
 // /mini-op:run is plugin mini-op's skill run; the image bakes plugin/ under ROOT (FR-209).
-const ROOT = "/opt/windroc/plugins/mini-op/";
+const ROOT = `${PLUGIN_ROOT}/`;
 const read = (file: string) => fs.readFileSync(path.join(REPO, file), "utf8");
 const skill = () => read("plugin/skills/run/SKILL.md");
-
-// The repo file a plugin-root path names: the root's CLAUDE.md is ctl/CLAUDE.md.
-const repoFile = (rest: string) => (rest === "CLAUDE.md" ? "ctl/CLAUDE.md" : rest);
 
 test("plugin.json names the plugin mini-op, with a version and a description", () => {
   const manifest = JSON.parse(read("plugin/.claude-plugin/plugin.json"));
@@ -40,7 +37,7 @@ test("the skill names its rules and tools by absolute plugin-root paths to repo 
   const paths = [...text.matchAll(/\/opt\/windroc\/plugins\/mini-op\/([\w./-]*)/g)];
   assert.ok(paths.length > 0);
   for (const [, rest] of paths) {
-    const file = repoFile((rest ?? "").replace(/\/$/, ""));
+    const file = (containerToRepo(ROOT + rest) ?? "").replace(/\/$/, "");
     assert.ok(fs.existsSync(path.join(REPO, file)), `${ROOT}${rest}: no ${file} in the repo`);
   }
   for (const match of text.matchAll(/(?<![\w.-])(?:\.\.?\/)?(?:ctl|mini|runbooks)\/[\w./-]*/g)) {

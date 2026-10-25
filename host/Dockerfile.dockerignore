@@ -1,0 +1,13 @@
+# host/Dockerfile's context is the repo root: only what the image takes, never status.md or
+# host/config's inputs.
+*
+!README.md
+!runbooks
+!ctl
+!mini
+!plugin
+!host/claude-code.asc
+!host/ssh_config.*
+mini/VERSION
+**/node_modules
+**/.tools

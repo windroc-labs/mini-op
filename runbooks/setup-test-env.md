@@ -82,7 +82,7 @@ At the mini (the user):
 
 On this Mac (the user, in this checkout):
 
-4. If the account or address changed, set `mini_user` or `mini_host` in `~/.mini-op/config.local.yaml`. Then `~/playground/mini-op/host/start` if the address changed (the proxy's policy; redo `host/README.md` steps 4–5), else `~/playground/mini-op/host/update`: the running container gets the new `ctl/` and ssh config without a restart (`host/README.md`, Steps).
+4. If the account or address changed, set `mini_user` or `mini_host` in `~/.mini-op/config.local.yaml`. Then, after any change, `~/playground/mini-op/host/stop` and `~/playground/mini-op/host/start`: the rebuilt image carries the new `ctl/` and ssh config (redo `host/README.md` steps 4–5).
 5. Drop the mini's old host key here and in the container:
 
    ```sh
@@ -97,10 +97,10 @@ In mini-op:
 
 7. `mini sync`, then `mini sync --check`.
 8. Section 1, steps 2–4: the permissions, `mini-autologin` and the settings, Screen Sharing.
-9. The 12 keychain items, from the export of the old login keychain (`/home/op/keychain-backup/export-2026-10-24.keychain-db`, unlocked by the same password). Copy it into a new private dir on the mini and list its items (attributes only, never `dump-keychain -d`):
+9. The 12 keychain items, from the export of the old login keychain (`/home/agent/keychain-backup/export-2026-10-24.keychain-db`, unlocked by the same password). Copy it into a new private dir on the mini and list its items (attributes only, never `dump-keychain -d`):
 
     ```sh
-    d=$(ssh mini 'mktemp -d') && ssh mini "cat > $d/export.keychain-db" < /home/op/keychain-backup/export-2026-10-24.keychain-db
+    d=$(ssh mini 'mktemp -d') && ssh mini "cat > $d/export.keychain-db" < /home/agent/keychain-backup/export-2026-10-24.keychain-db
     ssh mini "security dump-keychain $d/export.keychain-db" | grep -E 'class:|"(svce|acct)"<blob>='
     ```
 
