@@ -25,13 +25,11 @@
 
 ## Hard rules
 
-1. Secrets never appear in output, argv, env or logs.
+1. Secrets never appear on screen, in titles, shell history, output, argv, env or logs. Use protected stdin/files or private browser steps; page input only through secfield, Terminal passwords only at confirmed no-echo prompts. Stop if secret output cannot be isolated before launch.
 2. Never move or resize a window on the mini.
 3. Screenshots only with `~/apm/bin/shot`.
 4. Only the proxy gets out; ask the user when you need a new host.
 5. The docs here are a snapshot: to change one, tell the user.
 6. Run `mini sync --check` at the start of every session.
-7. On the mini's Terminal, answer and wait only with `mini run` and `~/apm/bin/termwait`; never a script of your own.
+7. Public work runs visibly: `mini exec` for complete noninteractive results, `mini run/termwait` for interaction; ordinary browser work uses `o` foreground. SSH only transports, reads results or performs a documented exception. Attach tmux's target pane first; use no custom answer/wait script.
 8. Install nothing on the mini and never call python3 there.
-9. Public commands run visibly: `mini exec` for complete noninteractive results, `mini run` for interactive work. Ordinary browser work uses `o` foreground. SSH only transports, reads results or performs a documented exception. Attach the target tmux pane before sending work.
-10. Secrets never reach the screen, window titles or shell history. Credential/mail/key-generation steps use protected stdin/files or `o --private`; private replies never print secrets. Page secrets only through secfield; Terminal passwords only at confirmed no-echo prompts. Stop when an external tool cannot isolate its secret output before launch.

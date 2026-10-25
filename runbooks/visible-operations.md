@@ -31,7 +31,7 @@
 | `ctl/mini sudo` | cannot be visible | 仅限 GUI 不可用、受保护凭据操作、或 Terminal 缺少文件权限；stdin 密码验证/提权及无 GUI 情况不能用键盘代替；有公开输出和可用 Terminal 就改走上一行 |
 | `ctl/mini-autologin [--reboot]` | cannot be visible | 登录窗口尚无用户 Terminal；需秘密写 kcpassword、设 autoLoginUser、重启并轮询 console user；不向未经确认的登录窗口打字 |
 | `ctl/mini sync`、`sync --check` | cannot be visible | tar/stdin 初次引导、原子交换运行脚本及 VERSION 协议校验；不能依赖待部署版本自己部署自己；保持 state 与失败恢复 |
-| `ctl/lib/ssh.zsh`、version/secrets helpers、`mini/lib/timeout.zsh/opencli.zsh/secrets.zsh` | cannot be visible | 配置解析、协议/JSON、超时、保密过滤是辅助控制；在 Terminal 回显原始数据会泄密或污染机器结果；实际动作使用各自可视路径 |
+| `ctl/lib/ssh.zsh`、version/secrets helpers、`mini/lib/timeout.zsh`、`mini/lib/opencli.zsh`、`mini/lib/secrets.zsh` | cannot be visible | 配置解析、协议/JSON、超时、保密过滤是辅助控制；在 Terminal 回显原始数据会泄密或污染机器结果；实际动作使用各自可视路径 |
 | setup 1：Remote Login、权限、Screen Sharing、自动登录的用户设置 | already visible | System Settings 和原生授权窗口；用户批准；不可用时仅恢复走 autologin 例外 |
 | setup 1：pmset、屏保、非凭据 defaults；caffeinate、进程诊断/清理残留 | visible now | 公开动作从 run/exec 执行；仅 GUI 卡死且控制不可用时允许 SSH 恢复，恢复后回到可视路径 |
 | setup 2：已有安装流程的下载、签名/哈希、opencli doctor；gh repo create | visible now | Terminal run/exec；现有 Chrome 扩展/权限由用户点选；本次不新增 mini 软件 |
