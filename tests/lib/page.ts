@@ -11,6 +11,8 @@ import { REPO } from "./repo.ts";
 
 // An element matches exactly the selectors it lists.
 export type Element = {
+  type?: string;
+  rejectMask?: boolean;
   selectors: string[];
   rect?: { left: number; top: number; width: number; height: number };
   value?: string;
@@ -107,6 +109,12 @@ export class Page {
     const element = (i: number) => {
       const e = list[i] ?? { selectors: [] };
       return {
+        get type(): string {
+          return e.type ?? "text";
+        },
+        set type(value: string) {
+          if (!e.rejectMask) e.type = value;
+        },
         value: e.value ?? "",
         href: e.href ?? "",
         id: e.id ?? "",
