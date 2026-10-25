@@ -17,10 +17,11 @@ const SECTIONS = [
   "Gotchas",
 ];
 
-test("plugin.json names the plugin mini-op, with a version and a description", () => {
+// The version is optional: host/Dockerfile stamps mini-op's commit into the image's copy.
+test("plugin.json names the plugin mini-op with a description; a version is optional", () => {
   const manifest = JSON.parse(read("plugin/.claude-plugin/plugin.json"));
   assert.equal(manifest.name, "mini-op");
-  assert.match(manifest.version, /^\S+$/);
+  if ("version" in manifest) assert.match(manifest.version, /^\S+$/);
   assert.match(manifest.description, /\S/);
 });
 
