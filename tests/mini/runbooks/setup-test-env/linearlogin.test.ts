@@ -16,21 +16,31 @@ const goTo = (code = "") =>
   Page.run(code).page.events.flatMap((e: PageEvent) => (e.type === "navigate" ? [e.url] : []));
 const GO = "(function page(url)";
 
+const CODE_PAGE = "https://linear.app/login | Enter the code";
+
 // The stand-in ~/apm/bin/o (a fake, never mini/bin/o) keeps the Linear tab's page in
 // $FAKE_DIR/page: open shows $FAKE_DIR/start, the logout and the clicks move it on unless
-// $FAKE_DIR/frozen exists, and the page read prints it as OpenCLI's JSON.
+// $FAKE_DIR/frozen exists, and the page read prints it as OpenCLI's JSON. The code field shows
+// while $FAKE_DIR/codefield exists: Enter code manually makes it unless $FAKE_DIR/nofield exists.
 const O = `p=$FAKE_DIR/page; to() { [[ -e $FAKE_DIR/frozen ]] || print -r -- "$1" > $p; }
 case $1:$2 in
   open:*) cp $FAKE_DIR/start $p;;
   eval:'(function page(url)'*) to 'https://linear.app/logout | Log out of all workspaces';;
+  eval:*'("length","input[name=authToken]")') [[ -e $FAKE_DIR/codefield ]] && n=0 || n=-1
+    print -r -- "{\\"data\\":$n}";;
   eval:*) print -r -- "{\\"data\\":\\"$(<$p)\\"}";;
   click:*)
     case "$*" in
       *"--name Log out "*) to '${LOGIN}';;
       *"--text Continue with email "*) to 'https://linear.app/login | Enter your email address';;
       *"--role button --name Continue with email "*) to 'https://linear.app/login | Check your email';;
+      *"--text Enter code manually "*) to '${CODE_PAGE}'
+        [[ -e $FAKE_DIR/nofield ]] || touch $FAKE_DIR/codefield;;
     esac;;
 esac`;
+
+// The tab leaves the code page for $FAKE_DIR/landing.
+const LANDS = 'cp $FAKE_DIR/landing $FAKE_DIR/page; rm -f -- "${FAKE_DIR:?}/codefield"';
 
 // The stand-in maillink: follow lands the tab on $FAKE_DIR/landing.
 const FOLLOWED: FakeRule = {
@@ -41,7 +51,13 @@ const FOLLOWED: FakeRule = {
 
 async function sandbox(
   t: Parameters<typeof Sandbox.create>[0],
-  opts: { start?: string; landing?: string; follow?: FakeRule } = {},
+  opts: {
+    start?: string;
+    landing?: string;
+    mark?: FakeRule;
+    follow?: FakeRule;
+    code?: FakeRule;
+  } = {},
 ) {
   const sb = await Sandbox.create(t);
   fs.writeFileSync(path.join(sb.dir, "start"), `${opts.start ?? LOGIN}\n`);
@@ -54,10 +70,14 @@ async function sandbox(
   stand("o", "bin", [{ shell: O, ignoresStdin: true }]);
   stand("front", "bin", [{ ignoresStdin: true }]);
   stand("maillink", "runbooks/setup-test-env", [
-    { argv: ["mark"], stdout: "marked\n", ignoresStdin: true },
+    opts.mark ?? { argv: ["mark"], stdout: "marked\n", ignoresStdin: true },
     opts.follow ?? FOLLOWED,
+    opts.code ?? { argv: ["code"], shell: `${LANDS}; print entered`, ignoresStdin: true },
   ]);
-  sb.fake("osascript", [{ program: "chrome.js", args: ["close"], ignoresStdin: true }]);
+  sb.fake("osascript", [
+    { program: "chrome.js", args: ["close"], ignoresStdin: true },
+    { program: "keys.js", args: ["--front", "Chrome", "--enter"], shell: LANDS },
+  ]);
   sb.fake("sleep", [{ ignoresStdin: true }]);
   const run = (args = [EMAIL]) => sb.run(["zsh", LINEARLOGIN, ...args]);
   const sleeps = () =>
@@ -163,12 +183,98 @@ test("maillink's timeout exits 124, its line passed on", async (t) => {
   assert.equal(r.stderr, line);
 });
 
-test("anything but one email address is a usage error", async (t) => {
+test("a mark that fails exits 1 before the login mail is requested", async (t) => {
+  const line =
+    "maillink: https://outlook.live.com/mail/0/ did not render in 15 s; marked nothing\n";
+  const { sb, run, actions } = await sandbox(t, {
+    mark: { argv: ["mark"], stderr: line, exit: 1, ignoresStdin: true },
+  });
+  const r = await run(["--code", EMAIL]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stdout, "");
+  assert.equal(r.stderr, line);
+  assert.deepEqual(actions(), ["open https://linear.app/login"]);
+  assert.deepEqual(
+    sb.calls("maillink").map((c) => c.argv[0]),
+    ["mark"],
+  );
+});
+
+test("--code enters the mailed code at Enter code manually and lands", async (t) => {
+  const { sb, run, sleeps, actions } = await sandbox(t);
+  const r = await run(["--code", EMAIL]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, `entered\nlanded: ${INBOX}\n`);
+  assert.equal(r.stderr, "");
+  assert.deepEqual(actions().slice(-2), [
+    "click --role button --name Continue with email",
+    "click --text Enter code manually",
+  ]);
+  assert.deepEqual(
+    sb.calls("maillink").map((c) => c.argv),
+    [
+      ["mark", EMAIL],
+      ["code", EMAIL],
+    ],
+  );
+  assert.deepEqual(
+    sb.calls("osascript").map((c) => c.program),
+    ["chrome.js"],
+  );
+  assert.equal(sleeps(), "3 1");
+});
+
+test("--code presses Return when the code page has not moved on", async (t) => {
+  const { sb, run, sleeps } = await sandbox(t, {
+    code: { argv: ["code"], stdout: "entered\n", ignoresStdin: true },
+  });
+  const r = await run(["--code", EMAIL]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, `entered\nlanded: ${INBOX}\n`);
+  const keys = sb.calls("osascript").filter((c) => c.program === "keys.js");
+  assert.deepEqual(
+    keys.map((c) => [c.argv.slice(-3), c.stdin]),
+    [[["--front", "Chrome", "--enter"], ""]],
+  );
+  assert.equal(sleeps(), "3 1 1 1 1");
+});
+
+test("--code without a code field exits 124 timed out before asking for the code", async (t) => {
+  const { sb, run, sleeps } = await sandbox(t);
+  fs.writeFileSync(path.join(sb.dir, "nofield"), "");
+  const r = await run(["--code", EMAIL]);
+  assert.equal(r.code, 124);
+  assert.equal(r.stdout, "");
+  assert.equal(r.stderr, `linearlogin: timed out after 15 s: no code field: ${CODE_PAGE}\n`);
+  assert.equal(sleeps(), ["3", "1", ...Array(15).fill("1")].join(" "));
+  assert.deepEqual(
+    sb.calls("maillink").map((c) => c.argv[0]),
+    ["mark"],
+  );
+});
+
+test("--code passes maillink's failure and timeout on", async (t) => {
+  for (const [exit, line] of [
+    [1, "maillink: cannot type the code into the Linear tab\n"],
+    [124, `maillink: timed out after 140 s: no fresh code for ${EMAIL}\n`],
+  ] as const) {
+    const { run } = await sandbox(t, {
+      code: { argv: ["code"], stderr: line, exit, ignoresStdin: true },
+    });
+    const r = await run(["--code", EMAIL]);
+    assert.equal(r.code, exit);
+    assert.equal(r.stdout, "");
+    assert.equal(r.stderr, line);
+  }
+});
+
+test("anything but one email address, --code before it, is a usage error", async (t) => {
   const { sb, run } = await sandbox(t);
-  for (const args of [[], [EMAIL, "x"], ["--no-such-option"], ["role"], ["-h", EMAIL], ["-r@x"]]) {
+  const bad = [[], [EMAIL, "x"], ["--no-such-option"], ["role"], ["-h", EMAIL], ["-r@x"]];
+  for (const args of [...bad, ["--code"], [EMAIL, "--code"], ["--code", EMAIL, "x"]]) {
     const r = await run(args);
     assert.equal(r.code, 2, args.join(" "));
-    assert.equal(r.stderr, "linearlogin: usage: linearlogin <email>\n");
+    assert.equal(r.stderr, "linearlogin: usage: linearlogin [--code] <email>\n");
     assert.equal(r.stdout, "");
   }
   assert.deepEqual(sb.calls(), []);
@@ -179,6 +285,6 @@ test("-h prints the usage to stdout and opens nothing", async (t) => {
   const r = await run(["-h"]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stderr, "");
-  assert.match(r.stdout, /^linearlogin <email> /);
+  assert.match(r.stdout, /^linearlogin \[--code\] <email> /);
   assert.deepEqual(sb.calls(), []);
 });

@@ -86,6 +86,11 @@ export const SECRET_SCRIPTS: Scenario[] = [
     title: "pw --sa types the password into SecurityAgent",
     args: ["pw", "--sa"],
   }),
+  ctl({
+    script: "ctl/mini",
+    title: "pw --settings types the password into a System Settings sheet",
+    args: ["pw", "--settings"],
+  }),
   ctl({ script: "ctl/mini", title: "sudo -v checks the sudo password", args: ["sudo", "-v"] }),
   ctl({
     script: "ctl/mini",

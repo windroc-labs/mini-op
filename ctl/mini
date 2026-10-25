@@ -3,9 +3,12 @@ setopt pipefail
 usage="mini run [secs] [--to <id>]   type stdin into the Terminal and wait; not for secrets: use mini pw
                               (~/apm/bin/ans on the mini: secs default 60; --to <id> answers that
                               command's prompt)
-mini pw [--lock | --sa]       type the mini account's password into the mini's front Terminal, its
-                              lock screen (only while locked) or its SecurityAgent dialog (one
+mini pw [--lock | --sa | --settings]
+                              type the mini account's password into the mini's front Terminal, its
+                              lock screen (only while locked), its SecurityAgent dialog (one
                               focused secure field; Allow once the field holds the whole password)
+                              or a System Settings password sheet (macOS 26+; System Settings
+                              frontmost, its focused field secure; OK once it holds the password)
 mini sudo <command> [args]    run <command> with sudo on the mini (stdin /dev/null); mini sudo -v
                               checks the password only
 mini chord <mods> <key code>  in the mini's front Terminal hold the modifiers (command,control,
@@ -109,13 +112,14 @@ if locked; then echo 'mini: pw: still locked' >&2; exit 1; fi
 echo 'mini: pw: unlocked'"
 
 pw_mini() {
-  [[ $# -eq 0 || ($# -eq 1 && ($1 == --lock || $1 == --sa)) ]] ||
-    usage_error 'mini pw [--lock | --sa]'
+  [[ $# -eq 0 || ($# -eq 1 && $1 == (--lock|--sa|--settings)) ]] ||
+    usage_error 'mini pw [--lock | --sa | --settings]'
   local file step
   file=$(password_file pw 'typed nothing') || exit 1
   case $1 in
     --lock) on_mini pw "$lock" < $file ;;
     --sa) step=$(timed pw 25 'typing the password' "$keys --front SecurityAgent --secret --verify-field") ;;
+    --settings) step=$(timed pw 25 'typing the password' "$keys --front SettingsSheet --secret --verify-field") ;;
     *) step=$(timed pw 15 'typing the password' "$keys --front Terminal --secret --enter") ;;
   esac
   on_mini pw "$step; exit \$rc" < $file
