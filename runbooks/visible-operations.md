@@ -37,8 +37,8 @@
 | setup 2：已有安装流程的下载、签名/哈希、opencli doctor；gh repo create | visible now | Terminal run/exec；现有 Chrome 扩展/权限由用户点选；本次不新增 mini 软件 |
 | setup 3/3b：Outlook/Proton/GitHub 注册、登录、人工验证 | already visible | 普通页面前台，密码/验证码仅 secfield；显示 recovery phrase、认证邮件、manifest redirect/code、生成 key 时先 private；没有安全路径就停止 |
 | setup 4/5/API keys：workspace/board/role 邀请、设置、撤销旧 key | already visible | 普通页面前台；lq 的凭据管道及生成/复制 key 的页面按保密例外；隐藏后离开秘密页才能重新前台 |
-| 安装与清理：`install-test`、`clean-test`、重跑/升级、Dock/配置文件修改 | already visible | 公开阶段在 Terminal 用 run；不得移动/放大窗口；外部安装器的 token/device-code 生成阶段不能展示，见下一行 |
-| 安装器的 gh device code、Claude setup-token、broker 凭据生成/交接 | cannot be visible | 外部工具会打印凭据；从启动前就以 umask 077 把输出写私有文件，不先显示再清屏；凭据从文件/stdin 交接，页面输入仍只用 secfield；无法隔离的交互阶段停止，交经理处理 |
+| 安装与清理：`install-test`、`clean-test`、重跑/升级、Dock/配置文件修改 | already visible | 公开阶段在 Terminal 用 run；不得移动/放大窗口；认证阶段也直接写 tty，见下一行 |
+| 安装器的 gh device code、Claude setup-token、broker 凭据生成/交接 | already visible | install.sh 的提示、gh auth login 和 claude setup-token 直接读写 fd 3 tty；stdout/stderr 重定向会隐藏公开进度，不能保护这些凭据。token/code 会显屏；截图前清 scrollback，keychain dialog 无截图按固定坐标处理，见 README Gotchas；网页秘密仍只用 secfield |
 | broker/router probe、docker info、sbx 创建/执行/reset/清理 | visible now | 公开命令用 exec，交互用 run；需要会话的 keychain 从已登录 Terminal；凭据读写、secret 操作及敏感输出另走隐藏管道 |
 | manager、worker、router 的 tmux 输入 | already visible | 先在 Terminal 附着目标 session/pane 并确认可见，再 send-keys；不向不可见 pane 发工作；capture-pane 只作回读；秘密不经 send-keys |
 | tmux list-clients/list-panes/capture-pane 的控制端读取 | cannot be visible | 从 SSH 仅读会话状态；TUI 已占用目标 pane，不能用 exec 把检查命令当聊天发入；实际工作仍在已确认可见的 pane |

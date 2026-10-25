@@ -11,7 +11,7 @@ Visible routes and protected exceptions: `visible-operations.md`. Run public min
 1. The user enables Remote Login; add this Mac's key to the mini's `~/.ssh/authorized_keys`; check the host key fingerprint.
 2. Give `sshd-keygen-wrapper` Screen Recording, Accessibility, Full Disk Access and Automation for System Events (the user approves each prompt).
 3. On the mini, with the mini's password on stdin (from mini-op: `< /run/secrets/<mini_user>`; before mini-op is set up, the user types it at the mini's prompt): auto-login (from mini-op: `mini-autologin`, which also restores a lost one), `pmset sleep 0`, `autorestart 1`, `pmset displaysleep 60`, `sysadminctl -screenLock 3600 -password -`, screen saver off (`defaults -currentHost write com.apple.screensaver idleTime -int 0`).
-4. Screen Sharing (VNC) for the user to watch: turn it on in System Settings › General › Sharing › Screen Sharing (`open x-apple.systempreferences:com.apple.Sharing-Settings.extension`, click the switch; Remote Management off). Starting `com.apple.screensharing` with launchctl or `kickstart` opens port 5900 but the viewer says "Screen Sharing is not permitted" (https://github.com/basnijholt/dotfiles/pull/107). Turning Remote Management off asks for the login password in a sheet that `dialogs` does not list: screenshot, click the field, type it piped, Modify Settings. The user connects with `open vnc://<user>@<address>` (both: `../status.md` › Current environment (user report, 2026-10-25), row Machine), ticking "Remember this password in my keychain" once.
+4. Screen Sharing (VNC) for the user to watch: turn it on in System Settings › General › Sharing › Screen Sharing (`open x-apple.systempreferences:com.apple.Sharing-Settings.extension`, click the switch; Remote Management off). Starting `com.apple.screensharing` with launchctl or `kickstart` opens port 5900 but the viewer says "Screen Sharing is not permitted" (https://github.com/basnijholt/dotfiles/pull/107). Turning Remote Management off asks for the login password in a sheet that `dialogs` does not list: screenshot, click the field, type it piped, Modify Settings. The user connects with `open vnc://<user>@<address>` (both: `../status.md` › Current environment (built 2026-10-20), row Machine), ticking "Remember this password in my keychain" once.
 
 ## 2. Browser
 
@@ -86,7 +86,7 @@ At the mini (the user):
 On this Mac (the user, in this checkout):
 
 4. If the account or address changed, set `mini_user` or `mini_host` in `~/.mini-op/config.local.yaml`. Then `~/playground/mini-op/host/start` if the address changed (the proxy's policy; redo `host/README.md` steps 4–5), else `~/playground/mini-op/host/update`: the running container gets the new `ctl/` and ssh config without a restart (`host/README.md`, Steps).
-5. Rename mini-op's password file, so the password is not typed again: `docker exec mini-op mv /run/secrets/<old account> /run/secrets/<mini_user>`, `<old account>` from `../status.md` › Current environment (user report, 2026-10-25), row Machine. After a container restart there is none: `host/README.md` step 4 instead.
+5. Rename mini-op's password file, so the password is not typed again: `docker exec mini-op mv /run/secrets/<old account> /run/secrets/<mini_user>`, `<old account>` from `../status.md` › Current environment (built 2026-10-20), row Machine. After a container restart there is none: `host/README.md` step 4 instead.
 6. Drop the mini's old host key here and in the container:
 
    ```sh
