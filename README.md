@@ -19,7 +19,7 @@ the task. Each fact has one home; the others point to it.
 | `status.md` | one-off records: the current environment and where the work stopped |
 | `runbooks/setup-test-env.md` | machine access, browser install, reconnecting mini-op after a reset |
 | `runbooks/return-mini.md` | erasing the mini before it goes back |
-| `host/README.md` | the mini-op container that operates the mini |
+| `host/README.md` | the mini-op container that operates the mini, and its environment definition for ensemble |
 
 ## Layout
 

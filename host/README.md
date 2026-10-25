@@ -91,6 +91,83 @@ mini sync --check
 ssh mini 'cd ~/apm && rc=0; for f in bin/* runbooks/*/*(N); do [ -x "$f" ] || continue; if "./$f" -h </dev/null >/dev/null 2>&1; then echo "ok $f"; else echo "FAIL $f"; rc=1; fi; done; exit $rc'
 ```
 
+## Environment definition
+
+What ensemble needs to run mini-op as an environment: for `verifier` runs, and for direct use once ensemble's direct-use command (WDRC-109 FR-301) replaces the container of Steps, which stays until then. The names are fixed: no mini-op upgrade, Claude Code's version included, changes them.
+
+| What | Name |
+| --- | --- |
+| Image | `mini-op:env`, built on this Mac by `start`, never pushed |
+| Caller network | `mini-op`: the egress gateway's network for mini-op, defined by the `mini-op` section of egress's local config |
+| Lock | `mini-op` |
+| Direct-use session | `mini-op`, its local cwd `~/.mini-op/workspace` |
+| Plugin | `mini-op`, in `/opt/windroc/plugins/mini-op/` |
+| Mini-side tools | `~/apm/bin/*` and `~/apm/lib/*.zsh` (`mini/`): the only ones a project's scripts call |
+| Project scripts | a project runbook's scripts, on the mini in `~/mini-op-projects/<project>/<name>/` |
+| Secrets | the keychain items below; in the container each is `/run/ensemble/secrets/env/<file>` |
+
+Direct use and `verifier` share these items:
+
+| Keychain item | `file` | Holds |
+| --- | --- | --- |
+| `ensemble-env/mini-op-password` | `mini-password` | the mini account's (`mini_user`) password |
+| `ensemble-env/mini-op-ssh-key` | `mini-ssh-key` | the private half of the one ssh key the environment logs into the mini with |
+| `ensemble-env/mini-op-strata-key` | `strata-key` | optional: the Strata API key, only for a project runbook that uses Strata |
+
+Create them once, on this Mac with ensemble installed. `ensemble-broker login env <name>` reads the value from stdin and stores it as `ensemble-env/<name>`, readable only by the broker; the Claude token comes from `ensemble-broker login claude` (skip it when done before).
+
+1. The ssh key: make it in a private temp dir, let its public half into the mini's `authorized_keys`, import the private half, and leave no key file behind:
+
+   ```sh
+   d=$(mktemp -d)
+   ssh-keygen -q -t ed25519 -N '' -C 'mini-op environment' -f "$d/key"
+   ssh -F ~/.mini-op/ssh_config mini 'cat >> ~/.ssh/authorized_keys' < "$d/key.pub"
+   ensemble-broker login env mini-op-ssh-key < "$d/key"
+   rm -rf "$d"
+   ```
+
+2. The mini's password, typed at the `password:` prompt, which does not echo it:
+
+   ```sh
+   stty -echo; printf 'password: '; head -n 1 | ensemble-broker login env mini-op-password; stty echo; echo
+   ```
+
+3. Only for a runbook that uses Strata: the key from this Mac's login keychain (its item's service and account):
+
+   ```sh
+   . ~/playground/mini-op/mini/lib/keychain.zsh
+   keychain_read <service> <account> | ensemble-broker login env mini-op-strata-key
+   ```
+
+4. The Claude token:
+
+   ```sh
+   ensemble-broker login claude
+   ```
+
+Then add the environment to `~/.ensemble/config.local.toml`; it prefetches nothing:
+
+```toml
+[delegate.environments.mini-op]   # no prefetch
+image = "mini-op:env"
+gateway = "mini-op"
+plugins = ["mini-op"]
+lock = "mini-op"
+
+[[delegate.environments.mini-op.secrets]]
+item = "ensemble-env/mini-op-password"
+file = "mini-password"
+
+[[delegate.environments.mini-op.secrets]]
+item = "ensemble-env/mini-op-ssh-key"
+file = "mini-ssh-key"
+
+# Optional: only once the Strata entry is imported
+# [[delegate.environments.mini-op.secrets]]
+# item = "ensemble-env/mini-op-strata-key"
+# file = "strata-key"
+```
+
 ## Change or remove
 
 - Files take effect only through a rebuild: after editing or pulling this repo, run on the user's Mac, from any directory (adjust the checkout path):
