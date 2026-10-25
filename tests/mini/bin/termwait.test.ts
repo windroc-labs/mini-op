@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
-import { REPO, Sandbox } from "../../lib/sandbox.ts";
+import { REPO, Sandbox, type FakeRule } from "../../lib/sandbox.ts";
 import { events, fakeTerminal, SLEEP, sleeps } from "../../lib/terminal.ts";
 
 const TERMWAIT = path.join(REPO, "mini/bin/termwait");
@@ -17,10 +17,16 @@ print -r -- "$rc" > "$HOME/apm/state/done/$ID.tmp" && mv "$HOME/apm/state/done/$
 
 async function sandbox(t: Parameters<typeof Sandbox.create>[0]) {
   const sb = await Sandbox.create(t);
+  sb.mini();
   const done = path.join(sb.home, "apm/state/done");
   fs.mkdirSync(done, { recursive: true });
-  const wait = async (args: string[], opts: { screen?: string; finish?: string } = {}) => {
+  const wait = async (
+    args: string[],
+    opts: { screen?: string; finish?: string; read?: FakeRule } = {},
+  ) => {
     fakeTerminal(sb, { screen: opts.screen ?? "Dots-Mac-mini acp-exp % " }, FINISHING_SLEEP);
+    if (opts.read)
+      sb.fake("osascript", [{ program: "terminal.js", args: ["contents"], ...opts.read }]);
     if (opts.finish !== undefined) fs.writeFileSync(path.join(sb.dir, "finish"), opts.finish);
     return sb.run(["zsh", TERMWAIT, ...args], { env: { ID } });
   };
@@ -63,16 +69,59 @@ test("a non-zero exit code is printed and exits 1", async (t) => {
   assert.ok(!fs.existsSync(path.join(done, ID)));
 });
 
-test("a timeout exits 124 still running and names the id", async (t) => {
+test("a timeout shorter than the idle threshold exits 124 and names the id", async (t) => {
   const { sb, wait } = await sandbox(t);
-  const r = await wait(["3", "--after", ID], { screen: "Write it? [y/N] " });
+  const r = await wait(["2", "--after", ID], { screen: "Write it? [y/N] " });
   assert.equal(r.code, 124);
-  assert.deepEqual(sleeps(sb), ["1", "1", "1"]);
+  assert.deepEqual(sleeps(sb), ["1", "1"]);
   assert.equal(r.stdout, "Write it? [y/N] \n");
   assert.equal(
     r.stderr,
-    `termwait: still running: ${ID} (after 3 s); keep waiting with termwait <secs> --after ${ID}\n`,
+    `termwait: still running: ${ID} (after 2 s); keep waiting with termwait <secs> --after ${ID}\n`,
   );
+});
+
+test("three unchanged seconds returns a look-now signal without claiming completion", async (t) => {
+  const { sb, done, wait } = await sandbox(t);
+  const r = await wait(["300", "--after", ID], { screen: "no recognizable prompt here" });
+  assert.equal(r.code, 75, r.stderr);
+  assert.deepEqual(sleeps(sb), ["1", "1", "1"]);
+  assert.match(r.stderr, /look now.*not finished/);
+  assert.ok(!r.stdout.includes("exited"));
+  assert.ok(!fs.existsSync(path.join(done, ID)));
+});
+
+test("a completion marker wins over idle at the same instant", async (t) => {
+  const { done, wait } = await sandbox(t);
+  const r = await wait(["300", "--after", ID], { finish: "3 0" });
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(r.stdout.endsWith(`${ID} exited 0\n`));
+  assert.ok(!fs.existsSync(path.join(done, ID)));
+});
+
+test("changing contents time out even if the text looks like an input prompt", async (t) => {
+  const { sb, wait } = await sandbox(t);
+  const r = await wait(["5", "--after", ID], {
+    read: {
+      shell:
+        'n=$(( $(cat $FAKE_DIR/reads 2>/dev/null || print 0) + 1 )); print $n > $FAKE_DIR/reads; print "Write it? [y/N] $n"',
+    },
+  });
+  assert.equal(r.code, 124);
+  assert.equal(sleeps(sb).length, 5);
+});
+
+test("failed or hung reads cannot establish idle", async (t) => {
+  for (const shell of [
+    "exit 1",
+    "kill -ALRM $PPID",
+    "n=$(( $(cat $FAKE_DIR/reads 2>/dev/null || print 0) + 1 )); print $n > $FAKE_DIR/reads; (( n % 2 )) || exit 1; print unchanged",
+  ]) {
+    const { wait } = await sandbox(t);
+    const r = await wait(["5", "--after", ID], { read: { shell } });
+    assert.equal(r.code, 124, r.stderr);
+    assert.ok(!r.stderr.includes("look now"));
+  }
 });
 
 test("a zero-second wait checks the marker once", async (t) => {

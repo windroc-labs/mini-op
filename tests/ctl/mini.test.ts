@@ -4,8 +4,57 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { REPO, Sandbox, type FakeRule } from "../lib/sandbox.ts";
 import { onlyOnStdin, remote } from "./remote.ts";
+import { fakeTerminal } from "../lib/terminal.ts";
 
 const MINI = path.join(REPO, "ctl/mini");
+
+test("exec returns complete visible results and original status including 255", async (t) => {
+  for (const code of [0, 7, 124, 255]) {
+    const sb = await remote(t, []);
+    fakeTerminal(sb);
+    const r = await sb.run(["zsh", MINI, "exec", "0"], {
+      input: `printf 'result\n\n'; printf 'error without newline' >&2; exit ${code}`,
+    });
+    assert.equal(r.code, code, r.stderr);
+    assert.equal(r.stdout, "result\n\n");
+    assert.equal(r.stderr, "error without newline");
+    assert.equal(sb.calls("ssh").length, 1);
+  }
+});
+
+test("exec separates transport failure and rejects a missing or invalid status frame", async (t) => {
+  const sb = await Sandbox.create(t);
+  for (const stderr of ["connection lost", "\nmini-exec-rc:no\n", "\nmini-exec-rc:256\n"]) {
+    sb.fake("ssh", [{ stderr }]);
+    const r = await sb.run(["zsh", MINI, "exec"], { input: "echo hi" });
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /missing result status/);
+  }
+  sb.fake("ssh", [{ stderr: "offline\n", exit: 255 }]);
+  const r = await sb.run(["zsh", MINI, "exec"]);
+  assert.equal(r.code, 255);
+  assert.match(r.stderr, /ssh to the mini failed/);
+});
+
+test("exec validates collect ids before SSH and collects without new input", async (t) => {
+  const sb = await remote(t, []);
+  const id = "1761200000-4242-17";
+  const dir = apm(sb, `state/visible/${id}`);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [name, value] of [
+    ["stdout", "saved"],
+    ["stderr", ""],
+    ["rc", "0\n"],
+  ]) {
+    fs.writeFileSync(path.join(dir, name!), value!);
+  }
+  const r = await sb.run(["zsh", MINI, "exec", "--collect", id]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, "saved");
+  const bad = await sb.run(["zsh", MINI, "exec", "--collect", "../x"]);
+  assert.equal(bad.code, 2);
+  assert.equal(sb.calls("ssh").length, 1);
+});
 const GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"];
 // The only commands sync runs on the mini: unpack, then swap the code in around ~/apm/state.
 const PACKING =
@@ -252,6 +301,7 @@ test("run sends stdin to ans and passes its rc", async (t) => {
     [[], 0, ""],
     [["300", "--to", "1761200000-4242-17"], 1, "keys: Terminal not frontmost; typed nothing\n"],
     [["5"], 124, "ans: still running: 1-2-3; keep waiting with termwait 5 --after 1-2-3\n"],
+    [["30", "--to", "1761200000-4242-17"], 75, "termwait: look now; not finished\n"],
   ] as const) {
     const sb = await sandbox(t);
     ans(sb, `print 'mini ~ %'; print -u2 -n -- ${JSON.stringify(stderr)}; exit ${rc}`);
@@ -617,8 +667,10 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
   const r = await sb.run(["zsh", MINI, "-h"]);
   assert.equal(r.code, 0);
   assert.equal(r.stderr, "");
+  assert.match(r.stdout, /exec.*255.*SSH.*completion.*unknown/i);
   const lines = r.stdout.split("\n");
-  assert.match(lines[0] ?? "", /^mini run \[secs\] \[--to <id>\] .*not for secrets: use mini pw$/);
+  assert.match(lines[0] ?? "", /^mini exec \[secs\]/);
+  assert.match(lines[2] ?? "", /^mini run \[secs\] \[--to <id>\] .*not for secrets: use mini pw$/);
   for (const form of [
     "mini pw [--lock | --sa | --settings]",
     "mini sudo <command> [args] ",
@@ -705,10 +757,10 @@ test("sudo rejects an unknown option", async (t) => {
 test("other subcommands and arguments are usage errors", async (t) => {
   const sb = await sandbox(t);
   for (const [args, synopsis] of [
-    [[], "mini run|pw|sudo|chord|sync …; mini -h for each"],
-    [["nope"], "mini run|pw|sudo|chord|sync …; mini -h for each"],
-    [["-x"], "mini run|pw|sudo|chord|sync …; mini -h for each"],
-    [["-h", "x"], "mini run|pw|sudo|chord|sync …; mini -h for each"],
+    [[], "mini exec|run|pw|sudo|chord|sync …; mini -h for each"],
+    [["nope"], "mini exec|run|pw|sudo|chord|sync …; mini -h for each"],
+    [["-x"], "mini exec|run|pw|sudo|chord|sync …; mini -h for each"],
+    [["-h", "x"], "mini exec|run|pw|sudo|chord|sync …; mini -h for each"],
     [["pw", "x"], "mini pw [--lock | --sa | --settings]"],
     [["pw", "--lock", "--sa"], "mini pw [--lock | --sa | --settings]"],
     [["pw", "--settings", "x"], "mini pw [--lock | --sa | --settings]"],

@@ -7,6 +7,7 @@ const scene = (over: Scene = {}): Scene => ({
     { selectors: ["#user"], value: "alice" },
     {
       selectors: ["#pw"],
+      type: "password",
       rect: { left: 100, top: 40, width: 200, height: 20 },
       value: "12chars-long",
     },
@@ -51,4 +52,21 @@ test("an unknown op throws: the eval exits 1", () => {
 
 test("the committed mini/js/page/field.js runs like its source", () => {
   assert.equal(Page.compiled("field", scene()).call("point", "#pw"), "215 170");
+});
+
+test("point masks a code field before focusing it; focused refuses unmasked input", () => {
+  const s: Scene = { elements: [{ selectors: ["#code"], type: "text" }], focus: 0 };
+  const page = Page.source("field", s);
+  assert.equal(page.call("focused", "#code"), false);
+  assert.equal(page.call("point", "#code"), "0 100");
+  assert.equal(s.elements?.[0]?.type, "password");
+  assert.equal(page.call("focused", "#code"), true);
+});
+
+test("point refuses a field that cannot mask its value", () => {
+  const page = Page.source("field", {
+    elements: [{ selectors: ["#code"], type: "text", rejectMask: true }],
+  });
+  assert.equal(page.call("point", "#code"), "");
+  assert.deepEqual(page.events, []);
 });

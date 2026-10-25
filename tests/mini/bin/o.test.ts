@@ -20,6 +20,8 @@ test("o runs opencli browser with its args and exits as opencli does", async (t)
     "https://linear.app",
     "--session",
     "role",
+    "--window",
+    "foreground",
   ]);
   const failed = await sb.run(["zsh", O, "eval", "1", "--session", "x"]);
   assert.equal(failed.code, 1);
@@ -54,4 +56,47 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
   assert.equal(r.stderr, "");
   assert.match(r.stdout, /^o <command> /);
   assert.deepEqual(sb.calls(), []);
+});
+
+test("caller window options are refused before any browser action", async (t) => {
+  const sb = await Sandbox.create(t);
+  for (const args of [
+    ["state", "--window", "foreground"],
+    ["state", "--window=foreground"],
+    ["state", "--window", "background"],
+    ["state", "--window"],
+    ["state", "--window=background"],
+  ]) {
+    const bad = await sb.run(["zsh", O, ...args]);
+    assert.equal(bad.code, 2);
+  }
+  assert.deepEqual(sb.calls(), []);
+});
+
+test("private mode hides Chrome before OpenCLI and never adds foreground", async (t) => {
+  const sb = await Sandbox.create(t);
+  sb.fake("osascript", [{ program: "chrome.js", args: ["hide"] }]);
+  sb.fake("opencli", [{ stdout: "private result", exit: 7 }]);
+  const r = await sb.run(["zsh", O, "eval", "1", "--private", "--session", "mail"]);
+  assert.equal(r.code, 7);
+  assert.equal(r.stdout, "private result");
+  assert.deepEqual(
+    sb.calls().map((c) => c.cmd),
+    ["osascript", "opencli"],
+  );
+  assert.deepEqual(sb.calls("opencli")[0]?.argv, [
+    "browser",
+    "eval",
+    "1",
+    "--session",
+    "mail",
+    "--window",
+    "background",
+  ]);
+  sb.fake("osascript", [{ exit: 1 }]);
+  const failed = await sb.run(["zsh", O, "state", "--private"]);
+  assert.equal(failed.code, 1);
+  assert.equal(sb.calls("opencli").length, 1);
+  const mixed = await sb.run(["zsh", O, "state", "--private", "--window", "foreground"]);
+  assert.equal(mixed.code, 2);
 });

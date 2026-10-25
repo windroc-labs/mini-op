@@ -3,23 +3,42 @@ usage="termwait <secs> --after <id>   wait up to <secs> s for the command ans ty
 Prints the Terminal's last 25 nonblank lines (secrets hidden by ~/apm/lib/secrets.zsh) and
 \"<id> exited <rc>\", and deletes its marker ~/apm/state/done/<id> (the typed command writes its rc
 there via <id>.tmp + mv; see ans). Markers and temp files there over a day old are deleted on each
-run. Exits 0 (<id> exited 0), 1 (<id> exited non-zero, or its marker holds no rc), 2 (usage error)
-or 124 (still running: the lines, a note naming <id> on stderr, the marker kept for a later wait)."
-# Screen scraping (prompt patterns, exit lines, line-count baselines) missed completions, e.g.
-# output ending in blank lines then the shell prompt waited out the limit (2026-10-23); only the
-# marker ends a wait now.
+run. Exits 0 (<id> exited 0), 1 (<id> exited non-zero, or its marker holds no rc), 2 (usage error),
+75 (readable contents unchanged for 3 s: look now, never completion), or 124 (limit reached).
+75 and 124 keep the marker and print the redacted last lines; inspect with termtail, then answer
+with ans --to or keep waiting. Interactive installs: at most 30 s per wait."
+# Only the marker proves completion. Three seconds of unchanged readable contents is merely a
+# look-now signal (75): a long-running quiet command may also be idle.
 usage_error() { print -u2 -r -- 'termwait: usage: termwait <secs> --after <id>'; exit 2; }
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
 [[ $# -eq 3 && $1 == <-> && $2 == --after && $3 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error
-source ${0:A:h}/../lib/secrets.zsh || exit 1
 source ${0:A:h}/../lib/timeout.zsh || exit 1
 q=$1; id=$3; dir=~/apm/state/done; marker=$dir/$id
 for f in $dir/<->-<->-<->(N.mh+24) $dir/<->-<->-<->.tmp(N.mh+24); do rm -f -- "${f:?}"; done
-# One check per second of <secs> plus the one before the first sleep.
-poll $((q + 1)) 1 test -e $marker
-osascript -l JavaScript ~/apm/js/terminal.js contents 2>/dev/null |
-  secrets_redact | sed -E '/^[[:space:]]*$/d' | tail -25
+end=$(( $(date +%s) + q )); have=0; look_now=0
+ready() {
+  local snapshot stamp
+  [[ -e $marker ]] && return 0
+  stamp=$(date +%s)
+  (( stamp < end )) || return 0
+  snapshot=$(~/apm/bin/termtail --all 2>/dev/null) || { have=0; return 1; }
+  [[ -e $marker ]] && return 0
+  stamp=$(date +%s)
+  (( stamp < end )) || return 0
+  if (( have )) && [[ $snapshot == "$previous" ]]; then
+    if (( stamp - idle_since >= 3 )); then look_now=1; return 0; fi
+  else idle_since=$stamp
+  fi
+  previous=$snapshot; have=1
+  return 1
+}
+poll $((q + 1)) 1 ready
+~/apm/bin/termtail
 if [[ ! -e $marker ]]; then
+  if (( look_now )); then
+    print -u2 -r -- "termwait: look now: $id idle for 3 s; waiting for input or quiet; not finished; use termtail, then termwait <secs> --after $id"
+    exit 75
+  fi
   print -u2 -r -- \
     "termwait: still running: $id (after $q s); keep waiting with termwait <secs> --after $id"
   exit 124

@@ -13,10 +13,11 @@ const JUNK = "https://outlook.live.com/mail/0/junkemail";
 const CODE = "AB12-CD34E";
 const link = (n: number) => `https://linear.app/auth/email/${EMAIL}/code${n}`;
 
-// Where a go.js eval sends the tab.
+// The private auth program consumes the link through stdin, never a navigation argv.
 const goTo = (code = "") =>
-  Page.run(code).page.events.flatMap((e: PageEvent) => (e.type === "navigate" ? [e.url] : []));
-const GO = "(function page(url)";
+  Page.run(code, { href: "https://linear.app/login" }).page.events.flatMap((e: PageEvent) =>
+    e.type === "fetch" ? [e.url] : [],
+  );
 
 // A folder's list as each read finds it, the last one again once they run out: "-" not rendered
 // yet, else the ids of its Linear mails, newest first.
@@ -37,7 +38,6 @@ case $1:$2 in
     echo "$2" | sed -n 's/.*("open","\\([^"]*\\)").*/\\1/p' > $FAKE_DIR/current; echo '{"data":"ok"}';;
   eval:*'("link",'*) cat $FAKE_DIR/mail/$(cat $FAKE_DIR/current).link 2>/dev/null || echo '{"data":""}';;
   eval:*'("code",'*) cat $FAKE_DIR/mail/$(cat $FAKE_DIR/current).code 2>/dev/null || echo '{"data":""}';;
-  eval:'(function page(url)'*) [ ! -e $FAKE_DIR/open-fails ] || exit 1;;
 esac`;
 
 const TYPED: FakeRule = { stdout: "secfield: input[name=authToken] filled, 10 chars\n" };
@@ -70,6 +70,9 @@ async function sandbox(
     fs.mkdirSync(path.join(sb.home, "apm/bin"), { recursive: true });
     fs.symlinkSync(path.join(sb.dir, "bin", name), path.join(sb.home, "apm/bin", name));
   }
+  sb.fake("osascript", [
+    { program: "chrome.js", args: ["auth"], shell: "[[ ! -e $FAKE_DIR/open-fails ]]" },
+  ]);
   // A clock that only the fake sleep moves on: date +%s reads it.
   const clock = "c=$FAKE_DIR/clock; print $(( $(cat $c 2>/dev/null || print 0) + $1 )) > $c";
   sb.fake("sleep", [{ shell: clock, ignoresStdin: true }]);
@@ -78,9 +81,9 @@ async function sandbox(
   const run = (args: string[]) => sb.run(["zsh", MAILLINK, ...args], { timeoutMs: 60000 });
   const opened = () =>
     sb
-      .calls("o")
-      .filter((c) => c.argv[1]?.startsWith(GO))
-      .map((c) => [c.argv[0], ...goTo(c.argv[1]), ...c.argv.slice(2)]);
+      .calls("osascript")
+      .filter((c) => c.program === "chrome.js" && c.argv.at(-1) === "auth")
+      .map((c) => ["auth", ...goTo(c.stdin)]);
   const mailsOpened = () =>
     sb.calls("o").flatMap((c) => /\("open","([^"]*)"\)$/.exec(c.argv[1] ?? "")?.[1] ?? []);
   const sleeps = () =>
@@ -95,9 +98,9 @@ async function sandbox(
   return { sb, run, opened, mailsOpened, sleeps, mark };
 }
 
-// Neither a link nor the code shows in the output or in any call's arguments but the link's eval.
+// Neither a link nor the code shows in output or in any process arguments.
 const noSecret = (sb: Sandbox, r: { stdout: string; stderr: string }) => {
-  const calls = sb.calls().filter((c) => c.cmd !== "o" || !c.argv[1]?.startsWith(GO));
+  const calls = sb.calls();
   for (const s of [CODE, "code1", "code2"]) {
     assert.ok(!(r.stdout + r.stderr).includes(s), s);
     assert.ok(
@@ -116,27 +119,41 @@ test("mark remembers the Linear mails of both folders once listed, opening none"
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, "marked\n");
   assert.equal(r.stderr, "");
+  assert.deepEqual(sb.calls("front"), []);
+  assert.ok(sb.calls("o").every((c) => c.argv.includes("--private")));
+  assert.equal(fs.statSync(path.join(sb.dir, MARK)).mode & 0o777, 0o600);
   assert.equal(fs.readFileSync(path.join(sb.dir, MARK), "utf8"), "c2\nc1\nj1\n");
   assert.deepEqual(
     sb.calls("o").flatMap((c) => (c.argv[0] === "open" ? [c.argv[1]] : [])),
     [INBOX, JUNK],
-  );
-  assert.deepEqual(
-    sb.calls("front").map((c) => c.argv),
-    [["outlook.live.com"], ["outlook.live.com"]],
   );
   assert.deepEqual(mailsOpened(), []);
   assert.equal(sleeps(), "1");
 });
 
 test("mark exits 1 and marks nothing when a folder never lists", async (t) => {
-  const { sb, run, sleeps } = await sandbox(t, { inbox: [["c1"]], junk: ["-"] });
+  const { sb, run, sleeps, mark } = await sandbox(t, { inbox: [["c1"]], junk: ["-"] });
+  mark(["stale"]);
   const r = await run(["mark", EMAIL]);
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
   assert.equal(r.stderr, `maillink: ${JUNK} did not render in 15 s; marked nothing\n`);
   assert.equal(sleeps(), Array(15).fill("1").join(" "));
   assert.ok(!fs.existsSync(path.join(sb.dir, MARK)));
+});
+
+test("mark deletes the previous baseline before the first folder read", async (t) => {
+  const { sb, run, mark } = await sandbox(t, { inbox: [["new"]], junk: [[]] });
+  mark(["stale"]);
+  sb.fake("o", [
+    {
+      shell: `[[ ! -e $HOME/apm/state/maillink.role_1_x_com ]] || exit 1\n${O}`,
+      ignoresStdin: true,
+    },
+  ]);
+  const r = await run(["mark", EMAIL]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(sb.dir, MARK), "utf8"), "new\n");
 });
 
 test("follow opens the link of a Linear mail not marked, in Junk Email too", async (t) => {
@@ -150,9 +167,10 @@ test("follow opens the link of a Linear mail not marked, in Junk Email too", asy
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, "followed\n");
   assert.equal(r.stderr, "");
+  assert.deepEqual(opened(), [["auth", link(2)]]);
+  assert.ok(sb.calls().every((c) => !c.argv.some((arg) => arg.includes("code2"))));
   assert.deepEqual(mailsOpened(), ["c3", "j2"]);
-  assert.deepEqual(opened(), [["eval", link(2), "--session", "role"]]);
-  assert.deepEqual(sb.calls("front").at(-1)?.argv, ["linear.app/auth"]);
+  assert.deepEqual(sb.calls("front").at(-1)?.argv, ["linear.app"]);
   assert.equal(sleeps(), "5 5 3 3");
   assert.deepEqual(sb.calls("secfield"), []);
   assert.ok(!fs.existsSync(path.join(sb.dir, MARK)));

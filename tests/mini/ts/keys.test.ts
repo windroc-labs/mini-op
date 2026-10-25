@@ -239,7 +239,7 @@ test("bad options are usage errors and press nothing", () => {
   }
 });
 
-test("only keys reads stdin", () => {
+test("only keys and private browser auth read stdin", () => {
   const dir = path.join(REPO, "mini/ts");
   const readers = fs
     .readdirSync(dir)
@@ -247,7 +247,7 @@ test("only keys reads stdin", () => {
     .filter((f) =>
       fs.readFileSync(path.join(dir, f), "utf8").includes("fileHandleWithStandardInput"),
     );
-  assert.deepEqual(readers, ["keys.ts"]);
+  assert.deepEqual(readers, ["chrome.ts", "keys.ts"]);
 });
 
 test("the committed mini/js/keys.js runs like its source", () => {

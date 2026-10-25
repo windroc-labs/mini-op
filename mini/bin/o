@@ -1,7 +1,21 @@
 #!/usr/bin/env zsh
-usage='o <command> [args...]   run `opencli browser <command> [args...]` with opencli found in
-/usr/local/bin or ~/.npm-global/bin, after the mini'"'"'s own PATH; exits as opencli does'
+usage='o <command> [args...]   run opencli browser in a foreground window; --private hides Chrome
+first and uses a background window for secret-bearing pages. Never print a private secret reply.
+opencli is found in /usr/local/bin or ~/.npm-global/bin after the mini'"'"'s own PATH; exits as it does'
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
 [[ $# -ge 1 && -n $1 && $1 != -* ]] || { print -u2 -r -- 'o: usage: o <command> [args...]'; exit 2; }
 export PATH=$PATH:/usr/local/bin:$HOME/.npm-global/bin
-exec opencli browser "$@"
+args=(); private=0
+while (( $# )); do
+  case $1 in
+    --private) private=1; shift ;;
+    --window|--window=*) print -u2 -r -- 'o: --window is not supported; window placement is automatic'; exit 2 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+if (( private )); then
+  osascript -l JavaScript ~/apm/js/chrome.js hide >/dev/null || exit 1
+  window=background
+else window=foreground
+fi
+exec opencli browser "${args[@]}" --window $window
