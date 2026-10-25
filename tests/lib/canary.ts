@@ -190,7 +190,7 @@ export const SECRET_SCRIPTS: Scenario[] = [
   {
     script: "mini/runbooks/setup-test-env/storekey",
     title: "stores the clipboard's Linear key and checks it",
-    args: () => ["ensemble-test-linear-key", "ensemble-test"],
+    args: () => ["agentpm-test-linear-key", "ensemble-test"],
     input: (sb) => sb.canary + "\n",
     setup(sb) {
       const clip = hex();
@@ -221,14 +221,14 @@ export const SECRET_SCRIPTS: Scenario[] = [
   {
     script: "mini/runbooks/setup-test-env/importkey",
     title: "copies an exported keychain item into the login keychain",
-    args: () => ["/tmp/apm.x/export.keychain-db", "ensemble-test-github", "dotpm2026"],
+    args: () => ["/tmp/apm.x/export.keychain-db", "agentpm-test-github", "dotpm2026"],
     input: (sb) => sb.canary + "\n",
     setup(sb) {
       const item = hex();
       sb.fake("security", [
         { argv: ["-i"] },
         {
-          argv: ["find-generic-password", "-s", "ensemble-test-github", "-a", "dotpm2026", "-w"],
+          argv: ["find-generic-password", "-s", "agentpm-test-github", "-a", "dotpm2026", "-w"],
           stdout: `${item}\n`,
         },
         { argv: ["find-generic-password"] },
@@ -239,7 +239,7 @@ export const SECRET_SCRIPTS: Scenario[] = [
     consumers: ["security"],
     check(sb, r, secrets) {
       assert.equal(r.code, 0, r.stderr);
-      assert.equal(r.stdout, "importkey: ensemble-test-github/dotpm2026 imported\n");
+      assert.equal(r.stdout, "importkey: agentpm-test-github/dotpm2026 imported\n");
       const [password, item] = secrets;
       const security = stdinOf(sb, "security");
       assert.ok(security.includes(`unlock-keychain -p "${password}" login.keychain`));

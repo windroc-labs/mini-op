@@ -7,6 +7,8 @@
 | Before any task | `README.md` › Start here |
 | Working from this container | `host/README.md` |
 | Install tests, reruns, upgrades in place | `runbooks/install-ensemble.md` |
+| OpenCode install flags and prompt answers | `runbooks/install-ensemble.md` › OpenCode-only install |
+| OpenCode board roles on tmux | `runbooks/manager-on-mini.md` › OpenCode board runs on the tmux Host |
 | Cleanup and the post-test check | `runbooks/clean-ensemble.md` |
 | Machine access, browser, Outlook, GitHub (`dotpm2026`), Linear, API keys | `runbooks/setup-test-env.md` |
 | The manager on the mini | `runbooks/manager-on-mini.md` |

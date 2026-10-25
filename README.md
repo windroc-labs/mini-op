@@ -167,7 +167,7 @@ Answer a running command with `printf '%s' '<public answer>' | mini run 30 --to 
 - **A new sandbox runs its own `apt-get` at boot.** An immediate `apt-get install` inside it fails with "Could not get lock /var/lib/apt/lists/lock": wait for the boot run to finish. The shell template has no tmux.
 - **`sbx reset` leaves state behind**: `~/.sbx`, `~/Library/Application Support/com.docker.sandboxes` and `~/.local/share/llmman`. Trash them after the reset.
 - **`sbx`'s first network-policy choice is global.** The first `sbx create`/`run` asks 1 Open, 2 Balanced, 3 Locked Down; the choice applies to every sandbox (`sbx policy reset` to change it).
-- **Outlook signs itself out between sessions.** Sign in again from `ensemble-test-outlook` / `outlook` with `secfield`, then go straight to `outlook.live.com/mail/0/` past "Help protect your account".
+- **Outlook signs itself out between sessions.** Sign in again from `agentpm-test-outlook` / `outlook` with `secfield`, then go straight to `outlook.live.com/mail/0/` past "Help protect your account".
 
 ## Offline checks
 
