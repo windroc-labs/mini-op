@@ -1,0 +1,3 @@
+[files]
+# PGP key armor and the npm lockfile are not prose.
+extend-exclude = ["*.asc", "package-lock.json"]

@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Bash 3.2 compatible: it runs on the MacBook too.
+set -euo pipefail
+
+synopsis="tools install [--manifest <tools.tsv>] [--dest <dir>]"
+usage="$synopsis
+Install the pinned binary tools of <tools.tsv> (default .github/tools.tsv) for this platform into
+<dir>/bin (default <repo>/.tools), checking each sha256 before anything is installed. Exits 0, 1
+(unsupported platform, no tools for it, or a download or checksum failed) or 2 (usage error)."
+
+fail() {
+  echo "tools: $*" >&2
+  exit 1
+}
+bad_usage() {
+  echo "tools: usage: $synopsis" >&2
+  exit 2
+}
+
+if [ $# -eq 1 ] && { [ "$1" = -h ] || [ "$1" = --help ]; }; then
+  printf '%s\n' "$usage"
+  exit 0
+fi
+[ "${1:-}" = install ] || bad_usage
+shift
+manifest=
+dest=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --manifest | --dest)
+      [ $# -ge 2 ] && [ -n "$2" ] || bad_usage
+      if [ "$1" = --manifest ]; then manifest=$2; else dest=$2; fi
+      shift 2
+      ;;
+    *) bad_usage ;;
+  esac
+done
+here=$(cd "$(dirname "$0")" && pwd)
+[ -n "$manifest" ] || manifest=$here/tools.tsv
+[ -n "$dest" ] || dest=$(dirname "$here")/.tools
+
+case $(uname -s) in
+  Linux) os=linux ;;
+  Darwin) os=darwin ;;
+  *) fail "unsupported OS $(uname -s)" ;;
+esac
+case $(uname -m) in
+  x86_64 | amd64) arch=x64 ;;
+  arm64 | aarch64) arch=arm64 ;;
+  *) fail "unsupported CPU $(uname -m)" ;;
+esac
+platform=$os-$arch
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
+}
+
+work=$(mktemp -d)
+trap 'rm -rf "${work:?}"' EXIT
+mkdir -p "$dest/bin"
+found=0
+# fd 3, so a command in the loop cannot read the manifest from stdin.
+while IFS=$'\t' read -r name version row_platform sum url member <&3; do
+  [ "$name" != name ] && [ "$row_platform" = "$platform" ] || continue
+  found=1
+  stamp=$dest/$name.version
+  if [ -x "$dest/bin/$name" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$version $sum" ]; then
+    echo "tools: $name $version already installed"
+    continue
+  fi
+  download=$work/$name.download
+  curl -fsSL "$url" >"$download"
+  actual=$(sha256 "$download")
+  [ "$actual" = "$sum" ] || fail "$name: sha256 mismatch (expected $sum, got $actual)"
+  mkdir "$work/$name"
+  if [ "$member" = - ]; then
+    cp "$download" "$work/$name/bin"
+  else
+    tar -xzf "$download" -C "$work/$name" "$member"
+    mv "$work/$name/$member" "$work/$name/bin"
+  fi
+  chmod 755 "$work/$name/bin"
+  mv "$work/$name/bin" "$dest/bin/$name"
+  printf '%s %s\n' "$version" "$sum" >"$stamp"
+  echo "tools: installed $name $version"
+done 3<"$manifest"
+[ "$found" = 1 ] || fail "no tools for $platform in $manifest"

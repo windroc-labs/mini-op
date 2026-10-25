@@ -1,0 +1,123 @@
+// keys: type stdin, less one trailing newline, as keystrokes. --front first makes sure that app
+// takes them; --verify-field checks SecurityAgent's secure field got every character, then clicks
+// Allow; --secret keeps the text out of every message; --wake presses Shift first (lock screen).
+ObjC.import("Foundation");
+
+const USAGE =
+  "usage: keys [--front Terminal|SecurityAgent] [--secret] [--verify-field] [--enter] [--wake]";
+
+type KeysOptions = {
+  front?: "Terminal" | "SecurityAgent";
+  secret: boolean;
+  verify: boolean;
+  enter: boolean;
+  wake: boolean;
+};
+
+function fail(message: string): never {
+  throw new Error(`keys: ${message}`);
+}
+
+function parse(argv: string[]): KeysOptions {
+  const options: KeysOptions = { secret: false, verify: false, enter: false, wake: false };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--front") {
+      const app = argv[++i];
+      if (app !== "Terminal" && app !== "SecurityAgent") fail(USAGE);
+      options.front = app;
+    } else if (arg === "--secret") options.secret = true;
+    else if (arg === "--verify-field") options.verify = true;
+    else if (arg === "--enter") options.enter = true;
+    else if (arg === "--wake") options.wake = true;
+    else fail(USAGE);
+  }
+  if (options.verify && options.front !== "SecurityAgent") fail(USAGE);
+  return options;
+}
+
+// All of stdin, less one trailing \r\n or \n: the one place typed text loses its newline.
+function readText(): string {
+  const data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+  const text = ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding));
+  return String(text ?? "").replace(/\r?\n$/, "");
+}
+
+function frontmost(se: JxaSystemEvents): string {
+  return se.processes.whose({ frontmost: true })[0].name();
+}
+
+function terminalInFront(se: JxaSystemEvents): void {
+  Application("Terminal").activate();
+  delay(0.6);
+  const front = frontmost(se);
+  if (front !== "Terminal") fail(`Terminal not frontmost (${front}); typed nothing`);
+}
+
+// SecurityAgent's one secure field, while SecurityAgent is frontmost with that field focused.
+function secureField(se: JxaSystemEvents): { window: JxaWindow; field: JxaUIElement } {
+  const agent = se.processes.byName("SecurityAgent");
+  if (!agent.exists()) fail("no SecurityAgent; typed nothing");
+  if (agent.windows.length === 0) fail("SecurityAgent has no window; typed nothing");
+  const window = agent.windows[0];
+  const fields = window.textFields.whose({ subrole: "AXSecureTextField" });
+  if (fields.length !== 1) fail(`SecurityAgent has ${fields.length} secure fields; typed nothing`);
+  const field = fields[0];
+  if (!(agent.attributes.byName("AXFrontmost").value() && field.focused())) {
+    fail("SecurityAgent field not focused; typed nothing");
+  }
+  return { window, field };
+}
+
+// A System Events error can quote what it was typing: with --secret, drop its message.
+function type(se: JxaSystemEvents, text: string, secret: boolean): void {
+  try {
+    se.keystroke(text);
+  } catch (err) {
+    if (secret) fail("typing failed; the secret may be partly typed");
+    throw err;
+  }
+}
+
+function run(argv: string[]): string {
+  const options = parse(argv);
+  let text = readText();
+  const count = text.length;
+  if (options.secret && count === 0) fail("empty secret; typed nothing");
+  if (options.verify && count === 0) fail("empty text; typed nothing");
+  const se = Application("System Events");
+  if (options.front === "Terminal") terminalInFront(se);
+  const agent = options.front === "SecurityAgent" ? secureField(se) : undefined;
+  if (options.wake) {
+    se.keyCode(56);
+    delay(1.5);
+  }
+  let allowed = false;
+  if (options.verify && agent) {
+    const before = agent.field.value().length;
+    type(se, text.slice(0, 1), options.secret);
+    delay(0.3);
+    if (agent.field.value().length !== before + 1) {
+      fail("first character did not reach the field; stopped");
+    }
+    type(se, text.slice(1), options.secret);
+    delay(0.3);
+    const now = agent.field.value().length;
+    if (now !== before + count) {
+      fail(`field has ${now} characters, expected ${before + count}; did not click Allow`);
+    }
+    agent.window.buttons.byName("Allow").click();
+    allowed = true;
+  } else if (count > 0) {
+    type(se, text, options.secret);
+    delay(0.3);
+  }
+  text = "";
+  if (options.enter) se.keyCode(36);
+  const what = !options.secret
+    ? `${count} characters`
+    : options.verify
+      ? `the secret (${count} characters)`
+      : "the secret";
+  return `keys: typed ${what}${options.enter ? ", Enter" : ""}${allowed ? "; clicked Allow" : ""}`;
+}

@@ -1,0 +1,6 @@
+[
+  {
+    "file": "mini/bin/o",
+    "reason": "appends opencli's install dirs to the mini's PATH, after the inherited PATH; opencli is installed there by runbooks/setup-test-env.md"
+  }
+]

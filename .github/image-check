@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+synopsis="image-check changed [<base>] | history | smoke | block-mini | mini-untouched"
+usage="$synopsis
+The steps of CI's Image job (.github/workflows/ci.yml) around host/start and host/verify-egress.
+changed: build=true|false for \$GITHUB_OUTPUT, whether an image input changed since <base> (no
+base, or one git does not have: true). history: both running images' history holds no secret.
+smoke: container mini-op runs as non-root, without sudo or python3, with its tools, and its
+mini_user is host/config's. block-mini, mini-untouched (as root): reject traffic to the mini,
+then fail if any was sent; block-mini first writes CI's fake ~/.mini-op/config.local.yaml
+(10.9.8.7, tester) for \$SUDO_USER (else \$HOME) when it has none, and takes the address from
+host/config. Exits 0, 1 (a
+check failed) or 2 (usage error)."
+bad_usage() {
+  echo "image-check: usage: $synopsis" >&2
+  exit 2
+}
+case ${1-} in
+  -h | --help)
+    [[ $# == 1 ]] || bad_usage
+    printf '%s\n' "$usage"
+    exit 0
+    ;;
+  changed) [[ $# -le 2 && ${2-} != -* ]] || bad_usage ;;
+  history | smoke | block-mini | mini-untouched) [[ $# == 1 ]] || bad_usage ;;
+  *) bad_usage ;;
+esac
+
+here=$(cd "$(dirname "$0")" && pwd)
+config=$(dirname "$here")/host/config
+tag=mini-op-image-check
+
+# What the images are built from, and the scripts this job runs.
+INPUTS='^(host/(Dockerfile|claude-code\.asc|config|config\.yaml|proxy/.+|ssh_config.*|start|update'
+INPUTS+='|verify-egress)'
+INPUTS+='|\.github/(workflows/ci\.yml|image-check)|mini/lib/secrets\.zsh)$'
+# FR-34's secret patterns (SECRET_NAMES, SECRET_RES) have one home, written for bash and zsh alike.
+secrets_lib=$(dirname "$here")/mini/lib/secrets.zsh
+
+fail() {
+  echo "image-check: $*" >&2
+  exit 1
+}
+
+changed() {
+  local base=$1 files
+  if [[ -n $base ]] && git rev-parse -q --verify "$base^{commit}" >/dev/null; then
+    # --no-renames: a file moved out of an input dir lists its old path too.
+    files=$(git diff --no-renames --name-only "$base" HEAD) || fail "git diff $base failed"
+    if ! grep -Eq "$INPUTS" <<<"$files"; then
+      echo "image-check: no image input changed since $base: no build needed (无需构建)" >&2
+      echo build=false
+      return
+    fi
+  fi
+  echo build=true
+}
+
+scan_history() {
+  local images image lines i hits leaked failed=0
+  # shellcheck source=/dev/null
+  [[ -r $secrets_lib ]] && source "$secrets_lib" && [[ ${#SECRET_RES[@]} -gt 0 ]] ||
+    fail "cannot read secret patterns from $secrets_lib"
+  images=$(docker inspect -f '{{.Config.Image}}' mini-op mini-op-proxy) ||
+    fail "cannot inspect containers mini-op and mini-op-proxy"
+  for image in $images; do
+    lines=$(docker history --no-trunc --format '{{.CreatedBy}}' "$image") ||
+      fail "cannot read the history of $image"
+    leaked=0
+    for i in "${!SECRET_RES[@]}"; do
+      # Line numbers only: the matched text is a secret.
+      hits=$(grep -En -- "${SECRET_RES[$i]}" <<<"$lines" | cut -d : -f 1 | tr '\n' ' ')
+      [[ -z $hits ]] && continue
+      echo "image-check: $image history line(s) ${hits% } match ${SECRET_NAMES[$i]}" >&2
+      leaked=1
+      failed=1
+    done
+    [[ $leaked == 1 ]] || echo "history clean: $image"
+  done
+  return "$failed"
+}
+
+smoke() {
+  local failed=0 uid r tool flag expected account
+  row() { # check result
+    printf '%-32s | %s\n' "$1" "$2"
+    [[ $2 == PASS ]] || failed=1
+  }
+  in_op() { docker exec mini-op "$@" >/dev/null 2>&1; }
+  uid=$(docker exec mini-op id -u 2>/dev/null)
+  [[ $uid =~ ^[0-9]+$ && $uid != 0 ]] && r=PASS || r=FAIL
+  row "non-root (uid ${uid:-?})" "$r"
+  in_op sh -c '! command -v sudo' && r=PASS || r=FAIL
+  row "no sudo on PATH" "$r"
+  in_op sh -c '! command -v python3' && r=PASS || r=FAIL
+  row "no python3 on PATH" "$r"
+  for tool in claude ssh zsh jq; do
+    flag=--version
+    [[ $tool == ssh ]] && flag=-V
+    in_op "$tool" "$flag" && r=PASS || r=FAIL
+    row "$tool $flag" "$r"
+  done
+  in_op sh -c 'command -v nc' && r=PASS || r=FAIL
+  row "nc on PATH" "$r"
+  # The account the container's ctl/ reads (host/update installed the ssh config) is the
+  # definition's.
+  expected=$(mini_value mini_user) || expected=
+  account=$(docker exec mini-op zsh -fc 'source /opt/mini-op/ctl/lib/ssh.zsh && mini_user' \
+    2>/dev/null)
+  [[ -n $expected && $account == "$expected" ]] && r=PASS || r=FAIL
+  row "mini_user is host/config's mini_user" "$r"
+  return "$failed"
+}
+
+# mini_value <key>: the mini's mini_host or mini_user, from host/config.
+mini_value() {
+  local value
+  value=$("$config" get "$1") || fail "cannot read the mini's $1 (host/config)"
+  echo "$value"
+}
+
+# CI has no mini and no local config: block-mini, the Image job's first step, writes CI's fake one
+# for the user sudo runs it for (else this user) when that user has none, saying so.
+ci_home() {
+  local user=${SUDO_USER-} home
+  [[ -z $user ]] && echo "$HOME" && return
+  [[ $user =~ ^[a-z_][a-z0-9_-]*$ ]] || fail "SUDO_USER $user is not an account name"
+  home=$(eval "echo ~$user")
+  [[ -d $home ]] || fail "no home for SUDO_USER $user"
+  echo "$home"
+}
+
+block_mini() {
+  local address chain home local_file
+  home=$(ci_home) || exit 1
+  local_file=$home/.mini-op/config.local.yaml
+  if [[ ! -e $local_file ]]; then
+    if ! { [[ -d $home/.mini-op ]] || mkdir -m 700 "$home/.mini-op"; } ||
+      ! printf 'mini_host: %s\nmini_user: %s\n' 10.9.8.7 tester >"$local_file"; then
+      fail "cannot write CI's fake $local_file"
+    fi
+    [[ -z ${SUDO_USER-} ]] || chown -R "$SUDO_USER" "$home/.mini-op" ||
+      fail "cannot give $home/.mini-op to $SUDO_USER"
+    echo "wrote CI's fake $local_file (no mini in CI)"
+  fi
+  address=$(HOME=$home mini_value mini_host) || exit 1
+  for chain in DOCKER-USER OUTPUT; do
+    iptables -w -I "$chain" -d "$address" -m comment --comment "$tag" -j REJECT ||
+      fail "cannot add the $chain rule rejecting traffic to the mini"
+  done
+  echo "traffic to the mini is rejected (DOCKER-USER, OUTPUT)"
+}
+
+mini_untouched() {
+  local chain pkts total=0
+  for chain in DOCKER-USER OUTPUT; do
+    pkts=$(iptables -w -nvxL "$chain" | awk -v tag="/* $tag */" 'index($0, tag) {print $1; exit}')
+    [[ $pkts =~ ^[0-9]+$ ]] || fail "no $tag rule in $chain"
+    total=$((total + pkts))
+  done
+  [[ $total == 0 ]] || fail "$total packet(s) to the mini were sent and rejected"
+  echo "nothing was sent to the mini"
+}
+
+case $1 in
+  changed) changed "${2-}" ;;
+  history) scan_history ;;
+  smoke) smoke ;;
+  block-mini) block_mini ;;
+  mini-untouched) mini_untouched ;;
+esac

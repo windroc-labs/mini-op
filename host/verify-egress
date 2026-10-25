@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -uo pipefail
+usage="verify-egress [--egress-only]   run on the user's Mac after host/start. From inside container
+mini-op, checks that Claude Code and ssh to the mini work and that every other target is blocked,
+through mini-op-proxy and directly; prints a table. Prints no command output: no tokens, passwords
+or replies. The only mini contact is the read-only ssh mini echo ok. --egress-only (CI) runs the
+network checks alone: no claude -p, which needs a login, and no mini contact. Exits 0, 1 (a check
+failed) or 2 (usage error)."
+egress_only=false
+case $#:${1-} in
+  0:) ;;
+  1:-h | 1:--help)
+    printf '%s\n' "$usage"
+    exit 0
+    ;;
+  1:--egress-only) egress_only=true ;;
+  *)
+    echo "verify-egress: usage: verify-egress [--egress-only]" >&2
+    exit 2
+    ;;
+esac
+proxy=http://mini-op-proxy:4750
+failed=0
+
+row() { # check expected result
+  printf '%-44s | %-14s | %s\n' "$1" "$2" "$3"
+  [[ $3 == PASS ]] || failed=1
+}
+
+in_op() { docker exec mini-op "$@" 2>/dev/null; }
+
+# From inside mini-op: the proxy's answer to CONNECT for the target. smokescreen denies by policy
+# with 407; 000 (no proxy), 200 (open) or 502/504 (allowed but not reached) are not a block.
+curl_via_proxy() {
+  in_op curl -sS -o /dev/null --proxytunnel -x "$proxy" --connect-timeout 5 -m 10 \
+    -w '%{http_connect}' "$1"
+}
+# Seconds until a direct TCP connection was made, 0 when none was (TLS or HTTP errors after it still
+# count).
+curl_direct() {
+  in_op curl -sS -o /dev/null --noproxy '*' --connect-timeout 5 -m 10 -w '%{time_connect}' "$1"
+}
+
+printf '%-44s | %-14s | %s\n' CHECK EXPECTED RESULT
+
+networks=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' \
+  mini-op 2>/dev/null)
+internal=$(docker network inspect -f '{{.Internal}}' mini-op-net 2>/dev/null)
+[[ $networks == 'mini-op-net ' && $internal == true ]] && r=PASS || r=FAIL
+row "mini-op networks: only internal mini-op-net" "mini-op-net" "$r"
+
+[[ $(curl_via_proxy https://api.anthropic.com) == 200 ]] && r=PASS || r=FAIL
+row "proxy: https://api.anthropic.com" "allowed (200)" "$r"
+
+if [[ $egress_only == false ]]; then
+  # Exit 0 and the reply itself, so an error message that merely contains "ok" does not pass.
+  reply=$(in_op timeout 120 claude -p 'Reply with exactly: ok' </dev/null) && rc=0 || rc=$?
+  reply=$(printf '%s' "$reply" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+  [[ $rc == 0 && ${reply%.} == ok ]] && r=PASS || r=FAIL
+  row "claude -p answers" "answers" "$r"
+
+  reply=$(in_op timeout 30 ssh -o BatchMode=yes -o ConnectTimeout=10 mini echo ok \
+    </dev/null)
+  [[ $reply == ok ]] && r=PASS || r=FAIL
+  row "ssh mini echo ok" "ok" "$r"
+fi
+
+for target in http://host.docker.internal:11434 http://192.168.1.1 https://192.168.1.1 \
+  https://192.168.1.51:5001 https://192.168.1.62:5001 http://192.168.1.40:8080 https://example.com \
+  https://1.1.1.1; do
+  [[ $(curl_via_proxy "$target") == 407 ]] && r=PASS || r=FAIL
+  row "proxy: $target" "denied (407)" "$r"
+done
+
+for target in http://host.docker.internal:11434 http://192.168.1.1 https://192.168.1.1 \
+  https://192.168.1.51:5001 https://192.168.1.62:5001 http://192.168.1.40:8080 https://example.com \
+  https://1.1.1.1; do
+  secs=$(curl_direct "$target")
+  [[ $secs =~ ^0(\.0+)?$ ]] && r=PASS || r=FAIL
+  row "direct: $target" "no connection" "$r"
+done
+
+exit "$failed"

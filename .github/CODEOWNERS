@@ -1,0 +1,14 @@
+# Changes to CI, the guards and their registries, the test sandbox, and the lint, format and
+# TypeScript settings and pins need the user's review. Branch protection is off (GitHub does not
+# enforce it on a personal account's private repo), so this review is by convention.
+/.github/ @windroc
+/.githooks/ @windroc
+/tests/guards/ @windroc
+/tests/registry/ @windroc
+/tests/lib/ @windroc
+/tsconfig.json @windroc
+/.prettierrc.json @windroc
+/_typos.toml @windroc
+/.node-version @windroc
+/package.json @windroc
+/package-lock.json @windroc

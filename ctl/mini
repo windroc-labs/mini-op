@@ -1,0 +1,164 @@
+#!/usr/bin/env zsh
+setopt pipefail
+usage="mini run [secs] [--to <id>]   type stdin into the Terminal and wait; not for secrets: use mini pw
+                              (~/apm/bin/ans on the mini: secs default 60; --to <id> answers that
+                              command's prompt)
+mini pw [--lock | --sa]       type the mini account's password into the mini's front Terminal, its
+                              lock screen (only while locked) or its SecurityAgent dialog (one
+                              focused secure field; Allow once the field holds the whole password)
+mini sudo <command> [args]    run <command> with sudo on the mini (stdin /dev/null); mini sudo -v
+                              checks the password only
+mini chord <mods> <key code>  in the mini's front Terminal hold the modifiers (command,control,
+                              option,shift), press and release the key, release the modifiers last
+mini sync [--check]           copy mini/ with its VERSION stamp to the mini's ~/apm, keeping
+                              ~/apm/state/; --check exits 1 unless the mini's ~/apm/VERSION matches
+pw and sudo send the mini account's password from \$(secrets_dir)/<account> (<account>:
+mini_user in ~/.mini-op/config.local.yaml) to ssh's stdin only. Exits 0, 1 (refused or failed), 2
+(usage error) or 124 (a wait timed out; its stderr line says which)."
+source ${0:A:h}/lib/ssh.zsh
+source ${0:A:h}/lib/version.sh
+source ${0:A:h}/lib/secrets.zsh
+root=${0:A:h:h}
+die() { print -u2 -r -- "mini: $1"; exit 1; }
+# usage_error <synopsis>
+usage_error() { print -u2 -r -- "mini: usage: $1"; exit 2; }
+# Unpack into ~/apm.new, move ~/apm/state in, then swap: the code is exactly the package. A run cut
+# off mid-swap left the state in ~/apm.new: move it back before clearing.
+unpack='set -e; chmod -R u+w ~/apm.new ~/apm.old 2>/dev/null || true; if [ -d ~/apm.new/state ] && [ ! -d ~/apm/state ]; then mkdir -p ~/apm; mv ~/apm.new/state ~/apm/state; fi; rm -rf ~/apm.new ~/apm.old; mkdir ~/apm.new; tar -xf - -C ~/apm.new; mkdir -p ~/apm/state; mv ~/apm/state ~/apm.new/state; mv ~/apm ~/apm.old; mv ~/apm.new ~/apm; chmod -R u+w ~/apm.old; rm -rf ~/apm.old'
+
+# This copy's stamp: made on the spot in a git checkout (the Mac), else host/update's (mini-op).
+stamp() {
+  apm_version $root && return
+  [[ -r $root/mini/VERSION ]] || die "no $root/mini/VERSION; run host/update on the Mac first"
+  print -r -- "$(<$root/mini/VERSION)"
+}
+
+sync_mini() {
+  local v
+  v=$(stamp) || exit 1
+  tmp=$(mktemp -d) || die "cannot make a temp dir"
+  trap 'rm -rf -- "${tmp:?}"' EXIT
+  print -r -- $v > $tmp/VERSION
+  local -a entries flags=(--no-xattrs)
+  entries=($root/mini/*(DN:t))
+  entries=(${entries:#VERSION})
+  [[ $(tar --version) == *bsdtar* ]] && flags+=(--no-mac-metadata)
+  COPYFILE_DISABLE=1 tar $flags -cf - -C $root/mini $entries -C $tmp VERSION |
+    mini_ssh -o BatchMode=yes mini $unpack ||
+    die "sync to the mini failed; ~/apm is unchanged or partly updated"
+  print -r -- "mini: synced mini/ to the mini's ~/apm at $v"
+}
+
+check_mini() {
+  local v remote
+  v=$(stamp) || exit 1
+  remote=$(mini_ssh -o BatchMode=yes mini 'cat ~/apm/VERSION' </dev/null) ||
+    die "cannot read ~/apm/VERSION on the mini; run mini sync"
+  [[ $remote == "$v" ]] || die "the mini's ~/apm is at $remote, this copy at $v; run mini sync"
+  print -r -- "mini: in sync at $v"
+}
+
+# on_mini <sub> <command>: <command> on the mini after the check that it has the timeout helpers
+# (mini sync brings them), then exit by ssh's rc: 0, 1 and 124 pass through, anything else is 1.
+on_mini() {
+  local sub=$1
+  local prefix="[ -r ~/apm/lib/timeout.zsh ] || { echo 'mini: $sub: the mini has no ~/apm/lib/timeout.zsh; run mini sync' >&2; exit 1; }; . ~/apm/lib/timeout.zsh"
+  mini_ssh -o BatchMode=yes mini "$prefix; $2"
+  local rc=$?
+  case $rc in
+    0 | 1 | 124) exit $rc ;;
+    255) die "$sub: ssh to the mini failed" ;;
+    *) die "$sub: the mini exited $rc" ;;
+  esac
+}
+
+# timed <sub> <secs> <what> <command>: remote text running <command> under with_timeout; when it
+# runs out the remote shell exits 124 with the killed line, else $rc holds <command>'s status.
+timed() {
+  print -r -- "with_timeout $2 $4; rc=\$?; [ \$rc -ne 124 ] || { echo 'mini: $1: killed after $2 s: $3' >&2; exit 124; }"
+}
+
+# password_file <sub> <nothing>: the mini account's password file, or exit 1 (a MacBook, a fresh
+# container: the user writes it).
+password_file() {
+  local account file
+  account=$(mini_user "mini: $1") || exit 1
+  file=$(secrets_dir)/$account
+  [[ -r $file ]] || die "$1: $file missing; the user writes it (host/README.md, Steps 4); $2"
+  print -r -- $file
+}
+
+run_mini() {
+  local secs=60 to=""
+  [[ $# -gt 0 && $1 =~ '^[0-9]+$' ]] && { secs=$1; shift; }
+  if [[ $1 == --to ]]; then
+    [[ $# -eq 2 && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error 'mini run [secs] [--to <id>]'
+    to=" --to $2"
+    shift 2
+  fi
+  [[ $# -eq 0 ]] || usage_error 'mini run [secs] [--to <id>]'
+  on_mini run "~/apm/bin/ans $secs$to"
+}
+
+keys='osascript -l JavaScript ~/apm/js/keys.js'
+# Wake the display, raise the password field with a Shift press, type only while still locked.
+lock="locked() { ioreg -n Root -d1 -a | grep -A1 CGSSessionScreenIsLocked | grep -q true; }
+locked || { echo 'mini: pw: screen not locked; typed nothing' >&2; exit 1; }
+caffeinate -u -t 3 & sleep 1
+$(timed pw 15 'typing the password' "$keys --wake --secret --enter"); [ \$rc -eq 0 ] || exit \$rc
+sleep 3
+if locked; then echo 'mini: pw: still locked' >&2; exit 1; fi
+echo 'mini: pw: unlocked'"
+
+pw_mini() {
+  [[ $# -eq 0 || ($# -eq 1 && ($1 == --lock || $1 == --sa)) ]] ||
+    usage_error 'mini pw [--lock | --sa]'
+  local file step
+  file=$(password_file pw 'typed nothing') || exit 1
+  case $1 in
+    --lock) on_mini pw "$lock" < $file ;;
+    --sa) step=$(timed pw 25 'typing the password' "$keys --front SecurityAgent --secret --verify-field") ;;
+    *) step=$(timed pw 15 'typing the password' "$keys --front Terminal --secret --enter") ;;
+  esac
+  on_mini pw "$step; exit \$rc" < $file
+}
+
+# sudo -S consumes the password before <command> runs, so <command> never reads it; each arg is
+# quoted for the mini's shell, and the cached credential is dropped after.
+sudo_mini() {
+  local synopsis='mini sudo <command> [args] | mini sudo -v'
+  [[ $# -gt 0 && ($1 != -* || ($1 == -v && $# -eq 1)) ]] || usage_error $synopsis
+  local file
+  file=$(password_file sudo 'ran nothing') || exit 1
+  if [[ $1 == -v ]]; then
+    on_mini sudo 'sudo -k; sudo -S -p "" -v; v=$?; sudo -n true </dev/null; n=$?; sudo -k
+if [ $v -eq 0 ] && [ $n -eq 0 ]; then echo "mini: sudo: password ok"; else echo "mini: sudo: sudo -S -v rc=$v, sudo -n true rc=$n" >&2; exit 1; fi' < $file
+  else
+    on_mini sudo "sudo -k; sudo -S -p '' -v || { echo 'mini: sudo: password rejected; ran nothing' >&2; exit 1; }
+sudo -n -- ${(j: :)${(q)@}} </dev/null; rc=\$?; sudo -k
+[ \$rc -eq 0 ] || { printf 'mini: sudo: %s exited %s\n' ${(q)1} \$rc >&2; exit 1; }" < $file
+  fi
+}
+
+chord_mini() {
+  local mod='(command|control|option|shift)'
+  [[ $# -eq 2 && $1 =~ "^$mod(,$mod)*\$" && $2 =~ '^[0-9]+$' ]] ||
+    usage_error 'mini chord <mods> <key code>'
+  local chord="osascript ~/apm/lib/chord.applescript $1 $2"
+  on_mini chord "$(timed chord 10 'the chord' "$chord"); exit \$rc"
+}
+
+synopsis='mini run|pw|sudo|chord|sync …; mini -h for each'
+case $1 in
+  -h) [[ $# -eq 1 ]] || usage_error $synopsis; print -r -- $usage ;;
+  run) shift; run_mini "$@" ;;
+  pw) shift; pw_mini "$@" ;;
+  sudo) shift; sudo_mini "$@" ;;
+  chord) shift; chord_mini "$@" ;;
+  sync)
+    if [[ $# -eq 1 ]]; then sync_mini
+    elif [[ $# -eq 2 && $2 == --check ]]; then check_mini
+    else usage_error 'mini sync [--check]'; fi
+    ;;
+  *) usage_error $synopsis ;;
+esac

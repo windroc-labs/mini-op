@@ -1,0 +1,23 @@
+#!/usr/bin/env zsh
+usage='shot [out.png]   screenshot the mini (default ~/apm/state/shot.png) and print its path;
+refused while any Terminal window holds a secret (a pattern in ~/apm/lib/secrets.zsh; clear it with
+Cmd-K first) or cannot be read'
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+[[ $# -le 1 && $1 != -* ]] || { print -u2 -r -- 'shot: usage: shot [out.png]'; exit 2; }
+source ${0:A:h}/../lib/secrets.zsh 2>/dev/null ||
+  { print -u2 -- "shot: cannot load ${0:A:h:h}/lib/secrets.zsh; no screenshot"; exit 1; }
+out=${1:-$HOME/apm/state/shot.png}
+mkdir -p ~/apm/state 2>/dev/null ||
+  { print -u2 -- 'shot: cannot make ~/apm/state; no screenshot'; exit 1; }
+osascript -l JavaScript ~/apm/js/terminal.js history --all 2>/dev/null | secrets_found
+rcs=($pipestatus)
+if (( rcs[1] != 0 )); then
+  print -u2 -- 'shot: cannot read the Terminal windows; no screenshot'; exit 1
+fi
+if (( rcs[2] == 0 )); then
+  print -u2 -- 'shot: a secret is in a Terminal window; clear it (Cmd-K) before a screenshot'; exit 1
+elif (( rcs[2] != 1 )); then
+  print -u2 -- 'shot: cannot check the Terminal windows for secrets; no screenshot'; exit 1
+fi
+screencapture -x "$out" || { print -u2 -- 'shot: screencapture failed; no screenshot'; exit 1; }
+print -r -- "$out"

@@ -1,0 +1,3 @@
+# mini-op has no direct way out: reach the mini's ssh through mini-op-proxy (HTTP CONNECT).
+Host mini
+    ProxyCommand nc -X connect -x mini-op-proxy:4750 %h %p

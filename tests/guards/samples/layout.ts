@@ -1,0 +1,56 @@
+const script = "#!/bin/zsh\ntrue\n";
+const base = {
+  "README.md": "# x\n",
+  "package.json": "{}\n",
+  "tests/a.test.ts": "\n",
+  ".github/workflows/ci.yml": "on: push\n",
+  "runbooks/setup.md": "# setup\n",
+  "runbooks/test-board.toml": "x = 1\n",
+  "mini/bin/ans": script,
+  "mini/js/type.js": "function run() {}\n",
+  "mini/js/page/field.js": "(function page() {})\n",
+  "mini/lib/secrets.zsh": "f() {}\n",
+  "mini/ts/keys.ts": "export {};\n",
+  "mini/runbooks/setup/lq": script,
+  "ctl/mini": script,
+  "ctl/CLAUDE.md": "# op\n",
+  "ctl/lib/ssh.zsh": "f() {}\n",
+  "host/start": "#!/usr/bin/env bash\n",
+  "host/ssh_config": "Host mini\n",
+  "host/proxy/acl.yaml": "x: 1\n",
+};
+
+export const violation = {
+  ...base,
+  "notes.md": "# stray\n",
+  // status.md and the runbooks replaced the old playbook.
+  "playbook.md": "# playbook\n",
+  "scripts/ans": script,
+  "runbooks/clean": script,
+  "runbooks/sub/x.md": "# x\n",
+  "mini/ans": script,
+  "mini/js/type.ts": "export {};\n",
+  "mini/js/page/sub/x.js": "x\n",
+  "mini/runbooks/gone/lq": script,
+  "ctl/notes.txt": "x\n",
+  "ctl/sub/x": script,
+  "host/proxy/a/b": "x\n",
+};
+
+export const clean = base;
+
+// Every violation the sample must produce, as "<file>:<line>: <message>".
+export const expected = [
+  "notes.md:1: the root holds only docs and tool configs",
+  "playbook.md:1: the root holds only docs and tool configs",
+  "scripts/ans:1: scripts/ is not a layout dir (mini/, ctl/, host/, runbooks/, tests/)",
+  "runbooks/clean:1: runbooks/ holds docs and data only",
+  "runbooks/sub/x.md:1: runbooks/ holds docs and data only",
+  "mini/ans:1: mini/ holds bin/, js/*.js, js/page/*.js, lib/, ts/ and runbooks/<runbook>/",
+  "mini/js/type.ts:1: mini/ holds bin/, js/*.js, js/page/*.js, lib/, ts/ and runbooks/<runbook>/",
+  "mini/js/page/sub/x.js:1: mini/ holds bin/, js/*.js, js/page/*.js, lib/, ts/ and runbooks/<runbook>/",
+  "mini/runbooks/gone/lq:1: no runbooks/gone.md for this script",
+  "ctl/notes.txt:1: ctl/ holds scripts, CLAUDE.md and lib/",
+  "ctl/sub/x:1: ctl/ holds scripts, CLAUDE.md and lib/",
+  "host/proxy/a/b:1: host/ holds its files and proxy/",
+];

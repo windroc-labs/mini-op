@@ -1,0 +1,6 @@
+[
+  {
+    "file": "mini/lib/chord.applescript",
+    "reason": "held-modifier chords for ctl/mini chord: JXA's keyDown sends nothing useful (README.md › Gotchas)"
+  }
+]

@@ -1,0 +1,7 @@
+#!/usr/bin/env zsh
+usage='dialogs [click <button>]   list every on-screen window with buttons (process | title |
+buttons); with click, press that button wherever it is (dialogs.js)'
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+[[ $# -eq 0 || ($# -eq 2 && $1 == click && $2 != -*) ]] ||
+  { print -u2 -r -- 'dialogs: usage: dialogs [click <button>]'; exit 2; }
+exec osascript -l JavaScript ~/apm/js/dialogs.js "$@"

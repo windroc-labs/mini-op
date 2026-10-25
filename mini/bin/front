@@ -1,0 +1,7 @@
+#!/usr/bin/env zsh
+usage='front <url-substring>   bring the first Chrome tab whose URL contains it to the front
+(front.js)'
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+[[ $# -eq 1 && -n $1 && $1 != -* ]] ||
+  { print -u2 -r -- 'front: usage: front <url-substring>'; exit 2; }
+exec osascript -l JavaScript ~/apm/js/front.js "$1"

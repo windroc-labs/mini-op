@@ -1,0 +1,23 @@
+#!/usr/bin/env zsh
+usage='secfield <session> <css>   type stdin (a secret) into that page field by keystrokes, only
+once a real click has put the OS keyboard focus inside the page on that field; prints nothing of
+the secret, only "secfield: <css> filled, <n> chars"; exits 1 if the field is not found or not
+focused'
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+[[ $# -eq 2 && $1 != -* && $2 != -* ]] ||
+  { print -u2 -r -- 'secfield: usage: secfield <session> <css>'; exit 2; }
+source ${0:A:h}/../lib/opencli.zsh || exit 1
+s=$1; css=$2
+field(){ ~/apm/bin/o eval "$(page_js field $1 $css)" --session $s | opencli_data; }
+IFS= read -r secret
+osascript -l JavaScript ~/apm/js/chrome.js activate >/dev/null; sleep 0.4
+xy=$(field point)
+[ -n "$xy" ] || { print -u2 -r -- "secfield: $css not found"; exit 1; }
+osascript -l JavaScript ~/apm/js/click.js ${=xy} >/dev/null; sleep 0.3
+ok=$(field focused)
+[ "$ok" = true ] ||
+  { print -u2 -r -- "secfield: focus not on $css (page focus: $ok); typed nothing"; exit 1; }
+printf '%s' "$secret" | osascript -l JavaScript ~/apm/js/keys.js --secret >/dev/null; rc=$?; unset secret
+(( rc == 0 )) || { print -u2 -r -- "secfield: typing into $css failed"; exit 1; }
+len=$(field length)
+echo "secfield: $css filled, $len chars"

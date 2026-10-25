@@ -1,0 +1,201 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Weekly, so the Image job rebuilds on the current Debian and Claude Code packages.
+  schedule:
+    - cron: "17 3 * * 1"
+
+# A new push to a pull request cancels its running checks; pushes to main all run. The weekly run
+# has its own group, so a push to main never cancels it while it waits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Install zsh
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+      - run: npm ci --ignore-scripts
+      - run: .github/tools install
+      - run: npm run lint
+      - run: npm run format
+      - run: npm run typecheck
+      - name: Require unchanged checkout
+        run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
+
+  guards:
+    name: Guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: npm ci --ignore-scripts
+      - run: npm run guards
+      - name: Require unchanged checkout
+        run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
+
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Install zsh
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+      - run: npm ci --ignore-scripts
+      - run: .github/tools install
+      - name: Make shipped code read-only
+        run: chmod -R a-w ctl host mini
+      - run: npm test
+      - name: Require unchanged checkout
+        run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
+
+  # Diff coverage needs the base commit, so this job fetches the full history.
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Install zsh
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+      - run: npm ci --ignore-scripts
+      - run: .github/tools install
+      - name: Make shipped code read-only
+        run: chmod -R a-w ctl host mini
+      - run: npm run coverage
+        env:
+          COVERAGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Require unchanged checkout
+        run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
+
+  # host/ runs on the MacBook's /bin/bash 3.2 (NFR-4): build it from GNU's pinned tarball and run
+  # the host tests with it first on PATH.
+  bash32:
+    name: Host bash 3.2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Install zsh and bison
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh bison
+      - run: npm ci --ignore-scripts
+      - name: Build bash 3.2.57
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -fsSL -o bash-3.2.57.tar.gz https://ftp.gnu.org/gnu/bash/bash-3.2.57.tar.gz
+          echo "3fa9daf85ebf35068f090ce51283ddeeb3c75eb5bc70b1a4a7cb05868bfe06a4  bash-3.2.57.tar.gz" |
+            sha256sum -c -
+          tar -xzf bash-3.2.57.tar.gz
+          cd bash-3.2.57
+          rm -f y.tab.c y.tab.h
+          CFLAGS="-O1 -std=gnu89 -w" ./configure --build="$(uname -m)-unknown-linux-gnu" \
+            --without-bash-malloc --disable-nls >/dev/null
+          # Serial: its Makefile builds libreadline.a and libhistory.a by two sub-makes in
+          # lib/readline, which race on their shared objects under -j.
+          make YACC="bison -y" >/dev/null
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: Require bash 3.2.57 first on PATH
+        run: bash --version | grep -F 'version 3.2.57'
+      - name: Make shipped code read-only
+        run: chmod -R a-w ctl host mini
+      - run: node --test --test-timeout=60000 'tests/host/**/*.test.ts'
+      - name: Require unchanged checkout
+        run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
+
+  # Builds and checks both images as host/start runs them, when an image input changed and weekly;
+  # otherwise it reports that no build is needed. It never reaches the mini (block-mini).
+  image:
+    name: Image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Decide whether an image input changed
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        # A pull request checks out its merge commit: its first parent is the base branch.
+        run: |
+          case $EVENT in
+            pull_request) base=HEAD^1 ;;
+            push) base=$BEFORE ;;
+            *) base= ;;
+          esac
+          .github/image-check changed "$base" >>"$GITHUB_OUTPUT"
+      - name: No build needed
+        if: steps.changes.outputs.build != 'true'
+        run: |
+          echo "No build needed (无需构建): no image input changed." | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Reject traffic to the mini
+        if: steps.changes.outputs.build == 'true'
+        run: sudo .github/image-check block-mini
+      - name: Build both images and start both containers
+        if: steps.changes.outputs.build == 'true'
+        run: host/start
+      - name: No secret in the images' history
+        if: steps.changes.outputs.build == 'true'
+        run: .github/image-check history
+      - name: Container smoke
+        if: steps.changes.outputs.build == 'true'
+        run: .github/image-check smoke
+      - name: Egress only through the proxy
+        if: steps.changes.outputs.build == 'true'
+        run: host/verify-egress --egress-only
+      - name: Nothing was sent to the mini
+        if: always() && steps.changes.outputs.build == 'true'
+        run: sudo .github/image-check mini-untouched
+      - name: Require unchanged checkout
+        run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
+
+  ci:
+    name: CI
+    needs: [lint, guards, test, coverage, bash32, image]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fail when a needed job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

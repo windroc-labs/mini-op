@@ -1,0 +1,15 @@
+# mini-op's settings: every key, one line each, with its default. ~/.mini-op/config.local.yaml sets
+# only the keys this Mac changes; host/config merges the two (a list replaces the whole list) and
+# generates the ssh and proxy configs into ~/.mini-op/. A key not listed here is an error.
+# The mini's LAN IPv4 address. Empty: not set; set it in ~/.mini-op/config.local.yaml.
+mini_host: ""
+# The mini's account (ssh User; mini-op's password file is named after it). Empty: not set; set it in ~/.mini-op/config.local.yaml.
+mini_user: ""
+# The mini's ssh port: ssh's Port, and the only port the proxy opens to the mini.
+mini_port: 22
+# Hosts mini-op may reach through the proxy besides the mini: Claude Code's API and claude.ai login
+# (https://code.claude.com/docs/en/network-config). Everything else is denied.
+proxy_allowed_domains: [api.anthropic.com, claude.ai, claude.com, platform.claude.com]
+# Ranges the proxy denies; smokescreen denies them by default too, listed so a later default change
+# can't open them. A local list may add ranges, never drop these.
+proxy_deny_ranges: [0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, ::1/128, fc00::/7, fe80::/10]

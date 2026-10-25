@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -uo pipefail
+usage="resume   run on the user's Mac after host/stop: start mini-op-proxy, require it still
+running 2 s later, then start mini-op, so mini-op only runs once its one way out does. Recreates no
+container or volume. Give mini-op the mini's password again after. Exits 0, 1 (a container did not
+start; mini-op stays stopped when the proxy does not run) or 2 (usage error)."
+if [ $# -eq 1 ] && [ "$1" = -h ]; then
+  printf '%s\n' "$usage"
+  exit 0
+fi
+[ $# -eq 0 ] || {
+  echo "resume: usage: resume" >&2
+  exit 2
+}
+proxy=mini-op-proxy
+docker start "$proxy" >/dev/null || {
+  echo "resume: $proxy did not start; mini-op not started (host/start recreates both)" >&2
+  exit 1
+}
+sleep 2
+if [ "$(docker inspect -f '{{.State.Running}}' "$proxy" 2>/dev/null)" != true ]; then
+  echo "resume: $proxy is not running; mini-op not started" >&2
+  exit 1
+fi
+docker start mini-op >/dev/null || {
+  echo "resume: mini-op did not start" >&2
+  exit 1
+}
+echo "resumed $proxy and mini-op; give mini-op the mini's password again (host/README.md step 4)"

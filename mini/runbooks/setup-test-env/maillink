@@ -1,0 +1,42 @@
+#!/usr/bin/env zsh
+usage='maillink mark|follow <email>   find the Linear login link for <email> in Outlook (session mail)
+mark: before requesting the link, remember the newest one; follow: after, wait 30 s for the mail,
+then up to 12 reads 10 s apart for a link other than the marked one, and open it in the Linear tab
+(session role). The link never prints. Outlook renders no list in a hidden tab, so its tab is raised
+before each read. Prints "marked" or "followed"; exits 0, 1 (the mark cannot be written, the link is
+not a Linear login link, or the tab does not take the link), 2 (usage error) or 124 (no fresh link:
+"timed out after 140 s").'
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+[[ $# -eq 2 && $1 == (mark|follow) && $2 =~ '^[A-Za-z0-9._%+][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+$' ]] ||
+  { print -u2 -r -- 'maillink: usage: maillink mark|follow <email>'; exit 2; }
+source ${0:A:h}/../../lib/timeout.zsh || exit 1
+source ${0:A:h}/../../lib/opencli.zsh || exit 1
+cmd=$1; E=$2; S=~/apm/state/maillink.${E//[^A-Za-z0-9]/_}
+m(){ ~/apm/bin/o "$@" --session mail; }
+newest(){
+  m open https://outlook.live.com/mail/0/ >/dev/null; ~/apm/bin/front outlook.live.com >/dev/null
+  m wait text "Focused" >/dev/null 2>&1
+  m eval "$(page_js outlook open)" >/dev/null
+  sleep 3
+  m eval "$(page_js outlook link $E)" | opencli_data
+}
+case $cmd in
+  mark)
+    mkdir -p ~/apm/state 2>/dev/null || { print -u2 -r -- 'maillink: cannot make ~/apm/state'; exit 1; }
+    newest > $S; echo marked ;;
+  follow)
+    OLD=$(cat $S 2>/dev/null)
+    fresh(){ L=$(newest); [[ -n $L && $L != $OLD ]]; }
+    sleep 30
+    poll 12 10 fresh; rc=$?
+    rm -f -- "${S:?}"
+    (( rc == 0 )) ||
+      { print -u2 -r -- "maillink: timed out after 140 s: no fresh link for $E"; exit 124; }
+    # $L comes from mail: open only a Linear login link.
+    [[ $L =~ '^https://linear\.app/auth/email/[A-Za-z0-9._%@/+-]+$' ]] ||
+      { print -u2 -r -- 'maillink: the fresh link is not a Linear login link'; exit 1; }
+    ~/apm/bin/o eval "$(page_js go $L)" --session role >/dev/null ||
+      { print -u2 -r -- 'maillink: cannot open the link in the Linear tab'; exit 1; }
+    ~/apm/bin/front linear.app/auth >/dev/null
+    echo followed ;;
+esac

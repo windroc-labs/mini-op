@@ -1,0 +1,52 @@
+[
+  {
+    "file": "host/Dockerfile",
+    "reason": "the mini-op image: base digest, claude-code pin, PATH, ssh config",
+    "tests": [
+      "tests/host/Dockerfile.test.ts",
+      "tests/host/update.test.ts"
+    ]
+  },
+  {
+    "file": "host/claude-code.asc",
+    "reason": "Claude Code's apt signing key, checked against the Dockerfile's fingerprint",
+    "tests": [
+      "tests/host/claude-code.test.ts"
+    ]
+  },
+  {
+    "file": "host/config.yaml",
+    "reason": "mini-op's settings: every key with its default; the mini's address and account empty",
+    "tests": [
+      "tests/host/config.test.ts"
+    ]
+  },
+  {
+    "file": "host/proxy/Dockerfile",
+    "reason": "the mini-op-proxy image: smokescreen release checksums and base digests",
+    "tests": [
+      "tests/host/proxy/Dockerfile.test.ts"
+    ]
+  },
+  {
+    "file": "host/ssh_config.container",
+    "reason": "the container's proxy hop to the mini",
+    "tests": [
+      "tests/host/ssh_config.container.test.ts"
+    ]
+  },
+  {
+    "file": "mini/lib/chord.applescript",
+    "reason": "the held-modifier chord program: AppleScript, as JXA's keyDown sends nothing useful (tests/registry/applescript.json)",
+    "tests": [
+      "tests/ctl/mini.test.ts"
+    ]
+  },
+  {
+    "file": "mini/runbooks/install-ensemble/strata.conf",
+    "reason": "install-test's Strata OpenCode URL, model and context (FR-56)",
+    "tests": [
+      "tests/mini/runbooks/install-ensemble/install-test.test.ts"
+    ]
+  }
+]

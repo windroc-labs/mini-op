@@ -1,0 +1,76 @@
+#!/usr/bin/env zsh
+usage="ans [secs] [--to <id>]   type stdin into the Terminal + Enter, then termwait (default 60 s)
+A command is typed as \`{ <stdin>\`, a newline, then \`}; printf '%s\\n' \$? > <marker>.tmp && mv -f
+<marker>.tmp <marker>\`, the marker ~/apm/state/done/<id> with a new <id>, so termwait ends when it
+ends; trailing newlines are dropped, and an unbalanced \`}\` in stdin closes the group early: no
+marker. --to <id>: stdin answers a prompt of the still-running command <id> (a [y/N], a key): typed
+as is, then waits for <id>. Types only if Terminal is frontmost, and does not wait if its scrollback
+is unchanged 5 s after typing. Exits 0 (the command exited 0), 1 (refused or failed, or the command
+exited non-zero: \"<id> exited <rc>\" on stdout), 2 (usage error) or 124 (a wait timed out: \"still
+running: <id>\", \"killed after <N> s\" or \"timed out after <N> s\" on stderr)."
+synopsis='ans [secs] [--to <id>]'
+usage_error() { print -u2 -r -- "ans: usage: $synopsis$1"; exit 2; }
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+q=60; id=""
+if [[ $# -gt 0 && $1 == <-> ]]; then q=$1; shift; fi
+if [[ ${1:-} == --to ]]; then
+  [[ $# -eq 2 && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error
+  id=$2; shift 2
+fi
+[[ $# -eq 0 ]] || usage_error
+source ${0:A:h}/../lib/timeout.zsh || exit 1
+terminal=(osascript -l JavaScript ~/apm/js/terminal.js)
+# killed <secs> <what>: exits 124 with the killed line when the step before ran out of time.
+killed() { (( $? != 124 )) || { print -u2 -r -- "ans: killed after $1 s: $2"; exit 124; }; }
+with_timeout 5 $terminal activate </dev/null >/dev/null || {
+  killed 5 'activating Terminal; typed nothing'
+  print -u2 -r -- 'ans: Terminal not frontmost; typed nothing'; exit 1
+}
+input=$(cat; print x); input=${input%x}
+if [[ -n $id ]]; then
+  text=$input
+else
+  cmd=$input
+  while [[ $cmd == *$'\n' ]]; do cmd=${cmd%?}; done
+  [[ -n ${cmd//[[:space:]]/} ]] || usage_error ' with a command on stdin; typed nothing'
+  id=$(date +%s)-$$-$RANDOM
+  mkdir -p ~/apm/state/done 2>/dev/null ||
+    { print -u2 -r -- 'ans: cannot make ~/apm/state/done; typed nothing'; exit 1; }
+  # `}` on its own line leaves a trailing `;`, `# comment` or heredoc terminator intact (keys.js
+  # keystrokes the newline; zle ends a line on ^M or ^J).
+  marker=${(q)HOME}/apm/state/done/$id
+  text="{ $cmd"$'\n'"}; printf '%s\n' \$? > $marker.tmp && mv -f $marker.tmp $marker"
+fi
+hist() { with_timeout 5 $terminal history 2>/dev/null; }
+before=$(hist) || {
+  killed 5 'reading Terminal; typed nothing'
+  print -u2 -r -- 'ans: cannot read Terminal; typed nothing'; exit 1
+}
+keys=(osascript -l JavaScript ~/apm/js/keys.js --enter)
+print -rn -- "$text" | with_timeout 15 $keys >/dev/null || {
+  killed 15 typing
+  print -u2 -r -- 'ans: typing failed; not waiting'; exit 1
+}
+# Keys dropped while the window was being moved left ans waiting 300 s for a command that never ran
+# (2026-10-23): wait only once the scrollback changed. A failed or killed read is not a change, and
+# with no read at all the typed command may run: name it.
+typed="$id was typed: termwait <secs> --after $id waits for it"
+read_any=0 read_killed=0
+landed() {
+  local now
+  now=$(hist) || { (( $? != 124 )) || read_killed=1; return 1; }
+  read_any=1; [[ $now != $before ]]
+}
+poll 10 0.5 landed || {
+  if (( ! read_any && read_killed )); then
+    print -u2 -r -- "ans: killed after 5 s: reading Terminal; $typed"; exit 124
+  elif (( ! read_any )); then
+    print -u2 -r -- "ans: timed out after 5 s: cannot read Terminal; $typed"; exit 124
+  fi
+  print -u2 -r -- 'ans: timed out after 5 s: typed text did not land; not waiting'; exit 124
+}
+with_timeout 5 $terminal bottom >/dev/null || killed 5 "scrolling Terminal; $typed"
+~/apm/bin/termwait "$q" --after "$id"; rc=$?
+with_timeout 5 $terminal bottom >/dev/null || (( $? != 124 )) ||
+  print -u2 -r -- "ans: note: killed after 5 s: scrolling Terminal after $id ended"
+exit $rc

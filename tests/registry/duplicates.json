@@ -1,0 +1,14 @@
+[
+  {
+    "file": "tests/lib/sandbox.test.ts",
+    "repeats": "tests/lib/help_probe.test.ts",
+    "text": "t.after(() => fs.rmSync(repo, { recursive: true, force: true }));",
+    "reason": "each test file builds its own throwaway checkout holding the tripwire's registries; the two differ in what they add to it"
+  },
+  {
+    "file": "tests/mini/runbooks/install-ensemble/install-test.test.ts",
+    "repeats": "tests/mini/runbooks/clean-ensemble/clean-test.test.ts",
+    "text": "async function sandbox(t: Parameters<typeof Sandbox.create>[0], rc = 0) {",
+    "reason": "install-test and clean-test both run an ensemble script fetched with curl; each test fakes that script the same way for its own runbook script"
+  }
+]

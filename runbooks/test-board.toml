@@ -1,0 +1,63 @@
+# Agent PM Test board (linear.app/agentpm-test; pre-rename names: runbooks/setup-test-env.md 3b), for the mini's ~/.ensemble/config.local.toml
+# Not config: project agentpm-test 6e020324-11da-409a-8eaa-4673b8090c34; view Dashboard a8e81d98-e404-43f8-8f2f-7ed64747660b
+[orchestrator]
+tracker = "linear"
+
+[orchestrator.linear]
+team = "dd277963-4a78-4565-8902-0faa9b604bab"
+task_label_group = "9fcfffb3-1ffa-449f-a670-08e89db11201"
+agent_label_group = "30091a9e-fadd-499f-9c2b-8d4f17d80522"
+harness_key = "ensemble-test-linear-harness"
+manager_key = "ensemble-test-linear-key"
+human_members = ["dotpm2026@outlook.com"]
+
+[orchestrator.linear.states]
+backlog     = "f2f86500-5d96-457f-9979-cdbfb34ac457"
+todo        = "5a02ea0a-c9d8-495e-bb0a-9b2c385ac681"
+in_progress = "651e82ca-3128-41ad-9c19-f11126a4b0f0"
+in_review   = "f6beecf1-095c-44a2-8b13-ca5ed863484b"
+handoff     = "5ce03698-2bcb-4aaf-b5f4-984cc5c4f53a"
+done        = "4924abb3-4ce2-4233-9a37-148eed146882"
+canceled    = "4d6329a6-fa7b-4144-abbe-a93c3edd679c"
+
+[orchestrator.linear.task_labels]
+build          = "f41bfd60-9de8-4e19-931d-934366c816ba"
+light-build    = "b80152f8-6491-48f5-b107-981e85490f5c"
+light-research = "c08dec27-9c45-4e8b-9908-f00dacf212aa"
+deep-research  = "d8acfa8a-ca51-4b05-adcb-abb3a233520a"
+
+[orchestrator.linear.agent_labels]
+claude   = "4a0b8b57-fe08-4d43-a410-c7cce28ed041"
+codex    = "d2c6f686-b2b2-4ca6-b2b7-7bfc19bba10b"
+opencode = "e9402b58-c48d-408c-b0b2-0f8c5c05cdb4"
+
+[orchestrator.linear.roles.researcher]
+account = "dotpm2026+researcher@outlook.com"
+key = "ensemble-test-linear-researcher"
+
+[orchestrator.linear.roles.pm]
+account = "dotpm2026+pm@outlook.com"
+key = "ensemble-test-linear-pm"
+
+[orchestrator.linear.roles.engineer]
+account = "dotpm2026+engineer@outlook.com"
+key = "ensemble-test-linear-engineer"
+
+[orchestrator.linear.project_repos]
+"6e020324-11da-409a-8eaa-4673b8090c34" = "dotpm2026/agentpm-test"
+
+[orchestrator.client_max_runs]
+opencode = 1
+claude = 1
+
+[delegate.roles.researcher.output]
+type = "github"
+repo = "dotpm2026/agentpm-test"
+branch = "main"
+dir = "Research/"
+
+[delegate.roles.pm.output]
+type = "github"
+repo = "dotpm2026/agentpm-test"
+branch = "main"
+dir = "PRD/"

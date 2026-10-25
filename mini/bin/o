@@ -1,0 +1,7 @@
+#!/usr/bin/env zsh
+usage='o <command> [args...]   run `opencli browser <command> [args...]` with opencli found in
+/usr/local/bin or ~/.npm-global/bin, after the mini'"'"'s own PATH; exits as opencli does'
+[[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+[[ $# -ge 1 && -n $1 && $1 != -* ]] || { print -u2 -r -- 'o: usage: o <command> [args...]'; exit 2; }
+export PATH=$PATH:/usr/local/bin:$HOME/.npm-global/bin
+exec opencli browser "$@"

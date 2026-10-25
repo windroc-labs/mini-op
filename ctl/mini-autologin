@@ -1,0 +1,95 @@
+#!/usr/bin/env zsh
+usage="mini-autologin [--reboot]  (in this container) as root on the mini, re-enable the mini
+                           account's auto-login (writes /etc/kcpassword itself and sets
+                           autoLoginUser)
+  --reboot                 only at the login window: then reboot and wait up to 300 s for the
+                           account to be the console user
+The account is mini_user in ~/.mini-op/config.local.yaml; its password goes from
+\$(secrets_dir)/<account> to ssh's stdin and on to sudo -S and the perl encoder's stdin only.
+Exits 0, 1 (refused or failed), 2 (usage error) or 124 (the mini did not come back from the
+reboot)."
+if [[ $# -eq 1 && $1 == -h ]]; then
+  print -r -- $usage
+  exit 0
+fi
+[[ $# -eq 0 || ($# -eq 1 && $1 == --reboot) ]] || {
+  print -u2 -r -- 'mini-autologin: usage: mini-autologin [--reboot]'
+  exit 2
+}
+reboot=; [[ $1 == --reboot ]] && reboot=1
+die() { print -u2 -r -- "mini-autologin: $1"; exit 1; }
+source ${0:A:h}/lib/ssh.zsh
+source ${0:A:h}/lib/secrets.zsh
+account=$(mini_user mini-autologin) || exit 1
+pwfile=$(secrets_dir)/$account
+[ -r "$pwfile" ] || die "$pwfile missing; changed nothing"
+# The console user (root at the login window) and the boot time, one per line.
+probe() {
+  mini_ssh -o BatchMode=yes -o ConnectTimeout=10 mini 'stat -f%Su /dev/console; sysctl -n kern.boottime' </dev/null
+}
+if [[ -n $reboot ]]; then
+  before=$(probe) || die "cannot reach the mini; changed nothing"
+  [[ ${before%%$'\n'*} == root ]] ||
+    die "${before%%$'\n'*} is logged in, not at the login window; changed nothing"
+fi
+# Read once: sudo -S would take all of stdin when the secret has no trailing newline.
+# sysadminctl -autologin cannot write /etc/kcpassword over ssh (it needs a SessionAgent of a logged-in
+# session, none at the login window), so the mini writes it: perl (python3 is not stock) encodes the
+# password in the public kcpassword format (the password zero-padded to the next multiple of 12
+# bytes, XORed with the key), and one root sh, mode 600 from the start, replaces the file only with
+# a non-empty one. Restored means the file is a new one (inode, mtime and size changed) and the login
+# window's user is the account: an old file left in place does not pass. The account is a plain
+# login name (mini_user checks it), quoted all the same.
+remote="account=${(q)account}"
+remote+='
+fail() { unset pass; sudo -k; echo "mini-autologin: $1" >&2; exit 1; }
+IFS= read -r pass || [ -n "$pass" ] || fail "no password on stdin; changed nothing"
+sudo -k
+printf "%s\n" "$pass" | sudo -S -p "" -v 2>/dev/null || fail "sudo refused the password; changed nothing"
+old=$(stat -f "%i %m %z" /etc/kcpassword 2>/dev/null)
+printf "%s" "$pass" |
+  perl -e "my @k = (0x7D, 0x89, 0x52, 0x23, 0xD2, 0xBC, 0xDD, 0xEA, 0xA3, 0xB9, 0x1F); local \$/; my @p = unpack(q(C*), <STDIN>); push @p, (0) x (12 - @p % 12); print pack(q(C*), map { \$p[\$_] ^ \$k[\$_ % 11] } 0 .. \$#p);" |
+  sudo -n sh -c "umask 077 && cat > /etc/kcpassword.new && [ -s /etc/kcpassword.new ] && chown root:wheel /etc/kcpassword.new && chmod 600 /etc/kcpassword.new && mv -f /etc/kcpassword.new /etc/kcpassword || { rm -f /etc/kcpassword.new; exit 1; }" ||
+  fail "cannot write /etc/kcpassword; auto-login not restored"
+unset pass
+sudo -n defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$account"
+new=$(stat -f "%i %m %z" /etc/kcpassword 2>/dev/null)
+user=$(defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser 2>/dev/null)
+if [ -z "$new" ] || [ "$new" = "$old" ] || [ "${new##* }" -le 0 ] 2>/dev/null || [ "$user" != "$account" ]; then
+  fail "auto-login not restored for $account (/etc/kcpassword not rewritten or autoLoginUser not $account)"
+fi
+echo "mini-autologin: auto-login restored for $account"'
+# Never reboot a session someone logged into since the probe.
+[[ -n $reboot ]] && remote+='
+console=$(stat -f%Su /dev/console 2>/dev/null)
+[ "$console" = root ] || fail "$console logged in meanwhile; auto-login is restored, not rebooting"
+echo "mini-autologin: rebooting"
+sudo -n shutdown -r now </dev/null >/dev/null || fail "reboot refused; auto-login is restored"'
+remote+='
+sudo -k'
+tmp=$(mktemp -d) || die "cannot make a temp dir; changed nothing"
+trap 'rm -rf -- "${tmp:?}"' EXIT
+out=$tmp/out
+# Keepalives end the call within about 30 s when the reboot cuts the network under it. Its stderr
+# comes after its output, and not at all when it is ssh's lost connection after the rebooting line.
+mini_ssh -o BatchMode=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=3 mini "$remote" < "$pwfile" > "$out" 2> "$tmp/err"; rc=$?
+cat -- "$out"
+cut=; (( rc == 255 )) && grep -qx 'mini-autologin: rebooting' "$out" && cut=1
+[[ -n $cut ]] || cat -- "$tmp/err" >&2
+(( rc == 255 )) && [[ -z $cut ]] &&
+  die "ssh to the mini failed before any reboot; auto-login may not be restored, run it again"
+[[ -n $reboot ]] && (( rc == 0 || rc == 255 )) || exit $rc
+# Rebooted: a new boot time with the account on the console. A probe answering before the mini went down
+# still shows the old boot time.
+seen=
+for i in {1..30}; do
+  sleep 10
+  now=$(probe 2>/dev/null) || continue
+  [[ ${now#*$'\n'} != "${before#*$'\n'}" ]] || continue
+  seen=${now%%$'\n'*}
+  [[ $seen == "$account" ]] && { echo "mini-autologin: rebooted; console user is $account"; exit 0; }
+done
+[[ -z $seen ]] || die "rebooted, but the console user is $seen, not $account; ask the user to log $account in"
+print -u2 -r -- "mini-autologin: timed out after 300 s: the mini did not come back from the reboot;" \
+  "ask the user to log $account in"
+exit 124

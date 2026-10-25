@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+usage="pre-commit   format the staged bash and TS files with the versions CI pins before each
+commit (git runs it). Enable once per clone: git config core.hooksPath .githooks. Exits 0, 1
+(prettier is not installed, or a staged file also has unstaged changes) or 2 (usage error)."
+if [ $# -eq 1 ] && [ "$1" = -h ]; then
+  printf '%s\n' "$usage"
+  exit 0
+fi
+[ $# -eq 0 ] || {
+  echo "pre-commit: usage: pre-commit" >&2
+  exit 2
+}
+tools=$(cd "$(dirname "$0")/.." && pwd)
+if [ ! -d "$tools/node_modules/prettier" ]; then
+  echo "pre-commit: prettier is not installed; run npm ci --ignore-scripts in $tools" >&2
+  exit 1
+fi
+exec node "$tools/.github/format.ts" --staged --root "$(git rev-parse --show-toplevel)"
