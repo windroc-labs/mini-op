@@ -54,6 +54,13 @@ export function shellSources(view: RepoView): ShellSource[] {
   return sources;
 }
 
+// Every doc's shell but the tests' docs, as sources.
+export function docShellSources(view: RepoView): ShellSource[] {
+  return scanned(view)
+    .filter((file) => file.endsWith(".md") && !file.startsWith("tests/"))
+    .map((file) => ({ file, views: docShellViews(view.read(file)) }));
+}
+
 const FENCE = /^```/;
 
 // A doc's shell: each inline code span and each fenced block (its lines between the fences, so a

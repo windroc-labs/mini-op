@@ -6,6 +6,7 @@
 | --- | --- |
 | Before any task | `README.md` › Start here |
 | Working from this container | `host/README.md` |
+| The environment definition for ensemble | `host/README.md` › Environment definition |
 | Install tests, reruns, upgrades in place | `runbooks/install-ensemble.md` |
 | OpenCode install flags and prompt answers | `runbooks/install-ensemble.md` › OpenCode-only install |
 | OpenCode board roles on tmux | `runbooks/manager-on-mini.md` › OpenCode board runs on the tmux Host |

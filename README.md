@@ -29,7 +29,7 @@ the task. Each fact has one home; the others point to it.
 | `runbooks/return-mini.md` | erasing the mini before it goes back |
 | `runbooks/check-connection.md` | the read-only check that mini-op reaches the mini and the mini's `~/apm` is in sync |
 | `runbooks/visible-operations.md` | every mini-side operation: visible route, protected exceptions and result recovery |
-| `host/README.md` | the mini-op container that operates the mini |
+| `host/README.md` | the mini-op container that operates the mini, and its environment definition for ensemble |
 
 ## Layout
 
