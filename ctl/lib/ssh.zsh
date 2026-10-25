@@ -9,7 +9,7 @@ mini_ssh() {
 }
 # mini_user [prefix]: the mini's account, the first User under Host mini in the file mini_ssh uses
 # (~/.mini-op/ssh_config, or the container's copy), read with builtins only. A missing or invalid
-# one (it becomes a path and a shell word) prints why to stderr, after "<prefix>: ".
+# one (it becomes a shell word) prints why to stderr, after "<prefix>: ".
 mini_user() {
   local file=${_mini_ssh_config:-/etc/ssh/ssh_config.d/mini.conf} line on= user=
   local -a words

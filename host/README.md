@@ -5,7 +5,7 @@ A Docker container on this Mac running Claude Code as user `op`, made to operate
 | What | How |
 | --- | --- |
 | Image | `mini-op:<claude-code version>`: Debian `trixie-20261005-slim` (digest-pinned), Claude Code from its signed apt repo (version: `ARG CLAUDE_CODE_VERSION` in `Dockerfile`), git, openssh-client, netcat-openbsd (ssh's proxy hop), tmux, curl, jq, zsh. No python3 (FR-68): Claude Code's apt package runs without it, which CI's Image job checks on every image change and weekly (`claude --version` passes, `command -v python3` finds nothing). No secrets. |
-| Host files | none mounted; `start` calls `update` to copy `../README.md`, `../status.md`, `../runbooks/`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`, with its `VERSION` file stamped: this checkout's commit, plus `-dirty` when anything is uncommitted; `update` refuses to run outside a git checkout) and `../ctl/` (on `PATH`; its `mini pw`, `mini sudo` and `mini-autologin` read `/run/secrets/<mini_user>`) into `/opt/mini-op`, the working directory, with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/mini-op/CLAUDE.md` |
+| Host files | none mounted; `start` calls `update` to copy `../README.md`, `../status.md`, `../runbooks/`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`, with its `VERSION` file stamped: this checkout's commit, plus `-dirty` when anything is uncommitted; `update` refuses to run outside a git checkout) and `../ctl/` (on `PATH`; its `mini pw`, `mini sudo` and `mini-autologin` read `/run/secrets/mini-password`) into `/opt/mini-op`, the working directory, with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/mini-op/CLAUDE.md` |
 | Persistent state | named volume `mini-op-home` (`/home/op`): Claude login (`~/.claude/.credentials.json`), Claude settings (`~/.claude/settings.json`; `start` sets `promptSuggestionEnabled` false, keeping other keys), ssh key `~/.ssh/id_ed25519` (comment `mini-op container`), `known_hosts` |
 | Secrets | `/run/secrets`, a 64k tmpfs only `op` can read; empty after every container start |
 | Hardening | `--cap-drop ALL`, `no-new-privileges`, non-root user |
@@ -44,10 +44,10 @@ printf 'mini_host: %s\nmini_user: %s\n' '<the mini LAN IPv4>' '<the mini account
    docker exec -it mini-op claude auth login
    ```
 
-4. Give it the mini's password (the account's: `mini_user`), after every container start (`start`, a Docker or Mac restart). Type it at the `<mini_user> password:` prompt, which does not echo it; it goes over stdin into a mode-0400 file named after the account, through no keychain:
+4. Give it the mini's password (the account's: `mini_user`), after every container start (`start`, a Docker or Mac restart). Type it at the `password:` prompt, which does not echo it; it goes over stdin into the mode-0400 file `/run/secrets/mini-password`, through no keychain:
 
    ```sh
-   docker exec -it mini-op zsh -fc 'source /opt/mini-op/ctl/lib/ssh.zsh && a=$(mini_user) || exit 1; stty -echo; printf "%s password: " $a; rm -f /run/secrets/${a:?}; umask 277; head -n 1 > /run/secrets/$a; stty echo; echo'
+   docker exec -it mini-op zsh -fc 'stty -echo; printf "password: "; rm -f /run/secrets/mini-password; umask 277; head -n 1 > /run/secrets/mini-password; stty echo; echo'
    ```
 
 5. After every `start` (needs steps 2–3 done), check the network from inside the container. It prints a PASS/FAIL table (Claude answers, `ssh … echo ok` works; this Mac, the LAN, `example.com` and direct `1.1.1.1:443` are blocked) and exits 1 on any FAIL. `--egress-only` skips the Claude and `ssh` checks (CI's Image job runs it so).
@@ -94,7 +94,7 @@ ssh mini 'cd ~/apm && rc=0; for f in bin/* runbooks/*/*; do [ -x "$f" ] || conti
   ~/playground/mini-op/host/update
   ```
 
-  The container `mini-op` must already be running. This runs `config`, overlays the Host files listed above in `/opt/mini-op` and, as root, replaces the container's ssh config (`/etc/ssh/ssh_config.d/mini.conf`) with `~/.mini-op/ssh_config`, so a new account takes effect, without rebuilding or restarting: `/run/secrets/<mini_user>` and tmux sessions stay in place. It copies nothing and exits 1 when the running proxy's policy differs from the config (a changed address, `mini_port` or `proxy_*` key): run `start`. Extra container files are not deleted. A failed copy exits nonzero; fix the cause and rerun (some files may already have been copied). It restamps mini/'s `VERSION`; the mini's `~/apm/` changes only with `mini sync` (Deploy to the mini).
+  The container `mini-op` must already be running. This runs `config`, overlays the Host files listed above in `/opt/mini-op` and, as root, replaces the container's ssh config (`/etc/ssh/ssh_config.d/mini.conf`) with `~/.mini-op/ssh_config`, so a new account takes effect, without rebuilding or restarting: `/run/secrets/mini-password` and tmux sessions stay in place. It copies nothing and exits 1 when the running proxy's policy differs from the config (a changed address, `mini_port` or `proxy_*` key): run `start`. Extra container files are not deleted. A failed copy exits nonzero; fix the cause and rerun (some files may already have been copied). It restamps mini/'s `VERSION`; the mini's `~/apm/` changes only with `mini sync` (Deploy to the mini).
 - Allow another host: set `proxy_allowed_domains` in `~/.mini-op/config.local.yaml` to the whole list, `config.yaml`'s hosts plus the new one (another mini port: `mini_port`), rerun `start`, then `verify-egress`. Claude Code's host list: https://code.claude.com/docs/en/network-config; telemetry, update and plugin hosts stay blocked on purpose.
 - Newer Claude Code: set `ARG CLAUDE_CODE_VERSION` to a version the stable repo lists (`curl -fsSL https://downloads.claude.ai/claude-code/apt/stable/dists/stable/main/binary-arm64/Packages | grep ^Version`), then rerun `start`.
 - Remove everything:

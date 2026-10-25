@@ -8,7 +8,7 @@ Rules, driving the mini and gotchas: `../README.md`. What exists now: `../status
 
 1. The user enables Remote Login; add this Mac's key to the mini's `~/.ssh/authorized_keys`; check the host key fingerprint.
 2. Give `sshd-keygen-wrapper` Screen Recording, Accessibility, Full Disk Access and Automation for System Events (the user approves each prompt).
-3. On the mini, with the mini's password on stdin (from mini-op: `< /run/secrets/<mini_user>`; before mini-op is set up, the user types it at the mini's prompt): auto-login (from mini-op: `mini-autologin`, which also restores a lost one), `pmset sleep 0`, `autorestart 1`, `pmset displaysleep 60`, `sysadminctl -screenLock 3600 -password -`, screen saver off (`defaults -currentHost write com.apple.screensaver idleTime -int 0`).
+3. On the mini, with the mini's password on stdin (from mini-op: `< /run/secrets/mini-password`; before mini-op is set up, the user types it at the mini's prompt): auto-login (from mini-op: `mini-autologin`, which also restores a lost one), `pmset sleep 0`, `autorestart 1`, `pmset displaysleep 60`, `sysadminctl -screenLock 3600 -password -`, screen saver off (`defaults -currentHost write com.apple.screensaver idleTime -int 0`).
 4. Screen Sharing (VNC) for the user to watch: turn it on in System Settings › General › Sharing › Screen Sharing (`open x-apple.systempreferences:com.apple.Sharing-Settings.extension`, click the switch; Remote Management off). Starting `com.apple.screensharing` with launchctl or `kickstart` opens port 5900 but the viewer says "Screen Sharing is not permitted" (https://github.com/basnijholt/dotfiles/pull/107). Turning Remote Management off asks for the login password in a sheet that `dialogs` does not list: screenshot, click the field, type it piped, Modify Settings. The user connects with `open vnc://<user>@<address>` (both: `../status.md` › Current environment (built 2026-10-20), row Machine), ticking "Remember this password in my keychain" once.
 
 ## 2. Browser
@@ -68,7 +68,7 @@ Minimum permissions, from `docs/credentials.md`; team access only `Agent PM Test
 
 1. Settings › Security & access › Personal API keys: revoke any older key of the account.
 2. New API key: name `ensemble-<account>`, Only select permissions… (check `#scope-read`, `#scope-write`), Only select teams… › Agent PM Test, Create, Copy to clipboard.
-3. From mini-op, `ssh mini '~/apm/runbooks/setup-test-env/storekey <service> <account>' < /run/secrets/<mini_user>` stores it, clears the clipboard and prints `viewer`.
+3. From mini-op, `ssh mini '~/apm/runbooks/setup-test-env/storekey <service> <account>' < /run/secrets/mini-password` stores it, clears the clipboard and prints `viewer`.
 
 ## Reconnect mini-op after a reset
 
@@ -78,13 +78,12 @@ At the mini (the user):
 
 1. Erase All Content and Settings (`return-mini.md`). In Setup Assistant create the admin account `<mini_user>` (or another name, then set `mini_user` to it in step 4) with the same password as the account before, signed into no Apple Account.
 2. System Settings › General › Sharing: Remote Login on, Screen Sharing on (Remote Management off). Privacy & Security › FileVault off: auto-login needs it off.
-3. In Terminal, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`: note the new host key's fingerprint for steps 6 and 7.
+3. In Terminal, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`: note the new host key's fingerprint for steps 5 and 6.
 
 On this Mac (the user, in this checkout):
 
 4. If the account or address changed, set `mini_user` or `mini_host` in `~/.mini-op/config.local.yaml`. Then `~/playground/mini-op/host/start` if the address changed (the proxy's policy; redo `host/README.md` steps 4–5), else `~/playground/mini-op/host/update`: the running container gets the new `ctl/` and ssh config without a restart (`host/README.md`, Steps).
-5. Rename mini-op's password file, so the password is not typed again: `docker exec mini-op mv /run/secrets/<old account> /run/secrets/<mini_user>`, `<old account>` from `../status.md` › Current environment (built 2026-10-20), row Machine. After a container restart there is none: `host/README.md` step 4 instead.
-6. Drop the mini's old host key here and in the container:
+5. Drop the mini's old host key here and in the container:
 
    ```sh
    address=$(ssh -G -F ~/.mini-op/ssh_config mini | awk '$1 == "hostname" {print $2}')
@@ -92,13 +91,13 @@ On this Mac (the user, in this checkout):
    docker exec mini-op ssh-keygen -R "$address"
    ```
 
-7. Add mini-op's key to the account's `~/.ssh/authorized_keys` with the first command of `host/README.md` step 2: ssh asks to accept the new host key (only when its fingerprint equals step 3's) and for the account's password. Then accept the key in the container the same way: `docker exec -it mini-op ssh -o StrictHostKeyChecking=ask mini hostname`.
+6. Add mini-op's key to the account's `~/.ssh/authorized_keys` with the first command of `host/README.md` step 2: ssh asks to accept the new host key (only when its fingerprint equals step 3's) and for the account's password. Then accept the key in the container the same way: `docker exec -it mini-op ssh -o StrictHostKeyChecking=ask mini hostname`.
 
 In mini-op:
 
-8. `mini sync`, then `mini sync --check`.
-9. Section 1, steps 2–4: the permissions, `mini-autologin` and the settings, Screen Sharing.
-10. The 12 keychain items, from the export of the old login keychain (`/home/op/keychain-backup/export-2026-10-24.keychain-db`, unlocked by the same password). Copy it into a new private dir on the mini and list its items (attributes only, never `dump-keychain -d`):
+7. `mini sync`, then `mini sync --check`.
+8. Section 1, steps 2–4: the permissions, `mini-autologin` and the settings, Screen Sharing.
+9. The 12 keychain items, from the export of the old login keychain (`/home/op/keychain-backup/export-2026-10-24.keychain-db`, unlocked by the same password). Copy it into a new private dir on the mini and list its items (attributes only, never `dump-keychain -d`):
 
     ```sh
     d=$(ssh mini 'mktemp -d') && ssh mini "cat > $d/export.keychain-db" < /home/op/keychain-backup/export-2026-10-24.keychain-db
@@ -108,9 +107,9 @@ In mini-op:
     Import each generic password (class `genp`) by its service (`svce`) and account (`acct`). Each name must match `^[A-Za-z0-9][A-Za-z0-9._@+:-]*$`, else stop and ask the user; 12 are expected, any other count: tell the user which and ask before importing. The export predates the ensemble rename: import a service `agentpm-test-<x>` as `ensemble-test-<x>` and the account `agent-pm-test` as `ensemble-test` (the new names, after the old ones); keep other names.
 
     ```sh
-    ssh mini "~/apm/runbooks/setup-test-env/importkey $d/export.keychain-db <service> <account> [<new-service> [<new-account>]]" < /run/secrets/<mini_user>
+    ssh mini "~/apm/runbooks/setup-test-env/importkey $d/export.keychain-db <service> <account> [<new-service> [<new-account>]]" < /run/secrets/mini-password
     ```
 
-    It prints `importkey: <service>/<account> imported`, or `… imported as <new-service>/<new-account>`. An internet password (class `inet`, e.g. git's `github.com`) is not imported: the `gh` login (step 11) makes it again. Then remove the copy: `ssh mini "rm -rf $d"`.
-11. `gh`: once installed (`install.sh` logs it in: `install-ensemble.md`), log in again as `dotpm2026` (password: keychain `ensemble-test-github`).
-12. Ask the user to update `../status.md` (row Machine: the account, the host name, the date).
+    It prints `importkey: <service>/<account> imported`, or `… imported as <new-service>/<new-account>`. An internet password (class `inet`, e.g. git's `github.com`) is not imported: the `gh` login (step 10) makes it again. Then remove the copy: `ssh mini "rm -rf $d"`.
+10. `gh`: once installed (`install.sh` logs it in: `install-ensemble.md`), log in again as `dotpm2026` (password: keychain `ensemble-test-github`).
+11. Ask the user to update `../status.md` (row Machine: the account, the host name, the date).
