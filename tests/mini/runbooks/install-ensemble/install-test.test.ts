@@ -45,9 +45,9 @@ test("runs main's install.sh with --ref main and only the flags after --", async
   assert.deepEqual(args(), ["install.sh", "--ref", "main", "--docker", "--board", "local"]);
 });
 
-test("REF, CLIENTS and OC pick the ref, the clients and the Strata OpenCode flags", async (t) => {
+test("--ref, CLIENTS and OC pick the ref, the clients and the Strata OpenCode flags", async (t) => {
   const { sb, args, run } = await sandbox(t);
-  const r = await run(["--"], { REF: "feature-x", CLIENTS: "claude,opencode", OC: "1" });
+  const r = await run(["--ref", "feature-x", "--"], { CLIENTS: "claude,opencode", OC: "1" });
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, "install.sh exited 0\n");
   assert.deepEqual(
@@ -74,13 +74,11 @@ test("--ref selects a branch or commit for both download and installer", async (
   }
 });
 
-test("CLI and REF cannot escape the ensemble repository or supply URL metacharacters", async (t) => {
+test("CLI refs cannot escape the ensemble repository or supply URL metacharacters", async (t) => {
   const { sb, run } = await sandbox(t);
   for (const ref of UNSAFE_REFS) {
-    for (const envMode of [false, true]) {
-      const r = await run(envMode ? [] : ["--ref", ref], envMode ? { REF: ref } : {});
-      assert.equal(r.code, 2, `${ref} via ${envMode ? "REF" : "CLI"}`);
-    }
+    const r = await run(["--ref", ref]);
+    assert.equal(r.code, 2, ref);
   }
   assert.deepEqual(sb.calls("curl"), []);
 });
@@ -150,7 +148,7 @@ test("install.sh exiting non-zero exits 1 with its rc on stdout", async (t) => {
 test("a failed download exits 1 and runs nothing", async (t) => {
   const sb = await Sandbox.create(t);
   sb.fake("curl", [{ stderr: "curl: (22) The requested URL returned error: 404\n", exit: 22 }]);
-  const r = await sb.run(["zsh", INSTALL_TEST, "--", "--docker"], { env: { REF: "gone" } });
+  const r = await sb.run(["zsh", INSTALL_TEST, "--ref", "gone", "--", "--docker"]);
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
   assert.equal(
@@ -190,4 +188,12 @@ test("-h prints the usage to stdout and fetches nothing", async (t) => {
   assert.equal(r.stderr, "");
   assert.match(r.stdout, /^install-test \[--ref <ref>\] \[-- <install\.sh flags>\] /);
   assert.deepEqual(sb.calls(), []);
+});
+
+test("legacy REF does not change the default main ref", async (t) => {
+  const { sb, args, run } = await sandbox(t);
+  const r = await run([], { REF: "legacy" });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(sb.calls("curl")[0]?.argv.at(-1), URL("main"));
+  assert.deepEqual(args(), ["install.sh", "--ref", "main"]);
 });

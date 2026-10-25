@@ -36,13 +36,13 @@ test("runs main's install-cleanup.sh --yes with only the flags after --", async 
   assert.deepEqual(args(), ["install-cleanup.sh", "--yes", "--password-stdin"]);
 });
 
-test("REF picks the ref; no flags runs --yes alone", async (t) => {
+test("legacy REF is ignored; no flags fetches main and runs --yes alone", async (t) => {
   const { sb, args, run } = await sandbox(t);
   const r = await run([], { REF: "feature-x" });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(
     sb.calls("curl").map((c) => c.argv.at(-1)),
-    [URL("feature-x")],
+    [URL("main")],
   );
   assert.deepEqual(args(), ["install-cleanup.sh", "--yes"]);
 });
@@ -57,13 +57,11 @@ test("--ref selects a branch or commit without forwarding an unsupported cleanup
   }
 });
 
-test("cleanup rejects traversal and URL syntax from both ref inputs before download", async (t) => {
+test("cleanup rejects traversal and URL syntax in --ref before download", async (t) => {
   const { sb, run, args } = await sandbox(t);
   for (const ref of UNSAFE_REFS) {
     const cli = await run(["--ref", ref]);
     assert.equal(cli.code, 2, ref);
-    const env = await run([], { REF: ref });
-    assert.equal(env.code, 2, ref);
   }
   assert.equal(args(), null);
   assert.deepEqual(sb.calls("curl"), []);
