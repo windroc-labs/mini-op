@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 // Dirs whose files ship to the container, the MacBook or the mini; read-only while CI tests run.
-export const SHIPPED_DIRS = ["ctl", "mini", "host"];
+export const SHIPPED_DIRS = ["ctl", "mini", "host", "plugin"];
 
 // Dirs whose scripts and program entries each need a test (FR-26): the shipped dirs and CI's own.
 export const TESTED_DIRS = [...SHIPPED_DIRS, ".github", ".githooks"];

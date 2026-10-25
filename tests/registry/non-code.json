@@ -48,5 +48,12 @@
     "tests": [
       "tests/mini/runbooks/install-ensemble/install-test.test.ts"
     ]
+  },
+  {
+    "file": "plugin/.claude-plugin/plugin.json",
+    "reason": "the mini-op plugin manifest: its name; the image build stamps its version",
+    "tests": [
+      "tests/plugin/skills/run.test.ts"
+    ]
   }
 ]

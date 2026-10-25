@@ -44,8 +44,12 @@ function problem(file: string, files: Set<string>, script: () => boolean): strin
       return /^[^/]+$/.test(rest) && script() ? null : "ctl/ holds scripts, CLAUDE.md and lib/";
     case "host":
       return /^(proxy\/)?[^/]+$/.test(rest) ? null : "host/ holds its files and proxy/";
+    case "plugin":
+      return /^(\.claude-plugin\/plugin\.json|skills\/[^/]+\/SKILL\.md)$/.test(rest)
+        ? null
+        : "plugin/ holds .claude-plugin/plugin.json and skills/<name>/SKILL.md";
     default:
-      return `${top}/ is not a layout dir (mini/, ctl/, host/, runbooks/, tests/)`;
+      return `${top}/ is not a layout dir (mini/, ctl/, host/, plugin/, runbooks/, tests/)`;
   }
 }
 

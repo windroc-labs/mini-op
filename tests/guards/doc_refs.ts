@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { lineAt, type Guard, type Violation } from "../lib/guard.ts";
-import { isShipped, scanned, type RepoView } from "../lib/repo.ts";
+import { isShipped, scanned, SHIPPED_DIRS, type RepoView } from "../lib/repo.ts";
 
 // The container's operator reads ctl/CLAUDE.md as /opt/mini-op/CLAUDE.md, beside the repo's
 // other copied files: its paths resolve from the repo root only.
@@ -14,7 +14,7 @@ const REQUIRED = [
     (name) => `runbooks/${name}.md`,
   ),
 ];
-const TOP = new Set(["mini", "ctl", "host", "runbooks", "tests", "proxy", ".github", ".githooks"]);
+const TOP = new Set([...SHIPPED_DIRS, "runbooks", "tests", "proxy", ".github", ".githooks"]);
 const PATH = /^(?:\.\.\/)*[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)*\/?$/;
 const SPAN = /`([^`\n]+)`/g;
 // The mini's ~/apm is mini/; its state/ and the VERSION stamp are made at run time.

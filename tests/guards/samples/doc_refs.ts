@@ -18,6 +18,7 @@ const files = {
   "mini/runbooks/setup/lq": "#!/bin/zsh\n",
   "host/README.md": "Edit `proxy/acl.yaml`, then `../README.md`.\n",
   "host/proxy/acl.yaml": "x: 1\n",
+  "plugin/.claude-plugin/plugin.json": "{}\n",
   "runbooks/setup.md": "Run `ssh mini '~/apm/runbooks/setup/lq body'` (`../status.md`).\n",
   "status.md": [
     "# status",
@@ -54,6 +55,7 @@ export const violation = {
     "Run `~/apm/ans` or `ssh mini '~/apm/lq'`; also ~/apm/type.js.",
     "Then `mini chord command 40`; the old `~/apm/.done/<id>`.",
     "Run `mini sync --bogus`, `mini pw --lock -x` and `mini sudo -k rm x`.",
+    "Edit `plugin/.claude-plugin/gone.json`.",
     "",
   ].join("\n"),
   "ctl/CLAUDE.md": [
@@ -88,6 +90,7 @@ export const clean = {
     "Run `ssh mini '~/apm/bin/ans 60'`, ~/apm/runbooks/<runbook>/<name>, `mini sync` and `mini pw`.",
     "The marker `~/apm/state/done/<id>`, the stamp `~/apm/VERSION`; `mini ~ %` is a prompt.",
     "Run `mini sync --check`, `mini sudo rm -rf x`, `mini sudo -v` and `mini run 5 --to 1-2-3`.",
+    "Edit `plugin/.claude-plugin/plugin.json`.",
     "",
   ].join("\n"),
   "ctl/CLAUDE.md": [
@@ -126,6 +129,7 @@ export const expected = [
   "README.md:4: `mini sync --bogus`: ctl/mini's usage has no --bogus for mini sync",
   "README.md:4: `mini pw -x`: ctl/mini's usage has no -x for mini pw",
   "README.md:4: `mini sudo -k`: ctl/mini's usage has no -k for mini sudo",
+  "README.md:5: `plugin/.claude-plugin/gone.json` does not exist",
   "ctl/CLAUDE.md:1: `../README.md` does not exist",
   "ctl/CLAUDE.md:1: `/opt/mini-op/scripts` does not exist",
   "ctl/CLAUDE.md:2: `status.md` › Machine (built 2): status.md has no such heading",

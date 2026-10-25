@@ -71,7 +71,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: .github/tools install
       - name: Make shipped code read-only
-        run: chmod -R a-w ctl host mini
+        run: chmod -R a-w ctl host mini plugin
       - run: npm test
       - name: Require unchanged checkout
         run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
@@ -94,7 +94,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: .github/tools install
       - name: Make shipped code read-only
-        run: chmod -R a-w ctl host mini
+        run: chmod -R a-w ctl host mini plugin
       - run: npm run coverage
         env:
           COVERAGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -135,7 +135,7 @@ jobs:
       - name: Require bash 3.2.57 first on PATH
         run: bash --version | grep -F 'version 3.2.57'
       - name: Make shipped code read-only
-        run: chmod -R a-w ctl host mini
+        run: chmod -R a-w ctl host mini plugin
       - run: node --test --test-timeout=60000 'tests/host/**/*.test.ts'
       - name: Require unchanged checkout
         run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
