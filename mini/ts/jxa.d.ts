@@ -15,8 +15,10 @@ interface JxaElements<T> {
 interface JxaUIElement {
   name(): string | null;
   value(): string;
+  subrole(): string;
   focused(): boolean;
   click(): void;
+  readonly attributes: JxaElements<JxaAttribute>;
 }
 
 interface JxaAttribute {

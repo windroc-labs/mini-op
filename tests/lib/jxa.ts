@@ -172,7 +172,7 @@ export class Jxa {
 
   private process(p: Process): object {
     const harness = this;
-    const window = (w: Window) => ({
+    const window = (w: Window): object => ({
       name: () => w.name ?? null,
       buttons: elements(
         () =>
@@ -185,12 +185,20 @@ export class Jxa {
         },
       ),
       textFields: elements(
-        () => (w.fields ?? []).map((f) => harness.field(f)),
+        () => (w.fields ?? []).map((f) => harness.field(f, () => window(w))),
         () => {
           throw new Error("Can't get text field.");
         },
       ),
     });
+    // As System Events, a process with no focused element throws on reading it.
+    const focused = () => {
+      for (const w of p.windows ?? []) {
+        const f = (w.fields ?? []).find((f) => f.focused);
+        if (f) return harness.field(f, () => window(w));
+      }
+      throw new Error(`Can't get attribute "AXFocusedUIElement" of ${p.name}.`);
+    };
     const process = {
       name: () => p.name,
       exists: () => true,
@@ -202,6 +210,7 @@ export class Jxa {
       },
       attributes: elements(() => [
         { name: () => "AXFrontmost", value: () => harness.front() === p.name },
+        { name: () => "AXFocusedUIElement", value: () => focused() },
       ]),
     };
     // Read as a getter call (whose filters), set as a property (hiding the process).
@@ -215,11 +224,13 @@ export class Jxa {
     return process;
   }
 
-  private field(f: Field): object {
+  // A field's AXTopLevelUIElement is its window.
+  private field(f: Field, top: () => object): object {
     return {
       subrole: () => f.subrole ?? "",
       value: () => f.value ?? "",
       focused: () => f.focused ?? false,
+      attributes: elements(() => [{ name: () => "AXTopLevelUIElement", value: top }]),
     };
   }
 
@@ -227,7 +238,7 @@ export class Jxa {
     if (this.scene.keystrokeError !== undefined) throw new Error(this.scene.keystrokeError);
     this.events.push({ type: "keystroke", text });
     const proc = (this.scene.processes ?? []).find((p) => p.name === this.front());
-    const field = proc?.windows?.[0]?.fields?.find((f) => f.focused);
+    const field = proc?.windows?.flatMap((w) => w.fields ?? []).find((f) => f.focused);
     if (!field) return;
     const reach = field.accepts === undefined ? text : text.slice(0, field.accepts);
     if (field.accepts !== undefined) field.accepts -= reach.length;

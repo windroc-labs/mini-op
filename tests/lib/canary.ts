@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { RunResult, Sandbox } from "./sandbox.ts";
+import { REPO, type RunResult, type Sandbox } from "./sandbox.ts";
 import { MINI_USER } from "./ssh_config.ts";
 
 export type Scenario = {
@@ -75,7 +75,16 @@ export const SECRET_SCRIPTS: Scenario[] = [
     setup(sb) {
       sb.mini();
       sb.fake("sleep", [{ ignoresStdin: true }]);
+      fs.mkdirSync(path.join(sb.home, "apm/state"), { recursive: true });
+      fs.writeFileSync(path.join(sb.home, "apm/state/maillink.role_example_com"), "");
+      const outlook = fs
+        .readFileSync(path.join(REPO, "mini/js/page/outlook.js"), "utf8")
+        .split("\n")
+        .slice(1)
+        .join("\n")
+        .trimEnd();
       sb.fake("opencli", [
+        { argv: ["browser", "eval", `${outlook}("rows","Linear")`], stdout: '{"data":"fresh"}\n' },
         {
           stdout:
             JSON.stringify({
@@ -109,6 +118,11 @@ export const SECRET_SCRIPTS: Scenario[] = [
     script: "ctl/mini",
     title: "pw --sa types the password into SecurityAgent",
     args: ["pw", "--sa"],
+  }),
+  ctl({
+    script: "ctl/mini",
+    title: "pw --settings types the password into a System Settings sheet",
+    args: ["pw", "--settings"],
   }),
   ctl({ script: "ctl/mini", title: "sudo -v checks the sudo password", args: ["sudo", "-v"] }),
   ctl({ script: "ctl/mini", title: "sudo runs a command with sudo", args: ["sudo", "ls", "-la"] }),

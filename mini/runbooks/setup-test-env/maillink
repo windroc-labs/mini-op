@@ -1,43 +1,81 @@
 #!/usr/bin/env zsh
-usage='maillink mark|follow <email>   find the Linear login link for <email> in Outlook (session mail)
-mark: before requesting the link, remember the newest one; follow: after, wait 5 s for the mail,
-then read for a link other than the marked one, again after 5, 10, 20, 40, 40 and 20 s (140 s in
-all), and open it in the Linear tab (session role). The link never prints. Outlook renders no list
-in a hidden tab, so its tab is raised before each read. Prints "marked" or "followed"; exits 0, 1 (the mark cannot be written, the link is
-not a Linear login link, or the tab does not take the link), 2 (usage error) or 124 (no fresh link:
-"timed out after 140 s").'
+usage='maillink mark|follow|code <email>   find the Linear login mail for <email> in Outlook (session
+mail), in the Inbox and in Junk Email. Each folder is read once its list or its empty state has
+rendered (up to 15 s); Outlook renders no list in a hidden tab, so its tab is raised first.
+mark: before requesting the mail, remember the Linear mails listed. follow: after, wait 5 s, then
+look for a Linear mail not marked, again after 5, 10, 20, 40, 40 and 20 s, each render wait and
+gap cut so no look starts after 140 s, and open its login link in the Linear tab (session role).
+code: as follow, but type the mail login code into the Linear tab code field
+(input[name=authToken]) with secfield; links in Junk Email do not work. Neither link nor code ever
+prints. Prints "marked", "followed" or "entered"; exits 0, 1 (the mark cannot be written, a folder
+did not render for mark, follow or code finds no mark, the link is not a Linear login link, or the
+tab does not take the link or code), 2 (usage error) or 124 (no fresh mail: "timed out after 140
+s", naming any folder that did not render on some look).'
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
-[[ $# -eq 2 && $1 == (mark|follow) && $2 =~ '^[A-Za-z0-9._%+][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+$' ]] ||
-  { print -u2 -r -- 'maillink: usage: maillink mark|follow <email>'; exit 2; }
+[[ $# -eq 2 && $1 == (mark|follow|code) && $2 =~ '^[A-Za-z0-9._%+][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+$' ]] ||
+  { print -u2 -r -- 'maillink: usage: maillink mark|follow|code <email>'; exit 2; }
 source ${0:A:h}/../../lib/timeout.zsh || exit 1
 source ${0:A:h}/../../lib/opencli.zsh || exit 1
 umask 077
 cmd=$1; E=$2; S=~/apm/state/maillink.${E//[^A-Za-z0-9]/_}
+folders=(https://outlook.live.com/mail/0/ https://outlook.live.com/mail/0/junkemail)
 m(){ ~/apm/bin/o "$@" --session mail --private; }
-newest(){
-  m open https://outlook.live.com/mail/0/ >/dev/null || return 1
-  m wait text "Focused" >/dev/null 2>&1
-  m eval "$(page_js outlook open)" >/dev/null
-  sleep 3
-  m eval "$(page_js outlook link $E)" | opencli_data
+listed(){ R=$(m eval "$(page_js outlook rows Linear)" | opencli_data) && [[ $R != - ]]; }
+# rows <folder> [<tries>]: R, the ids of its Linear mails, newest first; 1 when it did not render.
+rows(){
+  m open $1 >/dev/null || return 1
+  poll ${2:-16} 1 listed
 }
 case $cmd in
   mark)
     mkdir -p ~/apm/state 2>/dev/null || { print -u2 -r -- 'maillink: cannot make ~/apm/state'; exit 1; }
-    newest > $S; echo marked ;;
-  follow)
-    OLD=$(cat $S 2>/dev/null)
-    fresh(){ L=$(newest); [[ -n $L && $L != $OLD ]]; }
-    sleep 5
-    backoff 135 5 40 fresh; rc=$?
+    seen=()
+    for f in $folders; do
+      rows $f || { print -u2 -r -- "maillink: $f did not render in 15 s; marked nothing"; exit 1; }
+      seen+=(${(f)R})
+    done
+    print -rl -- $seen > $S; echo marked ;;
+  follow|code)
+    [[ -r $S ]] || { print -u2 -r -- "maillink: no mark for $E: run maillink mark first"; exit 1; }
+    seen=(${(f)"$(<$S)"})
+    what=link; [[ $cmd == code ]] && what=code
+    end=$(( $(date +%s) + 140 )); typeset -U missed=()
+    left(){ local n=$(( end - $(date +%s) )); print -r -- $(( n > 0 ? n : 0 )); }
+    fresh(){
+      local f id n
+      for f in $folders; do
+        n=$(left)
+        rows $f $(( n < 15 ? n + 1 : 16 )) || { missed+=($f); continue; }
+        for id in ${(f)R}; do
+          (( ${seen[(Ie)$id]} )) && continue
+          m eval "$(page_js outlook open $id)" >/dev/null; sleep 3
+          L=$(m eval "$(page_js outlook $what $E)" | opencli_data)
+          [[ -n $L ]] && return 0
+        done
+      done
+      return 1
+    }
+    sleep 5; gap=5; rc=0
+    until fresh; do
+      n=$(left)
+      (( n > 0 )) || { rc=124; break; }
+      sleep $(( gap < n ? gap : n )); gap=$(( gap * 2 < 40 ? gap * 2 : 40 ))
+    done
     rm -f -- "${S:?}"
+    unrendered=${missed:+; did not render on some look: ${(j: :)missed}}
     (( rc == 0 )) ||
-      { print -u2 -r -- "maillink: timed out after 140 s: no fresh link for $E"; exit 124; }
+      { print -u2 -r -- "maillink: timed out after 140 s: no fresh $what for $E$unrendered"; exit 124; }
+    if [[ $cmd == code ]]; then
+      ~/apm/bin/front linear.app >/dev/null
+      print -rn -- $L | ~/apm/bin/secfield role 'input[name=authToken]' >/dev/null; rc=$?; unset L
+      (( rc == 0 )) || { print -u2 -r -- 'maillink: cannot type the code into the Linear tab'; exit 1; }
+      echo entered; exit 0
+    fi
     # $L comes from mail: open only a Linear login link.
     [[ $L =~ '^https://linear\.app/auth/email/[A-Za-z0-9._%@/+-]+$' ]] ||
       { print -u2 -r -- 'maillink: the fresh link is not a Linear login link'; exit 1; }
     page_js auth "$L" | osascript -l JavaScript ~/apm/js/chrome.js auth >/dev/null 2>&1 ||
       { print -u2 -r -- 'maillink: cannot open the link in the Linear tab'; exit 1; }
-    ~/apm/bin/front linear.app/auth >/dev/null
+    ~/apm/bin/front linear.app >/dev/null
     echo followed ;;
 esac
