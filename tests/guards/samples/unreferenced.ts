@@ -15,8 +15,8 @@ export const clean = {
   "mini/bin/ans": script,
   "mini/runbooks/setup/lq": script,
   "ctl/mini-x": script,
-  "host/start": '#!/usr/bin/env bash\n"$here/update"\n',
-  "host/update": script,
+  "host/start": '#!/usr/bin/env bash\n"$here/config"\n',
+  "host/config": script,
   "host/Dockerfile": "FROM x\n",
   "README.md":
     "Run `ssh mini '~/apm/bin/ans 60'`, `mini/runbooks/setup/lq`, `mini-x` and `host/start`.\n",

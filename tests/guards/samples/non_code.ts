@@ -23,7 +23,7 @@ export const clean = {
   "host/Dockerfile": "FROM x\n",
   "tests/host/Dockerfile.test.ts": 'read("host/Dockerfile");\n',
   "host/README.md": "# docs\n",
-  "host/update": "#!/usr/bin/env bash\n",
+  "host/resume": "#!/usr/bin/env bash\n",
   "ctl/lib/ssh.zsh": "f() {}\n",
   "mini/js/type.js": "function run() {}\n",
   "mini/ts/keys.ts": "export {};\n",

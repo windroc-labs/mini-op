@@ -4,7 +4,7 @@ usage="config [get <key> | policy-hash]   run on the user's Mac: merge host/conf
 with its default) with ~/.mini-op/config.local.yaml (the keys this Mac sets: at least mini_host and
 mini_user, the mini's address and account), check the result, and write ~/.mini-op/ssh_config
 (Host mini), ~/.mini-op/proxy/config.yaml and ~/.mini-op/proxy/acl.yaml (smokescreen's config and
-ACL) for ctl/, host/start and host/update. A local key replaces the default; a list replaces the
+ACL) for ctl/ and host/start. A local key replaces the default; a list replaces the
 whole list, but proxy_deny_ranges must keep every default range. Both files are one key: value
 line per key (a value: \"\", \"text\", text or [a, b]); # starts a comment. get prints one merged
 value (a list: its items, space-separated) and writes nothing; policy-hash prints the SHA-256 of

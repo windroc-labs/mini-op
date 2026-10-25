@@ -2,15 +2,10 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
-import { PROXY_POLICY } from "../lib/image.ts";
 import { REPO, Sandbox, type FakeRule } from "../lib/sandbox.ts";
-import { MINI_USER } from "../lib/ssh_config.ts";
 import { onlyOnStdin, remote } from "./remote.ts";
 
 const MINI = path.join(REPO, "ctl/mini");
-const EXTRACT = ["exec", "-i", "mini-op", "tar", "-xf", "-", "-C", "/opt/mini-op"];
-// host/update's root write of the container's ssh config: not part of the /opt/mini-op payload.
-const SSH_CONFIG = ["exec", "-i", "-u", "0", "mini-op"];
 const GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"];
 // The only commands sync runs on the mini: unpack, then swap the code in around ~/apm/state.
 const PACKING =
@@ -41,32 +36,29 @@ async function checkout(sb: Sandbox): Promise<{ dir: string; commit: string }> {
   return { dir, commit: head.stdout.trim() };
 }
 
-// The container's /opt/mini-op: what host/update copies in from `dir`.
-async function payload(sb: Sandbox, dir: string): Promise<string> {
-  sb.fake("docker", [PROXY_POLICY, { argv: EXTRACT }, { argv: SSH_CONFIG }]);
-  const r = await sb.run(["bash", path.join(dir, "host/update")]);
-  assert.equal(r.code, 0, r.stderr);
-  const opt = path.join(sb.dir, "opt-mini-op");
-  fs.mkdirSync(opt);
-  const extracts = sb.calls("docker").filter((call) => call.argv[2] === "mini-op");
-  for (const [i, call] of extracts.entries()) {
-    const file = path.join(sb.dir, `payload-${i}.tar`);
-    fs.writeFileSync(file, Buffer.from(call.stdin, "utf8"));
-    assert.equal((await sb.run(["tar", "-xf", file, "-C", opt])).code, 0);
+// The image's plugin root as host/Dockerfile lays it out: ctl/ and mini/ side by side, no git
+// checkout around them, mini/VERSION the stamp host/start built it with.
+function pluginRoot(sb: Sandbox, stamp: string): string {
+  const root = path.join(sb.dir, "plugin-root");
+  for (const dir of ["ctl", "mini"]) {
+    fs.cpSync(path.join(REPO, dir), path.join(root, dir), { recursive: true });
   }
-  return opt;
+  // CI's shipped dirs are read-only, and the copy keeps their modes.
+  fs.chmodSync(path.join(root, "mini"), 0o755);
+  fs.writeFileSync(path.join(root, "mini/VERSION"), `${stamp}\n`);
+  return root;
 }
 
 function remoteCommands(sb: Sandbox): string[][] {
   return sb.calls("ssh").map((call) => (call.argv.at(-1) ?? "").split("; "));
 }
 
-test("host/update's payload syncs to ~/apm with the checkout's commit as VERSION", async (t) => {
+test("the image's plugin root syncs to ~/apm with its baked mini/VERSION", async (t) => {
   const sb = await Sandbox.create(t);
-  const { dir, commit } = await checkout(sb);
-  const opt = await payload(sb, dir);
+  const commit = "0123456789abcdef0123456789abcdef01234567-dirty";
+  const root = pluginRoot(sb, commit);
   sb.fake("ssh", [{ local: true }]);
-  const r = await sb.run(["zsh", path.join(opt, "ctl/mini"), "sync"]);
+  const r = await sb.run(["zsh", path.join(root, "ctl/mini"), "sync"]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, `mini: synced mini/ to the mini's ~/apm at ${commit}\n`);
   assert.equal(fs.readFileSync(apm(sb, "VERSION"), "utf8"), `${commit}\n`);
@@ -146,16 +138,19 @@ test("on the MacBook checkout sync stamps on the spot, -dirty included, via ~/.m
 test("without a VERSION outside a checkout sync and --check exit 1 and never call ssh", async (t) => {
   const sb = await Sandbox.create(t);
   sb.fake("ssh", [{ local: true }]);
-  const opt = path.join(sb.dir, "opt-mini-op");
-  fs.mkdirSync(path.join(opt, "ctl/lib"), { recursive: true });
-  fs.mkdirSync(path.join(opt, "mini/bin"), { recursive: true });
+  const root = path.join(sb.dir, "plugin-root");
+  fs.mkdirSync(path.join(root, "ctl/lib"), { recursive: true });
+  fs.mkdirSync(path.join(root, "mini/bin"), { recursive: true });
   for (const file of ["ctl/mini", "ctl/lib/ssh.zsh", "ctl/lib/secrets.zsh", "ctl/lib/version.sh"]) {
-    fs.copyFileSync(path.join(REPO, file), path.join(opt, file));
+    fs.copyFileSync(path.join(REPO, file), path.join(root, file));
   }
   for (const args of [["sync"], ["sync", "--check"]]) {
-    const r = await sb.run(["zsh", path.join(opt, "ctl/mini"), ...args]);
+    const r = await sb.run(["zsh", path.join(root, "ctl/mini"), ...args]);
     assert.equal(r.code, 1);
-    assert.equal(r.stderr, `mini: no ${opt}/mini/VERSION; run host/update on the Mac first\n`);
+    assert.equal(
+      r.stderr,
+      `mini: no ${root}/mini/VERSION; rebuild the image with host/start on the Mac\n`,
+    );
   }
   assert.deepEqual(sb.calls("ssh"), []);
 });
@@ -232,7 +227,7 @@ const HANGS = "kill -ALRM $PPID";
 // runs the command after --.
 const SUDO = [
   { argv: ["-k"], ignoresStdin: true },
-  { argv: ["-S"], shell: `[[ $(cat) == "$(<$FAKE_DIR/secrets/${MINI_USER})" ]]` },
+  { argv: ["-S"], shell: `[[ $(cat) == "$(<$FAKE_DIR/secrets/mini-password)" ]]` },
   { argv: ["-n"], shell: 'shift; [[ $1 == -- ]] && shift; "$@"' },
 ];
 
@@ -429,30 +424,67 @@ test("pw and sudo without the password file exit 1 and call no ssh", async (t) =
     const sub = args[0];
     assert.equal(
       r.stderr,
-      `mini: ${sub}: ${sb.passwordFile} missing; the user writes it (host/README.md, Steps 4); ${nothing}\n`,
+      `mini: ${sub}: no mini password in ${envPassword(sb)} or ${sb.passwordFile}; the user writes it (host/README.md, Steps 4); ${nothing}\n`,
     );
     assert.deepEqual(sb.calls(), []);
   }
 });
 
-test("pw and sudo without a valid account in ~/.mini-op/ssh_config exit 1 and call no ssh", async (t) => {
-  const sb = await sandbox(t);
+const envPassword = (sb: Sandbox) => path.join(sb.secrets, "env/mini-password");
+
+function writeEnvPassword(sb: Sandbox, text: string): void {
+  fs.mkdirSync(path.join(sb.secrets, "env"));
+  fs.writeFileSync(envPassword(sb), text, { mode: 0o400 });
+}
+
+test("pw and sudo send the environment's mini-password, not the secrets dir's", async (t) => {
+  for (const args of [["pw"], ["pw", "--sa"], ["sudo", "-v"], ["sudo", "ls"]]) {
+    const sb = await Sandbox.create(t);
+    sb.fake("ssh", [{}]);
+    writeEnvPassword(sb, `env-${sb.canary}`);
+    const r = await sb.run(["zsh", MINI, ...args]);
+    assert.equal(r.code, 0, args.join(" ") + r.stderr);
+    assert.deepEqual(
+      sb.calls("ssh").map((call) => call.stdin),
+      [`env-${sb.canary}`],
+    );
+  }
+});
+
+test("pw and sudo with an empty environment mini-password exit 1 and call no ssh", async (t) => {
+  for (const [args, nothing] of [
+    [["pw"], "typed nothing"],
+    [["sudo", "-v"], "ran nothing"],
+  ] as const) {
+    const sb = await sandbox(t);
+    writeEnvPassword(sb, "");
+    const r = await sb.run(["zsh", MINI, ...args]);
+    assert.equal(r.code, 1, args.join(" "));
+    assert.equal(r.stdout, "");
+    assert.equal(
+      r.stderr,
+      `mini: ${args[0]}: ${envPassword(sb)} is empty or unreadable; ${nothing}\n`,
+    );
+    assert.deepEqual(sb.calls(), []);
+  }
+});
+
+test("pw and sudo read no account: the password file is mini-password whatever it is", async (t) => {
+  const sb = await Sandbox.create(t);
+  sb.fake("ssh", [{}]);
   const repo = path.join(sb.dir, "repo");
   fs.cpSync(path.join(REPO, "ctl"), path.join(repo, "ctl"), { recursive: true });
   fs.mkdirSync(path.join(repo, "host"));
   fs.writeFileSync(path.join(repo, "host/config"), "");
-  const config = path.join(sb.home, ".mini-op/ssh_config");
-  fs.writeFileSync(config, "Host mini\n    HostName 10.9.8.7\n");
-  for (const [args, sub] of [
-    [["pw"], "pw"],
-    [["sudo", "-v"], "sudo"],
-  ] as const) {
+  fs.writeFileSync(path.join(sb.home, ".mini-op/ssh_config"), "Host mini\n    HostName 10.9.8.7\n");
+  for (const args of [["pw"], ["sudo", "-v"]]) {
     const r = await sb.run(["zsh", path.join(repo, "ctl/mini"), ...args]);
-    assert.equal(r.code, 1, args.join(" "));
-    assert.equal(r.stdout, "");
-    assert.equal(r.stderr, `mini: ${sub}: cannot read the mini's account from ${config}\n`);
+    assert.equal(r.code, 0, args.join(" ") + r.stderr);
   }
-  assert.deepEqual(sb.calls(), []);
+  assert.deepEqual(
+    sb.calls("ssh").map((call) => call.stdin),
+    [sb.canary, sb.canary],
+  );
 });
 
 test("sudo -v checks the password only", async (t) => {
@@ -599,11 +631,10 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
     );
   }
   assert.ok(r.stdout.includes("mini sudo -v"));
-  assert.ok(
-    r.stdout.includes(
-      "$(secrets_dir)/<account> (<account>:\nmini_user in ~/.mini-op/config.local.yaml)",
-    ),
-  );
+  const env = r.stdout.indexOf("$(env_secrets_dir)/mini-password");
+  assert.ok(env >= 0);
+  assert.ok(r.stdout.indexOf("$(secrets_dir)/mini-password") > env);
+  assert.doesNotMatch(r.stdout, /<account>/);
   assert.deepEqual(sb.calls(), []);
 });
 

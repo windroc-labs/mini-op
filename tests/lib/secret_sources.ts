@@ -1,17 +1,17 @@
 // What counts as a secret source in shell (FR-35, FR-36): security find-…-password with -w or -g,
-// pbpaste, and the secrets dir, by name or through a variable holding a path in it. Built from
-// parts so this file never matches itself.
+// pbpaste, and the secrets dirs or the mini password file, by name or through a variable holding a
+// path in them. Built from parts so this file never matches itself.
 import { SECRETS_LITERAL as SECRETS_DIR } from "./literals.ts";
 import type { Command, ShellView } from "./shell.ts";
 
-const RESOLVER = "$(secrets_" + "dir)";
+const RESOLVERS = ["$(secrets_" + "dir)", "$(env_secrets_" + "dir)", "$(mini_password_" + "file"];
 const PATH_VAR = /(?:^|[\s;&|(])(?:local\s+|typeset\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\S*)/g;
 
 export type Scope = { paths: Set<string> };
 
 // Whether a word names the secrets dir or a variable holding a path in it.
 export function secretPath(word: string, scope: Scope): boolean {
-  if (word.includes(SECRETS_DIR) || word.includes(RESOLVER)) return true;
+  if (word.includes(SECRETS_DIR) || RESOLVERS.some((r) => word.includes(r))) return true;
   return [...scope.paths].some((name) => new RegExp(`\\$\\{?${name}\\b`).test(word));
 }
 

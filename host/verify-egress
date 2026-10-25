@@ -3,7 +3,7 @@ set -uo pipefail
 usage="verify-egress [--egress-only]   run on the user's Mac after host/start. From inside container
 mini-op, checks that Claude Code and ssh to the mini work and that every other target is blocked,
 through mini-op-proxy and directly; prints a table. Prints no command output: no tokens, passwords
-or replies. The only mini contact is the read-only ssh mini echo ok. --egress-only (CI) runs the
+or replies. The only mini contact is the read-only ssh mini echo ok. --egress-only runs the
 network checks alone: no claude -p, which needs a login, and no mini contact. Exits 0, 1 (a check
 failed) or 2 (usage error)."
 egress_only=false

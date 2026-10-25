@@ -1,7 +1,7 @@
 # mini_ssh <ssh args>: ssh to Host mini. When this ctl/ sits in a checkout beside host/ (the
 # MacBook), through ~/.mini-op/ssh_config, which host/config generates from
-# ~/.mini-op/config.local.yaml. The container has no host/: host/update installs that file, and the
-# image the proxy hop, into ssh's own config.
+# ~/.mini-op/config.local.yaml. The container has no host/: host/start builds that file, and the
+# proxy hop, into the image's own ssh config.
 _mini_ssh_config=
 if [[ -e ${${(%):-%x}:A:h:h:h}/host/config ]]; then _mini_ssh_config=$HOME/.mini-op/ssh_config; fi
 mini_ssh() {
@@ -9,7 +9,7 @@ mini_ssh() {
 }
 # mini_user [prefix]: the mini's account, the first User under Host mini in the file mini_ssh uses
 # (~/.mini-op/ssh_config, or the container's copy), read with builtins only. A missing or invalid
-# one (it becomes a path and a shell word) prints why to stderr, after "<prefix>: ".
+# one (it becomes a shell word) prints why to stderr, after "<prefix>: ".
 mini_user() {
   local file=${_mini_ssh_config:-/etc/ssh/ssh_config.d/mini.conf} line on= user=
   local -a words

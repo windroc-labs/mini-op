@@ -12,7 +12,7 @@ import {
   SandboxError,
   type RunOptions,
 } from "./sandbox.ts";
-import { FAKE_LOCAL, FAKE_SSH_CONFIG, MINI_USER } from "./ssh_config.ts";
+import { FAKE_LOCAL, FAKE_SSH_CONFIG } from "./ssh_config.ts";
 
 const SECRETS = "/run/" + "secrets";
 
@@ -65,9 +65,9 @@ test("the override variable must be set and point inside the sandbox", async (t)
       (err: Error) => err instanceof SandboxError && /MINI_OP_SECRETS_DIR/.test(err.message),
     );
   }
-  const r = await sb.run(["sh", "-c", 'cat "$MINI_OP_SECRETS_DIR/$1"', "sh", MINI_USER]);
+  const r = await sb.run(["sh", "-c", 'cat "$MINI_OP_SECRETS_DIR/mini-password"']);
   assert.equal(r.stdout, sb.canary);
-  assert.equal(sb.passwordFile, path.join(sb.secrets, MINI_USER));
+  assert.equal(sb.passwordFile, path.join(sb.secrets, "mini-password"));
 });
 
 test("a secrets entry linking out of the sandbox rejects", async (t) => {
@@ -555,7 +555,7 @@ test("real tools run through shims that log their name, argv and env (FR-36)", a
 });
 
 // Scripts reading the canary from the secrets dir, each sending it somewhere.
-const READ = `tok=$(cat "$MINI_OP_SECRETS_DIR/${MINI_USER}"); `;
+const READ = 'tok=$(cat "$MINI_OP_SECRETS_DIR/mini-password"); ';
 
 test("leaks: a canary in a real tool's argv is caught (the sed variant)", async (t) => {
   const sb = await Sandbox.create(t);
@@ -567,7 +567,7 @@ test("leaks: a canary in a real tool's argv is caught (the sed variant)", async 
 test("leaks: the canary only on a consumer's stdin is clean", async (t) => {
   const sb = await Sandbox.create(t);
   sb.fake("ssh", [{ stdout: "" }]);
-  await sb.run(["zsh", "-fc", `ssh mini cat < "$MINI_OP_SECRETS_DIR/${MINI_USER}"`]);
+  await sb.run(["zsh", "-fc", 'ssh mini cat < "$MINI_OP_SECRETS_DIR/mini-password"']);
   assert.deepEqual(sb.leaks({ consumers: ["ssh"] }), []);
   assert.equal(sb.calls("ssh")[0]?.stdin, sb.canary);
 });

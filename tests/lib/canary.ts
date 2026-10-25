@@ -56,13 +56,20 @@ function sshGotCanary(sb: Sandbox, r: RunResult): void {
   for (const call of sb.calls("ssh")) assert.equal(call.stdin, sb.canary);
 }
 
-// ctl/ scripts send the mini account's password from the secrets dir to ssh's stdin.
-type CtlRow = { script: string; title: string; args: string[] };
-const ctl = ({ script, title, args }: CtlRow): Scenario => ({
+// ctl/ scripts send the mini account's password from the secrets dir, or with env from its env/
+// dir, to ssh's stdin.
+type CtlRow = { script: string; title: string; args: string[]; env?: boolean };
+const ctl = ({ script, title, args, env }: CtlRow): Scenario => ({
   script,
   title,
   args: () => args,
-  setup: (sb) => sb.fake("ssh", [{ stdout: "ok\n" }]),
+  setup(sb) {
+    if (env) {
+      fs.mkdirSync(path.join(sb.secrets, "env"));
+      fs.renameSync(sb.passwordFile, path.join(sb.secrets, "env/mini-password"));
+    }
+    sb.fake("ssh", [{ stdout: "ok\n" }]);
+  },
   consumers: ["ssh"],
   check: sshGotCanary,
 });
@@ -85,11 +92,23 @@ export const SECRET_SCRIPTS: Scenario[] = [
     args: ["pw", "--settings"],
   }),
   ctl({ script: "ctl/mini", title: "sudo -v checks the sudo password", args: ["sudo", "-v"] }),
+  ctl({
+    script: "ctl/mini",
+    title: "sudo -v checks the environment's password",
+    args: ["sudo", "-v"],
+    env: true,
+  }),
   ctl({ script: "ctl/mini", title: "sudo runs a command with sudo", args: ["sudo", "ls", "-la"] }),
   ctl({
     script: "ctl/mini-autologin",
     title: "restores the account's auto-login as root",
     args: [],
+  }),
+  ctl({
+    script: "ctl/mini-autologin",
+    title: "restores the auto-login with the environment's password",
+    args: [],
+    env: true,
   }),
   {
     script: "ctl/mini-autologin",

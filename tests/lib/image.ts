@@ -1,8 +1,5 @@
 // Checks of the image inputs (FR-33): each returns its problems, [] when the input is as pinned.
 import { createHash } from "node:crypto";
-import * as path from "node:path";
-import { REPO } from "./repo.ts";
-import type { FakeRule } from "./sandbox.ts";
 
 const DIGEST = /@sha256:[0-9a-f]{64}$/;
 const CLAUDE_HOSTS = ["api.anthropic.com", "claude.ai", "claude.com", "platform.claude.com"];
@@ -39,8 +36,24 @@ function fromProblems(text: string): string[] {
   return problems;
 }
 
+// The URLs ADD fetches, each of which must carry its sha256 checksum.
+function addedUrls(text: string, problems: string[]): string[] {
+  const urls: string[] = [];
+  for (const match of text.matchAll(/^ADD\s+(.*)$/gm)) {
+    const line = match[1] ?? "";
+    const url = /https?:\/\/\S+/.exec(line)?.[0];
+    if (!url) continue;
+    urls.push(url);
+    if (!/(^|\s)--checksum=sha256:[0-9a-f]{64}\s/.test(line)) {
+      problems.push(`ADD ${url} has no sha256 checksum`);
+    }
+  }
+  return urls;
+}
+
 export function dockerfileProblems(text: string): string[] {
   const problems = fromProblems(text);
+  addedUrls(text, problems);
   const version = /^ARG CLAUDE_CODE_VERSION=(\S*)$/m.exec(text)?.[1];
   if (version === undefined) problems.push("no ARG CLAUDE_CODE_VERSION");
   else if (!/^\d+\.\d+\.\d+-\d+$/.test(version)) {
@@ -54,15 +67,8 @@ export function dockerfileProblems(text: string): string[] {
 
 export function proxyDockerfileProblems(text: string): string[] {
   const problems = fromProblems(text);
-  const urls: string[] = [];
-  for (const match of text.matchAll(/^ADD\s+(.*)$/gm)) {
-    const line = match[1] ?? "";
-    const url = /https?:\/\/\S+/.exec(line)?.[0];
-    if (!url) continue;
-    urls.push(url);
-    if (!/(^|\s)--checksum=sha256:[0-9a-f]{64}\s/.test(line)) {
-      problems.push(`ADD ${url} has no sha256 checksum`);
-    }
+  const urls = addedUrls(text, problems);
+  for (const url of urls) {
     if (![SMOKESCREEN("amd64"), SMOKESCREEN("arm64")].includes(url)) {
       problems.push(`ADD ${url} is not a smokescreen v0.1.0 release`);
     }
@@ -143,11 +149,3 @@ export function configProblems(config: Config, mini: string, port = 22): string[
   }
   return problems;
 }
-
-// Fake docker's answer to host/update's check of the running proxy's policy label: the policy
-// host/config generated in the sandbox HOME, as a proxy host/start just built would carry.
-export const PROXY_LABEL = ["inspect", "-f", '{{index .Config.Labels "mini-op.proxy-policy"}}'];
-export const PROXY_POLICY: FakeRule = {
-  argv: [...PROXY_LABEL, "mini-op-proxy"],
-  shell: `bash '${path.join(REPO, "host/config")}' policy-hash`,
-};

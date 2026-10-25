@@ -1,10 +1,16 @@
 [
   {
     "file": "host/Dockerfile",
-    "reason": "the mini-op image: base digest, claude-code pin, PATH, ssh config",
+    "reason": "the mini-op image: base digest, claude-code pin, npm checksum, user agent, plugin root, PATH, ssh config",
     "tests": [
-      "tests/host/Dockerfile.test.ts",
-      "tests/host/update.test.ts"
+      "tests/host/Dockerfile.test.ts"
+    ]
+  },
+  {
+    "file": "host/Dockerfile.dockerignore",
+    "reason": "the image's build context from the repo root: only the files the image takes",
+    "tests": [
+      "tests/host/Dockerfile.test.ts"
     ]
   },
   {
@@ -36,6 +42,13 @@
     ]
   },
   {
+    "file": "host/ssh_config.keys",
+    "reason": "the image's ssh identity for the mini (the environment's key, else the volume's) and its only trusted host key",
+    "tests": [
+      "tests/host/ssh_config.keys.test.ts"
+    ]
+  },
+  {
     "file": "mini/lib/chord.applescript",
     "reason": "the held-modifier chord program: AppleScript, as JXA's keyDown sends nothing useful (tests/registry/applescript.json)",
     "tests": [
@@ -47,6 +60,13 @@
     "reason": "install-test's Strata OpenCode URL, model and context (FR-56)",
     "tests": [
       "tests/mini/runbooks/install-ensemble/install-test.test.ts"
+    ]
+  },
+  {
+    "file": "plugin/.claude-plugin/plugin.json",
+    "reason": "the mini-op plugin manifest: its name; the image build stamps its version",
+    "tests": [
+      "tests/plugin/skills/run.test.ts"
     ]
   }
 ]

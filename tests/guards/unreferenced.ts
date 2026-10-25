@@ -3,7 +3,7 @@ import { scanned } from "../lib/repo.ts";
 
 // A script nothing names is dead or undocumented. The mini's scripts are named by their path under
 // ~/apm (bin/<name>, runbooks/<runbook>/<name>), ctl/ scripts by name (they are on the container's
-// PATH), host/ scripts by a path ending /<name> (host/start, "$here/update"). Tests don't count.
+// PATH), host/ scripts by a path ending /<name> (host/start, "$here/config"). Tests don't count.
 const DIRS = ["mini/", "ctl/", "host/"];
 
 function named(text: string, word: string): boolean {

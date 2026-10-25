@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 // Dirs whose files ship to the container, the MacBook or the mini; read-only while CI tests run.
-export const SHIPPED_DIRS = ["ctl", "mini", "host"];
+export const SHIPPED_DIRS = ["ctl", "mini", "host", "plugin"];
 
 // Dirs whose scripts and program entries each need a test (FR-26): the shipped dirs and CI's own.
 export const TESTED_DIRS = [...SHIPPED_DIRS, ".github", ".githooks"];
@@ -18,6 +18,32 @@ export const APM_DIRS = ["bin", "js", "lib", "ts", "runbooks"];
 // Where a mini/ file lives on the mini, as scripts and docs name it.
 export function apmPath(file: string): string | undefined {
   return file.startsWith("mini/") ? `~/apm/${file.slice("mini/".length)}` : undefined;
+}
+
+// The image's plugin root (host/Dockerfile): plugin/, ctl/, mini/, README.md and runbooks/.
+export const PLUGIN_ROOT = "/opt/windroc/plugins/mini-op";
+
+// The plugin root's top-level entries the image bakes, each with the repo path it comes from.
+export const BAKED = new Map([
+  ["CLAUDE.md", "ctl/CLAUDE.md"],
+  ["README.md", "README.md"],
+  ["ctl", "ctl"],
+  ["mini", "mini"],
+  ["runbooks", "runbooks"],
+  ["skills", "plugin/skills"],
+  [".claude-plugin", "plugin/.claude-plugin"],
+]);
+
+// The repo path a plugin-root path names: undefined outside the root, "" for the root itself, null
+// for a path the image does not bake (ctl/CLAUDE.md is moved to the root).
+export function containerToRepo(file: string): string | null | undefined {
+  if (file !== PLUGIN_ROOT && !file.startsWith(`${PLUGIN_ROOT}/`)) return undefined;
+  const rest = file.slice(PLUGIN_ROOT.length + 1);
+  if (!rest) return "";
+  const [top = "", ...below] = rest.split("/");
+  const from = BAKED.get(top);
+  if (from === undefined || rest === "ctl/CLAUDE.md") return null;
+  return [from, ...below].join("/");
 }
 
 // Guard samples hold deliberate violations; guards scanning the repo skip them.

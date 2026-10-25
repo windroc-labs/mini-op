@@ -15,8 +15,8 @@ mini chord <mods> <key code>  in the mini's front Terminal hold the modifiers (c
                               option,shift), press and release the key, release the modifiers last
 mini sync [--check]           copy mini/ with its VERSION stamp to the mini's ~/apm, keeping
                               ~/apm/state/; --check exits 1 unless the mini's ~/apm/VERSION matches
-pw and sudo send the mini account's password from \$(secrets_dir)/<account> (<account>:
-mini_user in ~/.mini-op/config.local.yaml) to ssh's stdin only. Exits 0, 1 (refused or failed), 2
+pw and sudo send the mini account's password from \$(env_secrets_dir)/mini-password when it
+exists, else \$(secrets_dir)/mini-password, to ssh's stdin only. Exits 0, 1 (refused or failed), 2
 (usage error) or 124 (a wait timed out; its stderr line says which)."
 source ${0:A:h}/lib/ssh.zsh
 source ${0:A:h}/lib/version.sh
@@ -29,10 +29,10 @@ usage_error() { print -u2 -r -- "mini: usage: $1"; exit 2; }
 # off mid-swap left the state in ~/apm.new: move it back before clearing.
 unpack='set -e; chmod -R u+w ~/apm.new ~/apm.old 2>/dev/null || true; if [ -d ~/apm.new/state ] && [ ! -d ~/apm/state ]; then mkdir -p ~/apm; mv ~/apm.new/state ~/apm/state; fi; rm -rf ~/apm.new ~/apm.old; mkdir ~/apm.new; tar -xf - -C ~/apm.new; mkdir -p ~/apm/state; mv ~/apm/state ~/apm.new/state; mv ~/apm ~/apm.old; mv ~/apm.new ~/apm; chmod -R u+w ~/apm.old; rm -rf ~/apm.old'
 
-# This copy's stamp: made on the spot in a git checkout (the Mac), else host/update's (mini-op).
+# This copy's stamp: made on the spot in a git checkout (the Mac), else the image's (host/start).
 stamp() {
   apm_version $root && return
-  [[ -r $root/mini/VERSION ]] || die "no $root/mini/VERSION; run host/update on the Mac first"
+  [[ -r $root/mini/VERSION ]] || die "no $root/mini/VERSION; rebuild the image with host/start on the Mac"
   print -r -- "$(<$root/mini/VERSION)"
 }
 
@@ -84,10 +84,8 @@ timed() {
 # password_file <sub> <nothing>: the mini account's password file, or exit 1 (a MacBook, a fresh
 # container: the user writes it).
 password_file() {
-  local account file
-  account=$(mini_user "mini: $1") || exit 1
-  file=$(secrets_dir)/$account
-  [[ -r $file ]] || die "$1: $file missing; the user writes it (host/README.md, Steps 4); $2"
+  local file
+  file=$(mini_password_file "mini: $1" "$2") || exit 1
   print -r -- $file
 }
 

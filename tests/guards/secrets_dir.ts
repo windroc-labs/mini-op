@@ -6,6 +6,9 @@ const REGISTRY = "tests/registry/secrets.json";
 const VARIABLE = "MINI_OP_SECRETS_DIR";
 const RESOLVER = "ctl/lib/secrets.zsh";
 const LITERAL = "/run/" + "secrets";
+// The environment's secrets dir (AC9b): named only by the resolver, the ssh settings and docs.
+const ENV_LITERAL = "/run/ensemble/" + "secrets/env";
+const ENV_NAMERS = new Set([RESOLVER, "host/ssh_config.keys"]);
 // The direct users of the literal left after E2 put ctl/'s readers on the resolver. A move may
 // rename a row (same count, same commit); a new file may never be added: new code goes through the
 // resolver.
@@ -33,9 +36,17 @@ export const guard: Guard = {
       }
     }
     for (const file of scanned(view)) {
+      const text = view.read(file);
+      const env = text.indexOf(ENV_LITERAL);
+      if (env >= 0 && !ENV_NAMERS.has(file) && !file.endsWith(".md")) {
+        found.push({
+          file,
+          line: lineAt(text, env),
+          message: `names ${ENV_LITERAL}; use env_secrets_dir`,
+        });
+      }
       const tests = file.startsWith("tests/");
       if (!tests && !isShipped(file)) continue;
-      const text = view.read(file);
       const literal = text.indexOf(LITERAL);
       if (literal >= 0 && (tests || (file !== RESOLVER && !listed.has(file)))) {
         found.push({
