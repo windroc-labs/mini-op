@@ -12,9 +12,10 @@ export const violation = {
     'item = "mini-op-password"',
     'item = "Mac Mini Password"',
     'env = { item = "mini-password", file = "x" }',
+    "item = '''mini-op-password'''",
     "",
   ].join("\n"),
-  "config/env.yaml": "secrets:\n  - item: mac-mini-x-password\n",
+  "config/env.yaml": "secrets:\n  - item: mac-mini-x-password\n  - item: Mac Mini Password # x\n",
 };
 
 export const clean = {
@@ -42,6 +43,8 @@ export const clean = {
     '# item = "mini-op-password"',
     '# env = { item = "mini-op-password" }',
     "s = { item = 'ensemble-env/mini-op-password' }",
+    'note = "x" # see { item = "mini-op-password" }',
+    'url = "a#b" # item = "mini-op-password"',
     "",
   ].join("\n"),
   "config/env.yaml": "secrets:\n  - item: ensemble-env/mini-op-password\n",
@@ -61,5 +64,7 @@ export const expected = [
   `config/env.toml:2: ${message("mini-op-password")}`,
   `config/env.toml:3: ${message("Mac Mini Password")}`,
   `config/env.toml:4: ${message("mini-password")}`,
+  `config/env.toml:5: ${message("mini-op-password")}`,
+  `config/env.yaml:3: ${message("Mac Mini Password")}`,
   `config/env.yaml:2: ${message("mac-mini-x-password")}`,
 ];

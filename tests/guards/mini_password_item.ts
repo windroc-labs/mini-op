@@ -11,11 +11,23 @@ import { commands } from "../lib/shell.ts";
 const PREFIX = "ensemble-env/";
 // `item` at a line's start, a YAML list item's, or in an inline table after { or ,.
 const CONFIG =
-  /(?:^[ \t]*(?:-[ \t]+)?|[{,][ \t]*)item[ \t]*[=:][ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#"',}]+))/g;
+  /(?:^[ \t]*(?:-[ \t]+)?|[{,][ \t]*)item[ \t]*[=:][ \t]*(?:"""(.*?)"""|'''(.*?)'''|"([^"]*)"|'([^']*)'|([^,}]*[^\s,}]))/g;
 const PATH = /^(?:\/|~\/|\.\.?\/)/;
 const READERS = new Set(["security", "keychain_read", "keychain_has", "storekey"]);
 
 const unquote = (word: string) => word.replace(/^(['"])(.*)\1$/, "$2");
+
+// A config line without its # comment: a # outside quotes, at the start or after a blank.
+function uncomment(line: string): string {
+  let quote = "";
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i] ?? "";
+    if (quote) quote = c === quote ? "" : quote;
+    else if (c === '"' || c === "'") quote = c;
+    else if (c === "#" && (i === 0 || /\s/.test(line[i - 1] ?? ""))) return line.slice(0, i);
+  }
+  return line;
+}
 
 function misplaced(word: string): boolean {
   if (word.startsWith(PREFIX) || PATH.test(word) || word.includes("$")) return false;
@@ -37,9 +49,8 @@ export const guard: Guard = {
       if (file.startsWith("tests/")) continue;
       const text = view.read(file);
       text.split("\n").forEach((line, i) => {
-        if (/^[ \t]*#/.test(line)) return;
-        for (const m of line.matchAll(CONFIG)) {
-          const name = m[1] ?? m[2] ?? m[3] ?? "";
+        for (const m of uncomment(line).matchAll(CONFIG)) {
+          const name = m.slice(1).find((g) => g !== undefined) ?? "";
           if (misplaced(name)) at(file, i + 1, name);
         }
       });
