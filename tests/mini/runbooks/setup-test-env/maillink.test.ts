@@ -76,7 +76,7 @@ test("follow waits for a link other than the marked one and opens it in the Line
   assert.equal(r.stderr, "");
   assert.deepEqual(opened(), [["eval", link(2), "--session", "role"]]);
   assert.deepEqual(sb.calls("front").at(-1)?.argv, ["linear.app/auth"]);
-  assert.equal(sleeps(), "30 3 10 3 10 3");
+  assert.equal(sleeps(), "5 3 5 3 10 3");
   assert.ok(!fs.existsSync(path.join(sb.dir, MARK)));
   noLink(sb, r);
 });
@@ -90,7 +90,7 @@ test("follow exits 124 timed out when no fresh link comes", async (t) => {
   assert.equal(r.stdout, "");
   assert.equal(r.stderr, `maillink: timed out after 140 s: no fresh link for ${EMAIL}\n`);
   assert.deepEqual(opened(), []);
-  assert.equal(sleeps(), ["30", ...Array(11).fill("3 10"), "3"].join(" "));
+  assert.equal(sleeps(), "5 3 5 3 10 3 20 3 40 3 40 3 20 3");
   assert.ok(!fs.existsSync(path.join(sb.dir, MARK)));
   noLink(sb, r);
 });

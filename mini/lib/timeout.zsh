@@ -1,5 +1,5 @@
-# The one timeout wrapper and the one poll helper (FR-53). Sourced by the mini's zsh scripts and
-# by ssh's remote shell, so it keeps to POSIX sh. Callers print their own timeout line.
+# The one timeout wrapper and the poll helpers, poll and backoff (FR-53). Sourced by the mini's zsh
+# scripts and by ssh's remote shell, so it keeps to POSIX sh. Callers print their own timeout line.
 
 # with_timeout <secs> <cmd> [args...]: <cmd>'s status, or 124 when <secs> ran out. perl's alarm
 # outlives its exec of <cmd>, one program run without a shell: a function or 'x;y' is 127.
@@ -28,5 +28,27 @@ poll() {
     _poll_left=$((_poll_left - 1))
     [ "$_poll_left" -gt 0 ] || return 124
     sleep "$_poll_wait"
+  done
+}
+
+# backoff <secs> <first> <max> <cmd> [args...]: poll with growing gaps. 0 once <cmd> succeeds, 124
+# once <secs> s of gaps ran out; the first gap is <first> s, each next one twice the last but at
+# most <max> s, the last one cut to what is left of <secs>. Whole seconds only.
+backoff() {
+  local _backoff_arg _backoff_left _backoff_gap _backoff_max
+  for _backoff_arg in "$1" "$2" "$3"; do
+    case $_backoff_arg in '' | 0* | *[!0-9]*) return 2 ;; esac
+  done
+  [ $# -ge 4 ] && [ "$2" -le "$3" ] || return 2
+  _backoff_left=$1 _backoff_gap=$2 _backoff_max=$3
+  shift 3
+  while :; do
+    "$@" && return 0
+    [ "$_backoff_left" -gt 0 ] || return 124
+    [ "$_backoff_gap" -le "$_backoff_left" ] || _backoff_gap=$_backoff_left
+    sleep "$_backoff_gap"
+    _backoff_left=$((_backoff_left - _backoff_gap))
+    _backoff_gap=$((_backoff_gap * 2))
+    [ "$_backoff_gap" -le "$_backoff_max" ] || _backoff_gap=$_backoff_max
   done
 }
