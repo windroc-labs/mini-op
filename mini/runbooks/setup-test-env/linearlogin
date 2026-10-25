@@ -1,10 +1,11 @@
 #!/usr/bin/env zsh
 usage='linearlogin [--code] <email>   log the Linear tab (session role) out, request a login mail for
 <email>, open its link (maillink follow) or, with --code, enter its login code at "Enter code
-manually" (maillink code; Return when the page has not moved on 3 s later), and print where the
-tab lands ("landed: <url> | <text>"). Each page and the code field are awaited up to 15 s and the
-landing up to 20 s. Exits 0, 1 (maillink failed), 2 (usage error) or 124 (a page, the code field or
-the landing did not come: "timed out after <N> s"; or maillink timed out).'
+manually" (maillink code; Return, only into a frontmost Chrome, when the page has not moved on 3 s
+later), and print where the tab lands ("landed: <url> | <text>"). Each page and the code field are
+awaited up to 15 s and the landing up to 20 s. Exits 0, 1 (maillink failed, its mark included), 2
+(usage error) or 124 (a page, the code field or the landing did not come: "timed out after <N> s";
+or maillink timed out).'
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
 code=; [[ $# -eq 2 && $1 == --code ]] && { code=1; shift; }
 [[ $# -eq 1 && $1 =~ '^[A-Za-z0-9._%+][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+$' ]] ||
@@ -30,7 +31,8 @@ case "$(page)" in *"Log in to Linear"*) ;; *)
   expect "Log in to Linear";;
 esac
 expect "Log in to Linear"
-~/apm/runbooks/setup-test-env/maillink mark "$E" >/dev/null; ~/apm/bin/front linear.app >/dev/null; sleep 1
+~/apm/runbooks/setup-test-env/maillink mark "$E" >/dev/null || exit 1
+~/apm/bin/front linear.app >/dev/null; sleep 1
 o click --text "Continue with email" >/dev/null; expect "email address"
 o type --name "email address" "$E" >/dev/null
 o click --role button --name "Continue with email" >/dev/null; expect "Check your email"
@@ -40,7 +42,7 @@ if [[ -n $code ]]; then
     { print -u2 -r -- "linearlogin: timed out after 15 s: no code field: $(page)"; exit 124; }
   ~/apm/runbooks/setup-test-env/maillink code "$E"; rc=$?
   (( rc == 0 )) || exit $(( rc == 124 ? 124 : 1 ))
-  poll 4 1 left || printf '' | osascript -l JavaScript ~/apm/js/keys.js --enter >/dev/null
+  poll 4 1 left || printf '' | osascript -l JavaScript ~/apm/js/keys.js --front Chrome --enter >/dev/null
 else
   ~/apm/runbooks/setup-test-env/maillink follow "$E"; rc=$?
   (( rc == 0 )) || exit $(( rc == 124 ? 124 : 1 ))

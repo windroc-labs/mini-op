@@ -70,7 +70,10 @@ async function sandbox(
     fs.mkdirSync(path.join(sb.home, "apm/bin"), { recursive: true });
     fs.symlinkSync(path.join(sb.dir, "bin", name), path.join(sb.home, "apm/bin", name));
   }
-  sb.fake("sleep", [{ ignoresStdin: true }]);
+  // A clock that only the fake sleep moves on: date +%s reads it.
+  const clock = "c=$FAKE_DIR/clock; print $(( $(cat $c 2>/dev/null || print 0) + $1 )) > $c";
+  sb.fake("sleep", [{ shell: clock, ignoresStdin: true }]);
+  sb.fake("date", [{ shell: "cat $FAKE_DIR/clock 2>/dev/null || print 0", ignoresStdin: true }]);
   // Polling two folders makes many fake calls: give them time.
   const run = (args: string[]) => sb.run(["zsh", MAILLINK, ...args], { timeoutMs: 60000 });
   const opened = () =>
@@ -202,25 +205,49 @@ test("follow and code exit 124 timed out when no fresh mail comes", async (t) =>
   }
 });
 
-test("follow without a mark takes the newest Linear mail with a link for the email", async (t) => {
-  const { run, opened, mailsOpened } = await sandbox(
-    t,
-    { inbox: [["c2", "c1"]], junk: [[]] },
-    { c1: { link: link(1) } },
+test("follow and code exit 1 with no mark, opening no mail", async (t) => {
+  for (const cmd of ["follow", "code"]) {
+    const { sb, run, mailsOpened } = await sandbox(
+      t,
+      { inbox: [["c2", "c1"]], junk: [[]] },
+      { c1: { link: link(1), code: CODE } },
+    );
+    const r = await run([cmd, EMAIL]);
+    assert.equal(r.code, 1, cmd);
+    assert.equal(r.stdout, "");
+    assert.equal(r.stderr, `maillink: no mark for ${EMAIL}: run maillink mark first\n`);
+    assert.deepEqual(sb.calls("o"), []);
+    assert.deepEqual(mailsOpened(), []);
+    assert.deepEqual(sb.calls("secfield"), []);
+  }
+});
+
+// The Inbox takes 15 s to render at the first look and never renders at the sixth, at 135 s: the
+// gaps and that last render wait are cut so the looks end at 140 s.
+test("render waits count toward the 140 s, and a folder not rendered is named", async (t) => {
+  const ones = (n: number) => Array(n).fill("1");
+  const inbox: Reads = [...Array(16).fill("-"), [], [], [], [], "-"];
+  const { sb, run, sleeps, mark } = await sandbox(t, { inbox, junk: [[]] });
+  mark([]);
+  const r = await run(["code", EMAIL]);
+  assert.equal(r.code, 124);
+  assert.equal(
+    r.stderr,
+    `maillink: timed out after 140 s: no fresh code for ${EMAIL}; did not render on some look: ${INBOX}\n`,
   );
-  const r = await run(["follow", EMAIL]);
-  assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(mailsOpened(), ["c2", "c1"]);
-  assert.deepEqual(opened(), [["eval", link(1), "--session", "role"]]);
+  assert.equal(sleeps(), ["5", ...ones(15), "5", "10", "20", "40", "40", ...ones(5)].join(" "));
+  assert.deepEqual(sb.calls("secfield"), []);
+  assert.ok(!fs.existsSync(path.join(sb.dir, MARK)));
 });
 
 test("follow exits 1 when the Linear tab does not take the link", async (t) => {
-  const { sb, run, opened } = await sandbox(
+  const { sb, run, opened, mark } = await sandbox(
     t,
     { inbox: [["c2"]], junk: [[]] },
     { c2: { link: link(2) } },
   );
   fs.writeFileSync(path.join(sb.dir, "open-fails"), "");
+  mark([]);
   const r = await run(["follow", EMAIL]);
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
@@ -232,12 +259,13 @@ test("follow exits 1 when the Linear tab does not take the link", async (t) => {
 test("code exits 1 when the code cannot be typed", async (t) => {
   const refused =
     "secfield: focus not on input[name=authToken] (page focus: false); typed nothing\n";
-  const { sb, run } = await sandbox(
+  const { sb, run, mark } = await sandbox(
     t,
     { inbox: [["c2"]], junk: [[]] },
     { c2: { code: CODE } },
     { stderr: refused, exit: 1 },
   );
+  mark([]);
   const r = await run(["code", EMAIL]);
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
@@ -253,11 +281,12 @@ test("follow refuses a fresh link that is not a Linear login link", async (t) =>
     `${link(2)}'+alert(1)+'`,
     `https://linear.app.example/auth/email/${EMAIL}/c`,
   ]) {
-    const { sb, run, opened } = await sandbox(
+    const { sb, run, opened, mark } = await sandbox(
       t,
       { inbox: [["c2"]], junk: [[]] },
       { c2: { link: bad } },
     );
+    mark([]);
     const r = await run(["follow", EMAIL]);
     assert.equal(r.code, 1, bad);
     assert.equal(r.stdout, "", bad);

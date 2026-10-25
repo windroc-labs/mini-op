@@ -3,13 +3,14 @@ usage='maillink mark|follow|code <email>   find the Linear login mail for <email
 mail), in the Inbox and in Junk Email. Each folder is read once its list or its empty state has
 rendered (up to 15 s); Outlook renders no list in a hidden tab, so its tab is raised first.
 mark: before requesting the mail, remember the Linear mails listed. follow: after, wait 5 s, then
-look for a Linear mail not marked, again after 5, 10, 20, 40, 40 and 20 s (140 s in all), and open
-its login link in the Linear tab (session role). code: as follow, but type the mail login code
-into the Linear tab code field (input[name=authToken]) with secfield; links in Junk Email do not
-work. Neither link nor code ever prints. Prints "marked", "followed" or "entered"; exits 0, 1 (the
-mark cannot be written, a folder did not render for mark, the link is not a Linear login link, or
-the tab does not take the link or code), 2 (usage error) or 124 (no fresh mail: "timed out after
-140 s").'
+look for a Linear mail not marked, again after 5, 10, 20, 40, 40 and 20 s, each render wait and
+gap cut so no look starts after 140 s, and open its login link in the Linear tab (session role).
+code: as follow, but type the mail login code into the Linear tab code field
+(input[name=authToken]) with secfield; links in Junk Email do not work. Neither link nor code ever
+prints. Prints "marked", "followed" or "entered"; exits 0, 1 (the mark cannot be written, a folder
+did not render for mark, follow or code finds no mark, the link is not a Linear login link, or the
+tab does not take the link or code), 2 (usage error) or 124 (no fresh mail: "timed out after 140
+s", naming any folder that did not render on some look).'
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
 [[ $# -eq 2 && $1 == (mark|follow|code) && $2 =~ '^[A-Za-z0-9._%+][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+$' ]] ||
   { print -u2 -r -- 'maillink: usage: maillink mark|follow|code <email>'; exit 2; }
@@ -19,10 +20,10 @@ cmd=$1; E=$2; S=~/apm/state/maillink.${E//[^A-Za-z0-9]/_}
 folders=(https://outlook.live.com/mail/0/ https://outlook.live.com/mail/0/junkemail)
 m(){ ~/apm/bin/o "$@" --session mail; }
 listed(){ R=$(m eval "$(page_js outlook rows Linear)" | opencli_data) && [[ $R != - ]]; }
-# rows <folder>: R, the ids of its Linear mails, newest first; 1 when it did not render.
+# rows <folder> [<tries>]: R, the ids of its Linear mails, newest first; 1 when it did not render.
 rows(){
   m open $1 >/dev/null; ~/apm/bin/front outlook.live.com >/dev/null
-  poll 16 1 listed
+  poll ${2:-16} 1 listed
 }
 case $cmd in
   mark)
@@ -34,12 +35,16 @@ case $cmd in
     done
     print -rl -- $seen > $S; echo marked ;;
   follow|code)
-    seen=(${(f)"$(cat $S 2>/dev/null)"})
+    [[ -r $S ]] || { print -u2 -r -- "maillink: no mark for $E: run maillink mark first"; exit 1; }
+    seen=(${(f)"$(<$S)"})
     what=link; [[ $cmd == code ]] && what=code
+    end=$(( $(date +%s) + 140 )); typeset -U missed=()
+    left(){ local n=$(( end - $(date +%s) )); print -r -- $(( n > 0 ? n : 0 )); }
     fresh(){
-      local f id
+      local f id n
       for f in $folders; do
-        rows $f || continue
+        n=$(left)
+        rows $f $(( n < 15 ? n + 1 : 16 )) || { missed+=($f); continue; }
         for id in ${(f)R}; do
           (( ${seen[(Ie)$id]} )) && continue
           m eval "$(page_js outlook open $id)" >/dev/null; sleep 3
@@ -49,11 +54,16 @@ case $cmd in
       done
       return 1
     }
-    sleep 5
-    backoff 135 5 40 fresh; rc=$?
+    sleep 5; gap=5; rc=0
+    until fresh; do
+      n=$(left)
+      (( n > 0 )) || { rc=124; break; }
+      sleep $(( gap < n ? gap : n )); gap=$(( gap * 2 < 40 ? gap * 2 : 40 ))
+    done
     rm -f -- "${S:?}"
+    unrendered=${missed:+; did not render on some look: ${(j: :)missed}}
     (( rc == 0 )) ||
-      { print -u2 -r -- "maillink: timed out after 140 s: no fresh $what for $E"; exit 124; }
+      { print -u2 -r -- "maillink: timed out after 140 s: no fresh $what for $E$unrendered"; exit 124; }
     if [[ $cmd == code ]]; then
       ~/apm/bin/front linear.app >/dev/null
       print -rn -- $L | ~/apm/bin/secfield role 'input[name=authToken]' >/dev/null; rc=$?; unset L

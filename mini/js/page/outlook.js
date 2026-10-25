@@ -3,13 +3,13 @@
     const rows = Array.from(document.querySelectorAll("[role=option]"));
     const text = document.body?.innerText ?? "";
     const label = (row) => row.getAttribute("aria-label") || row.innerText;
-    const id = (row) => (row.getAttribute("data-convid") || row.id || label(row)).replace(/\s+/g, " ").trim();
+    const id = (row) => (row.getAttribute("data-convid") || row.id).trim();
     if (op === "rows") {
         const empty = /Nothing in folder|Looks empty over here|All done for the day/.test(text);
         if (rows.length === 0)
             return empty ? "" : "-";
-        const mine = rows.filter((r) => label(r).includes(arg));
-        return mine.map(id).filter(Boolean).join("\n");
+        const ids = rows.filter((r) => label(r).includes(arg)).map(id);
+        return ids.includes("") ? "-" : ids.join("\n");
     }
     if (op === "open") {
         const row = rows.find((r) => id(r) === arg);

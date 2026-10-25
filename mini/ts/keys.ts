@@ -1,14 +1,14 @@
 // keys: type stdin, less one trailing newline, as keystrokes. --front first makes sure that app
-// takes them (SettingsSheet: System Settings frontmost with a focused secure field, as on its
-// macOS 26+ password sheets); --verify-field checks that secure field got every character, then
-// clicks Allow (SecurityAgent) or OK (SettingsSheet); --secret keeps the text out of every message;
-// --wake presses Shift first (lock screen).
+// takes them (Chrome: Google Chrome frontmost; SettingsSheet: System Settings frontmost with a
+// focused secure field, as on its macOS 26+ password sheets); --verify-field checks that secure
+// field got every character, then clicks Allow (SecurityAgent) or OK (SettingsSheet); --secret
+// keeps the text out of every message; --wake presses Shift first (lock screen).
 ObjC.import("Foundation");
 
 const USAGE =
-  "usage: keys [--front Terminal|SecurityAgent|SettingsSheet] [--secret] [--verify-field] [--enter] [--wake]";
+  "usage: keys [--front Terminal|Chrome|SecurityAgent|SettingsSheet] [--secret] [--verify-field] [--enter] [--wake]";
 
-type Front = "Terminal" | "SecurityAgent" | "SettingsSheet";
+type Front = "Terminal" | "Chrome" | "SecurityAgent" | "SettingsSheet";
 
 type KeysOptions = {
   front?: Front;
@@ -31,7 +31,14 @@ function parse(argv: string[]): KeysOptions {
     const arg = argv[i];
     if (arg === "--front") {
       const app = argv[++i];
-      if (app !== "Terminal" && app !== "SecurityAgent" && app !== "SettingsSheet") fail(USAGE);
+      if (
+        app !== "Terminal" &&
+        app !== "Chrome" &&
+        app !== "SecurityAgent" &&
+        app !== "SettingsSheet"
+      ) {
+        fail(USAGE);
+      }
       options.front = app;
     } else if (arg === "--secret") options.secret = true;
     else if (arg === "--verify-field") options.verify = true;
@@ -39,7 +46,8 @@ function parse(argv: string[]): KeysOptions {
     else if (arg === "--wake") options.wake = true;
     else fail(USAGE);
   }
-  if (options.verify && (options.front === undefined || options.front === "Terminal")) fail(USAGE);
+  const field = options.front === "SecurityAgent" || options.front === "SettingsSheet";
+  if (options.verify && !field) fail(USAGE);
   return options;
 }
 
@@ -59,6 +67,11 @@ function terminalInFront(se: JxaSystemEvents): void {
   delay(0.6);
   const front = frontmost(se);
   if (front !== "Terminal") fail(`Terminal not frontmost (${front}); typed nothing`);
+}
+
+function chromeInFront(se: JxaSystemEvents): void {
+  const front = frontmost(se);
+  if (front !== "Google Chrome") fail(`Google Chrome not frontmost (${front}); typed nothing`);
 }
 
 // SecurityAgent's one secure field, while SecurityAgent is frontmost with that field focused.
@@ -112,6 +125,7 @@ function run(argv: string[]): string {
   if (options.verify && count === 0) fail("empty text; typed nothing");
   const se = Application("System Events");
   if (options.front === "Terminal") terminalInFront(se);
+  if (options.front === "Chrome") chromeInFront(se);
   const secure =
     options.front === "SecurityAgent"
       ? secureField(se)

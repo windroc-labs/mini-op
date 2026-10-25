@@ -51,7 +51,13 @@ const FOLLOWED: FakeRule = {
 
 async function sandbox(
   t: Parameters<typeof Sandbox.create>[0],
-  opts: { start?: string; landing?: string; follow?: FakeRule; code?: FakeRule } = {},
+  opts: {
+    start?: string;
+    landing?: string;
+    mark?: FakeRule;
+    follow?: FakeRule;
+    code?: FakeRule;
+  } = {},
 ) {
   const sb = await Sandbox.create(t);
   fs.writeFileSync(path.join(sb.dir, "start"), `${opts.start ?? LOGIN}\n`);
@@ -64,13 +70,13 @@ async function sandbox(
   stand("o", "bin", [{ shell: O, ignoresStdin: true }]);
   stand("front", "bin", [{ ignoresStdin: true }]);
   stand("maillink", "runbooks/setup-test-env", [
-    { argv: ["mark"], stdout: "marked\n", ignoresStdin: true },
+    opts.mark ?? { argv: ["mark"], stdout: "marked\n", ignoresStdin: true },
     opts.follow ?? FOLLOWED,
     opts.code ?? { argv: ["code"], shell: `${LANDS}; print entered`, ignoresStdin: true },
   ]);
   sb.fake("osascript", [
     { program: "chrome.js", args: ["close"], ignoresStdin: true },
-    { program: "keys.js", args: ["--enter"], shell: LANDS },
+    { program: "keys.js", args: ["--front", "Chrome", "--enter"], shell: LANDS },
   ]);
   sb.fake("sleep", [{ ignoresStdin: true }]);
   const run = (args = [EMAIL]) => sb.run(["zsh", LINEARLOGIN, ...args]);
@@ -177,6 +183,23 @@ test("maillink's timeout exits 124, its line passed on", async (t) => {
   assert.equal(r.stderr, line);
 });
 
+test("a mark that fails exits 1 before the login mail is requested", async (t) => {
+  const line =
+    "maillink: https://outlook.live.com/mail/0/ did not render in 15 s; marked nothing\n";
+  const { sb, run, actions } = await sandbox(t, {
+    mark: { argv: ["mark"], stderr: line, exit: 1, ignoresStdin: true },
+  });
+  const r = await run(["--code", EMAIL]);
+  assert.equal(r.code, 1);
+  assert.equal(r.stdout, "");
+  assert.equal(r.stderr, line);
+  assert.deepEqual(actions(), ["open https://linear.app/login"]);
+  assert.deepEqual(
+    sb.calls("maillink").map((c) => c.argv[0]),
+    ["mark"],
+  );
+});
+
 test("--code enters the mailed code at Enter code manually and lands", async (t) => {
   const { sb, run, sleeps, actions } = await sandbox(t);
   const r = await run(["--code", EMAIL]);
@@ -210,8 +233,8 @@ test("--code presses Return when the code page has not moved on", async (t) => {
   assert.equal(r.stdout, `entered\nlanded: ${INBOX}\n`);
   const keys = sb.calls("osascript").filter((c) => c.program === "keys.js");
   assert.deepEqual(
-    keys.map((c) => [c.argv.slice(-1), c.stdin]),
-    [[["--enter"], ""]],
+    keys.map((c) => [c.argv.slice(-3), c.stdin]),
+    [[["--front", "Chrome", "--enter"], ""]],
   );
   assert.equal(sleeps(), "3 1 1 1 1");
 });

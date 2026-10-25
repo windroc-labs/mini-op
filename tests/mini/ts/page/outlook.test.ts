@@ -26,13 +26,16 @@ test("rows gives the ids of the rows whose label holds the text, newest first", 
   assert.equal(Page.source("outlook", scene()).call("rows", "Proton"), "");
 });
 
-test("a row without data-convid is known by its id, else by its label on one line", () => {
-  const rows: Element[] = [
-    { selectors: ["[role=option]"], id: "r9", attributes: { "aria-label": "Linear a" } },
-    { selectors: ["[role=option]"], text: "Linear\nLogin  for Linear" },
-  ];
-  const page = Page.source("outlook", { elements: rows });
-  assert.equal(page.call("rows", "Linear"), "r9\nLinear Login for Linear");
+test("a row without data-convid is known by its id; a matching row with neither is -", () => {
+  const byId: Element = {
+    selectors: ["[role=option]"],
+    id: "r9",
+    attributes: { "aria-label": "Linear a" },
+  };
+  const bare: Element = { selectors: ["[role=option]"], text: "Linear\nLogin for Linear" };
+  const other: Element = { selectors: ["[role=option]"], text: "GitHub" };
+  assert.equal(Page.source("outlook", { elements: [byId, other] }).call("rows", "Linear"), "r9");
+  assert.equal(Page.source("outlook", { elements: [byId, bare] }).call("rows", "Linear"), "-");
 });
 
 test("rows is - until the list or the empty state renders", () => {

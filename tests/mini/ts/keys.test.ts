@@ -81,6 +81,19 @@ test("--front Terminal mismatch throws and presses nothing", () => {
   assert.match(r.stderr, /keys: Terminal not frontmost \(Finder\)/);
 });
 
+test("--front Chrome types only while Google Chrome is frontmost, activating nothing", () => {
+  const jxa = keys({ stdin: "", front: "Google Chrome" });
+  assert.equal(jxa.call(["--front", "Chrome", "--enter"]), "keys: typed 0 characters, Enter");
+  assert.deepEqual(presses(jxa), [{ type: "keyCode", code: 36 }]);
+  assert.ok(!jxa.events.some((e) => e.type === "activate"));
+  const other = keys({ stdin: "", front: "Terminal" });
+  assert.throws(
+    () => other.call(["--front", "Chrome", "--enter"]),
+    /^Error: keys: Google Chrome not frontmost \(Terminal\); typed nothing$/,
+  );
+  assert.deepEqual(presses(other), []);
+});
+
 test("SecurityAgent success types one character, then the rest, then clicks Allow once", () => {
   const jxa = keys({ ...agent({ focused: true }), stdin: `${SECRET}\n` });
   const r = jxa.osascript(["--front", "SecurityAgent", "--secret", "--verify-field"]);
@@ -217,6 +230,7 @@ test("bad options are usage errors and press nothing", () => {
     ["--front", "Finder"],
     ["--verify-field"],
     ["--front", "Terminal", "--verify-field"],
+    ["--front", "Chrome", "--verify-field"],
     ["--front", "System Settings"],
   ]) {
     const jxa = keys({ stdin: "x", front: "Terminal" });

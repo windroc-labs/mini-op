@@ -1,18 +1,18 @@
 // outlook rows <text>|open <id>|link <email>|code, for maillink: the ids of the listed messages
-// whose label holds <text>, newest first ("-" until the list or its empty state has rendered);
+// whose label holds <text> (data-convid, else the row id), newest first ("-" until the list or its
+// empty state has rendered, or while such a row has no id: its label changes once read);
 // open the message with that id ("ok", "" with none); the first Linear login link for <email> in
 // the open message; or the one login code in the open message ("" with none).
 function page(op: string, arg: string): string {
   const rows = Array.from(document.querySelectorAll<HTMLElement>("[role=option]"));
   const text = document.body?.innerText ?? "";
   const label = (row: HTMLElement) => row.getAttribute("aria-label") || row.innerText;
-  const id = (row: HTMLElement) =>
-    (row.getAttribute("data-convid") || row.id || label(row)).replace(/\s+/g, " ").trim();
+  const id = (row: HTMLElement) => (row.getAttribute("data-convid") || row.id).trim();
   if (op === "rows") {
     const empty = /Nothing in folder|Looks empty over here|All done for the day/.test(text);
     if (rows.length === 0) return empty ? "" : "-";
-    const mine = rows.filter((r) => label(r).includes(arg));
-    return mine.map(id).filter(Boolean).join("\n");
+    const ids = rows.filter((r) => label(r).includes(arg)).map(id);
+    return ids.includes("") ? "-" : ids.join("\n");
   }
   if (op === "open") {
     const row = rows.find((r) => id(r) === arg);
