@@ -27,7 +27,7 @@ Observed prompt order from the user's WDRC-99 report; existing state can skip a 
 | 1 | sudo password | `--password-stdin` consumes the first private stdin line; otherwise confirmed no-echo prompt → mini pw |
 | 2 | Write `.zprofile` | y |
 | 3 | Write ensemble config | y; `--board` decides the board type |
-| 4 | gh “Authenticate Git”, then Enter to open device login | Y, then Enter; gh prints the device code to the tty; use the existing Chrome tab, each code character through masked secfield; GitHub sudo mode uses keychain → secfield → Confirm, then real-focus Authorize |
+| 4 | gh “Authenticate Git”, then Enter to open device login | The user answers Y, then Enter, enters the device code and completes GitHub authorization and any sudo mode. mini-op stays paused and never reads the code from the screen. After the user clears secrets and hands back, mini-op only cleans up safe tabs and reads redacted Terminal progress, as detailed in the gh step below |
 | 5 | Plugin write/install | y |
 | 6 | Provider config write | y; set `--opencode-provider`, `--opencode-url`, `--opencode-model`, `--opencode-context` first |
 | 7 | `opencode auth login` | without `--opencode-key-stdin`: Other → strata → key by protected stdin at a confirmed hidden prompt; with it, consume the second private stdin line |
@@ -46,19 +46,21 @@ Flags verified against [install.sh](https://github.com/windroc-labs/ensemble/blo
    4. How waiting works: `../README.md` › Waiting and answering.
    5. Answer at once when a wait times out at a prompt (`../README.md` › Waiting and answering). install.sh's prompts:
       - Docker Desktop first run: unattended since main `227d83c` (install.sh accepts the license; no Rosetta prompt, 2026-10-23). Only if a dialog shows: Rosetta prompt (process `com.apple.Virtualization.LinuxRosetta`) › Not Now, then Disable Rosetta (decided: no Rosetta); Subscription Agreement › Accept; Welcome › Skip; check `docker info`, then Enter in the Terminal.
-      - `gh` logs in as `dotpm2026`:
+      - The user logs `gh` in as `dotpm2026`; mini-op remains paused throughout authentication:
 
         ```mermaid
         flowchart LR
-          A[Terminal Enter] --> B[Continue and code]
-          B --> C[Focus and Authorize github]
-          C --> D{sudo mode?}
-          D -->|yes| E[Password and Confirm]
-          D -->|no| F[Close extra gh tabs]
-          E --> F
+          A[User: Y and Enter] --> B[User: account and device code]
+          B --> C[User: Authorize and any sudo mode]
+          C --> D[User: clear secrets and hand back]
+          D --> E{Safe gh tab remains?}
+          E -->|yes| F[mini-op: bind and close extra tabs]
+          E -->|no| G[mini-op: activate Terminal]
+          F --> G
+          G --> H[mini-op: redacted public progress]
         ```
 
-        At `Press Enter to open https://github.com/login/device in your browser...`, let `gh` open Chrome itself. Bind to the existing tab with `o bin --session <name>` (e.g. `gh`); do not use `o open` to make another window. Continue picks the account; feed each code character through secfield into its masked box (`#user-code-0..3`, `#user-code-5..8`; one paste fills only the first box), never through argv or ordinary keystrokes. After Continue, Authorize github needs real page focus: real-click blank space until `document.hasFocus()` is true, move the real pointer onto the button, wait about 1 s, then real-click. For sudo mode (`#sudo_password`), unlock the mini's keychain in the same ssh session (`../README.md` › Gotchas), then `source ~/apm/lib/keychain.zsh; keychain_read agentpm-test-github | ~/apm/bin/secfield <session> '#sudo_password'`; real-click Confirm. Close any extra tabs `gh` opened when done.
+        At `Press Enter to open https://github.com/login/device in your browser...`, the user lets gh open Chrome and handles the browser directly. mini-op never reads the device code off the screen, takes no screenshots or screen readbacks during authentication, and accepts handback only after the user confirms authentication finished and all code/token text in the browser and Terminal, including scrollback, is cleared. After handback, mini-op binds only a remaining safe tab with `o bin --session <name>` (e.g. `gh`) and closes extra gh tabs; with no safe tab it skips browser cleanup. It never uses `o open` or restarts authentication. It then activates Terminal with `terminal.js activate` and reads only redacted public installer progress with `termtail`. If authentication or secret cleanup is incomplete, control stays with the user.
       - With mini-op paused, the user does the Claude browser login and the following tty steps. install.sh runs `claude setup-token` and the broker login on fd 3, so the setup token prints to the tty. The user supplies the token at the broker prompt. Before any screenshot, clear scrollback (Cmd+K); for a keychain dialog use the fixed positions in the Gotchas section of `../README.md`, without a screenshot.
       - broker GitHub: the App's pem path and ID (`setup-test-env.md` 3b.3); a fresh install asks nothing more (2026-10-23). An upgrade may still ask the login password and raise the keychain dialog (6.2.11).
       - broker OpenCode: at `opencode auth login` type `Other`, then `strata`; at the hidden key prompt, unlock the keychain in the same ssh session, then `source ~/apm/lib/keychain.zsh; keychain_read strata-api-key strata | ~/apm/bin/ans 30 --to <id>` (the key stays on the mini).
