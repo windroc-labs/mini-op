@@ -55,7 +55,7 @@ Board extras, with `lq` (manager key): project `agentpm-test` (`projectCreate`, 
 ## 5. Role accounts
 
 1. Invite `dotpm2026+<role>@outlook.com` for harness, researcher, pm, engineer: `organizationInviteCreate(role: admin, teamIds: [team])`. The free plan invites admins only.
-2. Per role, one at a time: `ssh mini '~/apm/runbooks/setup-test-env/linearlogin <email>'` in the background (logs out, requests the link, follows it, prints where it lands). Then by hand with OpenCLI: Join, the onboarding steps (profile name `Agent <role>`, Skip, Finish), then the key.
+2. Per role, one at a time: `ssh mini '~/apm/runbooks/setup-test-env/linearlogin --code <email>'` in the background (logs out, requests the login mail, enters its code, prints where it lands). Then by hand with OpenCLI: Join, the onboarding steps (profile name `Agent <role>`, Skip, Finish), then the key.
 
 ## API keys
 

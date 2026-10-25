@@ -217,6 +217,7 @@ test("bad options are usage errors and press nothing", () => {
     ["--front", "Finder"],
     ["--verify-field"],
     ["--front", "Terminal", "--verify-field"],
+    ["--front", "System Settings"],
   ]) {
     const jxa = keys({ stdin: "x", front: "Terminal" });
     assert.throws(() => jxa.call(argv), /keys: usage: keys /, argv.join(" "));
@@ -239,4 +240,75 @@ test("the committed mini/js/keys.js runs like its source", () => {
   const jxa = Jxa.compiled("keys", { stdin: "ab\r\n", front: "Terminal" });
   assert.equal(jxa.call(["--front", "Terminal", "--enter"]), "keys: typed 2 characters, Enter");
   assert.equal(jxa.typed(), "ab");
+});
+
+function settings(field: Field, front = "System Settings"): Scene {
+  return {
+    front,
+    processes: [
+      {
+        name: "System Settings",
+        windows: [
+          { name: "Software Update", fields: [{ subrole: "AXTextField" }] },
+          { buttons: ["Cancel", "OK"], fields: [{ subrole: "AXSecureTextField", ...field }] },
+        ],
+      },
+    ],
+  };
+}
+
+test("SettingsSheet types one character, then the rest, then clicks OK on the sheet", () => {
+  const jxa = keys({ ...settings({ focused: true }), stdin: `${SECRET}\n` });
+  const r = jxa.osascript(["--front", "SettingsSheet", "--secret", "--verify-field"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, `keys: typed the secret (${SECRET.length} characters); clicked OK\n`);
+  assert.deepEqual(
+    presses(jxa).map((e) => (e.type === "keystroke" ? e.text.length : -1)),
+    [1, SECRET.length - 1],
+  );
+  assert.deepEqual(clicks(jxa), [{ type: "click", process: "System Settings", button: "OK" }]);
+});
+
+test("SettingsSheet refuses unless System Settings is frontmost with a focused secure field", () => {
+  const plain: Scene = {
+    front: "System Settings",
+    processes: [{ name: "System Settings", windows: [{ fields: [{ focused: true }] }] }],
+  };
+  const cases: [Scene, RegExp][] = [
+    [settings({ focused: true }, "Finder"), /keys: System Settings not frontmost \(Finder\)/],
+    [settings({ focused: false }), /keys: System Settings has no focused secure field/],
+    [plain, /keys: System Settings has no focused secure field; typed nothing/],
+    [{ front: "System Settings" }, /keys: System Settings has no focused secure field/],
+  ];
+  for (const [scene, error] of cases) {
+    const jxa = keys({ ...scene, stdin: SECRET });
+    const r = jxa.osascript(["--front", "SettingsSheet", "--secret", "--verify-field"]);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, error);
+    assert.ok(!r.stderr.includes(SECRET));
+    assert.deepEqual(presses(jxa), []);
+    assert.deepEqual(clicks(jxa), []);
+  }
+});
+
+test("SettingsSheet with a short field does not click OK", () => {
+  const jxa = keys({ ...settings({ focused: true, accepts: 4 }), stdin: SECRET });
+  assert.throws(
+    () => jxa.call(["--front", "SettingsSheet", "--secret", "--verify-field"]),
+    new RegExp(`keys: field has 4 characters, expected ${SECRET.length}; did not click OK`),
+  );
+  assert.deepEqual(clicks(jxa), []);
+});
+
+test("SettingsSheet without --verify-field types the whole text and clicks nothing", () => {
+  const jxa = keys({ ...settings({ focused: true }), stdin: "pw" });
+  assert.equal(jxa.call(["--front", "SettingsSheet", "--secret"]), "keys: typed the secret");
+  assert.equal(jxa.typed(), "pw");
+  assert.deepEqual(clicks(jxa), []);
+});
+
+test("the committed mini/js/keys.js handles SettingsSheet like its source", () => {
+  const jxa = Jxa.compiled("keys", { ...settings({ focused: true }), stdin: "pw" });
+  const value = jxa.call(["--front", "SettingsSheet", "--secret", "--verify-field"]);
+  assert.equal(value, "keys: typed the secret (2 characters); clicked OK");
 });

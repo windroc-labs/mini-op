@@ -1,17 +1,22 @@
 #!/usr/bin/env zsh
-usage='linearlogin <email>   log the Linear tab (session role) out, request a login link for <email>,
-open it (maillink), and print where the tab lands ("landed: <url> | <text>"). Each page is awaited
-up to 15 s and the landing up to 20 s. Exits 0, 1 (maillink failed), 2 (usage error) or 124 (a page
-or the landing did not come: "timed out after <N> s"; or maillink timed out).'
+usage='linearlogin [--code] <email>   log the Linear tab (session role) out, request a login mail for
+<email>, open its link (maillink follow) or, with --code, enter its login code at "Enter code
+manually" (maillink code; Return when the page has not moved on 3 s later), and print where the
+tab lands ("landed: <url> | <text>"). Each page and the code field are awaited up to 15 s and the
+landing up to 20 s. Exits 0, 1 (maillink failed), 2 (usage error) or 124 (a page, the code field or
+the landing did not come: "timed out after <N> s"; or maillink timed out).'
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+code=; [[ $# -eq 2 && $1 == --code ]] && { code=1; shift; }
 [[ $# -eq 1 && $1 =~ '^[A-Za-z0-9._%+][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+$' ]] ||
-  { print -u2 -r -- 'linearlogin: usage: linearlogin <email>'; exit 2; }
+  { print -u2 -r -- 'linearlogin: usage: linearlogin [--code] <email>'; exit 2; }
 source ${0:A:h}/../../lib/timeout.zsh || exit 1
 source ${0:A:h}/../../lib/opencli.zsh || exit 1
-E=$1
+E=$1; T='input[name=authToken]'
 o(){ ~/apm/bin/o "$@" --session role --window foreground; }
 page(){ o eval "$(page_js where)" | opencli_data; }
 on(){ [[ $(page) == *"$1"* ]]; }
+codefield(){ local n; n=$(o eval "$(page_js field length $T)" | opencli_data) && [[ $n == <-> ]]; }
+left(){ local p; p=$(page); [[ $p != *"/login"* && $p != *"Check your email"* ]] && ! codefield; }
 # One check per second of the 15 s plus the one before the first sleep.
 expect(){
   poll 16 1 on "$1" ||
@@ -29,9 +34,17 @@ expect "Log in to Linear"
 o click --text "Continue with email" >/dev/null; expect "email address"
 o type --name "email address" "$E" >/dev/null
 o click --role button --name "Continue with email" >/dev/null; expect "Check your email"
-~/apm/runbooks/setup-test-env/maillink follow "$E"; rc=$?
-(( rc == 0 )) || exit $(( rc == 124 ? 124 : 1 ))
-left(){ local p; p=$(page); [[ $p != *"/login"* && $p != *"Check your email"* ]]; }
+if [[ -n $code ]]; then
+  o click --text "Enter code manually" >/dev/null
+  poll 16 1 codefield ||
+    { print -u2 -r -- "linearlogin: timed out after 15 s: no code field: $(page)"; exit 124; }
+  ~/apm/runbooks/setup-test-env/maillink code "$E"; rc=$?
+  (( rc == 0 )) || exit $(( rc == 124 ? 124 : 1 ))
+  poll 4 1 left || printf '' | osascript -l JavaScript ~/apm/js/keys.js --enter >/dev/null
+else
+  ~/apm/runbooks/setup-test-env/maillink follow "$E"; rc=$?
+  (( rc == 0 )) || exit $(( rc == 124 ? 124 : 1 ))
+fi
 poll 21 1 left ||
   { print -u2 -r -- "linearlogin: timed out after 20 s: still on the login page: $(page)"; exit 124; }
 echo "landed: $(page)"

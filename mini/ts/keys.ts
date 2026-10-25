@@ -1,18 +1,25 @@
 // keys: type stdin, less one trailing newline, as keystrokes. --front first makes sure that app
-// takes them; --verify-field checks SecurityAgent's secure field got every character, then clicks
-// Allow; --secret keeps the text out of every message; --wake presses Shift first (lock screen).
+// takes them (SettingsSheet: System Settings frontmost with a focused secure field, as on its
+// macOS 26+ password sheets); --verify-field checks that secure field got every character, then
+// clicks Allow (SecurityAgent) or OK (SettingsSheet); --secret keeps the text out of every message;
+// --wake presses Shift first (lock screen).
 ObjC.import("Foundation");
 
 const USAGE =
-  "usage: keys [--front Terminal|SecurityAgent] [--secret] [--verify-field] [--enter] [--wake]";
+  "usage: keys [--front Terminal|SecurityAgent|SettingsSheet] [--secret] [--verify-field] [--enter] [--wake]";
+
+type Front = "Terminal" | "SecurityAgent" | "SettingsSheet";
 
 type KeysOptions = {
-  front?: "Terminal" | "SecurityAgent";
+  front?: Front;
   secret: boolean;
   verify: boolean;
   enter: boolean;
   wake: boolean;
 };
+
+// A secure field to type into, and the dialog button that confirms it.
+type Secure = { field: JxaUIElement; dialog: JxaWindow; button: string };
 
 function fail(message: string): never {
   throw new Error(`keys: ${message}`);
@@ -24,7 +31,7 @@ function parse(argv: string[]): KeysOptions {
     const arg = argv[i];
     if (arg === "--front") {
       const app = argv[++i];
-      if (app !== "Terminal" && app !== "SecurityAgent") fail(USAGE);
+      if (app !== "Terminal" && app !== "SecurityAgent" && app !== "SettingsSheet") fail(USAGE);
       options.front = app;
     } else if (arg === "--secret") options.secret = true;
     else if (arg === "--verify-field") options.verify = true;
@@ -32,7 +39,7 @@ function parse(argv: string[]): KeysOptions {
     else if (arg === "--wake") options.wake = true;
     else fail(USAGE);
   }
-  if (options.verify && options.front !== "SecurityAgent") fail(USAGE);
+  if (options.verify && (options.front === undefined || options.front === "Terminal")) fail(USAGE);
   return options;
 }
 
@@ -55,7 +62,7 @@ function terminalInFront(se: JxaSystemEvents): void {
 }
 
 // SecurityAgent's one secure field, while SecurityAgent is frontmost with that field focused.
-function secureField(se: JxaSystemEvents): { window: JxaWindow; field: JxaUIElement } {
+function secureField(se: JxaSystemEvents): Secure {
   const agent = se.processes.byName("SecurityAgent");
   if (!agent.exists()) fail("no SecurityAgent; typed nothing");
   if (agent.windows.length === 0) fail("SecurityAgent has no window; typed nothing");
@@ -66,7 +73,25 @@ function secureField(se: JxaSystemEvents): { window: JxaWindow; field: JxaUIElem
   if (!(agent.attributes.byName("AXFrontmost").value() && field.focused())) {
     fail("SecurityAgent field not focused; typed nothing");
   }
-  return { window, field };
+  return { field, dialog: window, button: "Allow" };
+}
+
+// System Settings' focused secure field and the sheet holding it, while System Settings is
+// frontmost.
+function settingsField(se: JxaSystemEvents): Secure {
+  const front = frontmost(se);
+  if (front !== "System Settings") fail(`System Settings not frontmost (${front}); typed nothing`);
+  let field: JxaUIElement | undefined;
+  try {
+    const settings = se.processes.byName("System Settings");
+    field = settings.attributes.byName("AXFocusedUIElement").value() as JxaUIElement;
+    if (field.subrole() !== "AXSecureTextField") field = undefined;
+  } catch {
+    field = undefined;
+  }
+  if (!field) fail("System Settings has no focused secure field; typed nothing");
+  const dialog = field.attributes.byName("AXTopLevelUIElement").value() as JxaWindow;
+  return { field, dialog, button: "OK" };
 }
 
 // A System Events error can quote what it was typing: with --secret, drop its message.
@@ -87,27 +112,34 @@ function run(argv: string[]): string {
   if (options.verify && count === 0) fail("empty text; typed nothing");
   const se = Application("System Events");
   if (options.front === "Terminal") terminalInFront(se);
-  const agent = options.front === "SecurityAgent" ? secureField(se) : undefined;
+  const secure =
+    options.front === "SecurityAgent"
+      ? secureField(se)
+      : options.front === "SettingsSheet"
+        ? settingsField(se)
+        : undefined;
   if (options.wake) {
     se.keyCode(56);
     delay(1.5);
   }
-  let allowed = false;
-  if (options.verify && agent) {
-    const before = agent.field.value().length;
+  let clicked = "";
+  if (options.verify && secure) {
+    const before = secure.field.value().length;
     type(se, text.slice(0, 1), options.secret);
     delay(0.3);
-    if (agent.field.value().length !== before + 1) {
+    if (secure.field.value().length !== before + 1) {
       fail("first character did not reach the field; stopped");
     }
     type(se, text.slice(1), options.secret);
     delay(0.3);
-    const now = agent.field.value().length;
+    const now = secure.field.value().length;
     if (now !== before + count) {
-      fail(`field has ${now} characters, expected ${before + count}; did not click Allow`);
+      fail(
+        `field has ${now} characters, expected ${before + count}; did not click ${secure.button}`,
+      );
     }
-    agent.window.buttons.byName("Allow").click();
-    allowed = true;
+    secure.dialog.buttons.byName(secure.button).click();
+    clicked = secure.button;
   } else if (count > 0) {
     type(se, text, options.secret);
     delay(0.3);
@@ -119,5 +151,5 @@ function run(argv: string[]): string {
     : options.verify
       ? `the secret (${count} characters)`
       : "the secret";
-  return `keys: typed ${what}${options.enter ? ", Enter" : ""}${allowed ? "; clicked Allow" : ""}`;
+  return `keys: typed ${what}${options.enter ? ", Enter" : ""}${clicked ? `; clicked ${clicked}` : ""}`;
 }

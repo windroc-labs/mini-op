@@ -15,6 +15,9 @@ export type Element = {
   rect?: { left: number; top: number; width: number; height: number };
   value?: string;
   href?: string;
+  id?: string;
+  text?: string;
+  attributes?: Record<string, string>;
 };
 export type Scene = {
   elements?: Element[];
@@ -103,6 +106,9 @@ export class Page {
       return {
         value: e.value ?? "",
         href: e.href ?? "",
+        id: e.id ?? "",
+        innerText: e.text ?? "",
+        getAttribute: (name: string) => e.attributes?.[name] ?? null,
         matches: (css: string) => e.selectors.includes(css),
         scrollIntoView: (opts?: { block?: string }) =>
           events.push({ type: "scroll", element: i, block: opts?.block }),
