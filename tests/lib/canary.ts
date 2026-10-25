@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { RunResult, Sandbox } from "./sandbox.ts";
+import { REPO, type RunResult, type Sandbox } from "./sandbox.ts";
 import { MINI_USER } from "./ssh_config.ts";
 
 export type Scenario = {
@@ -75,6 +75,46 @@ const ctl = ({ script, title, args, env }: CtlRow): Scenario => ({
 });
 
 export const SECRET_SCRIPTS: Scenario[] = [
+  {
+    script: "mini/runbooks/setup-test-env/maillink",
+    title: "consumes a mail login link through JXA stdin without token argv",
+    args: () => ["follow", "role@example.com"],
+    setup(sb) {
+      sb.mini();
+      sb.fake("sleep", [{ ignoresStdin: true }]);
+      fs.mkdirSync(path.join(sb.home, "apm/state"), { recursive: true });
+      fs.writeFileSync(path.join(sb.home, "apm/state/maillink.role_example_com"), "");
+      const outlook = fs
+        .readFileSync(path.join(REPO, "mini/js/page/outlook.js"), "utf8")
+        .split("\n")
+        .slice(1)
+        .join("\n")
+        .trimEnd();
+      sb.fake("opencli", [
+        { argv: ["browser", "eval", `${outlook}("rows","Linear")`], stdout: '{"data":"fresh"}\n' },
+        {
+          stdout:
+            JSON.stringify({
+              data: `https://linear.app/auth/email/role@example.com/${sb.canary}`,
+            }) + "\n",
+        },
+      ]);
+      sb.fake("osascript", [{}]);
+    },
+    consumers: ["osascript"],
+    check(sb, r) {
+      assert.equal(r.code, 0, r.stderr);
+      assert.equal(r.stdout, "followed\n");
+      const auth = sb
+        .calls("osascript")
+        .filter((c) => c.program === "chrome.js" && c.argv.at(-1) === "auth");
+      assert.equal(auth.length, 1);
+      assert.ok(auth[0]?.stdin.includes(sb.canary));
+      assert.ok(
+        sb.calls("opencli").every((c) => c.argv.slice(-2).join(" ") === "--window background"),
+      );
+    },
+  },
   ctl({ script: "ctl/mini", title: "pw types the password into the Terminal", args: ["pw"] }),
   ctl({
     script: "ctl/mini",
@@ -169,7 +209,7 @@ export const SECRET_SCRIPTS: Scenario[] = [
   {
     script: "mini/runbooks/setup-test-env/storekey",
     title: "stores the clipboard's Linear key and checks it",
-    args: () => ["ensemble-test-linear-key", "ensemble-test"],
+    args: () => ["agentpm-test-linear-key", "ensemble-test"],
     input: (sb) => sb.canary + "\n",
     setup(sb) {
       const clip = hex();
@@ -200,14 +240,14 @@ export const SECRET_SCRIPTS: Scenario[] = [
   {
     script: "mini/runbooks/setup-test-env/importkey",
     title: "copies an exported keychain item into the login keychain",
-    args: () => ["/tmp/apm.x/export.keychain-db", "ensemble-test-github", "dotpm2026"],
+    args: () => ["/tmp/apm.x/export.keychain-db", "agentpm-test-github", "dotpm2026"],
     input: (sb) => sb.canary + "\n",
     setup(sb) {
       const item = hex();
       sb.fake("security", [
         { argv: ["-i"] },
         {
-          argv: ["find-generic-password", "-s", "ensemble-test-github", "-a", "dotpm2026", "-w"],
+          argv: ["find-generic-password", "-s", "agentpm-test-github", "-a", "dotpm2026", "-w"],
           stdout: `${item}\n`,
         },
         { argv: ["find-generic-password"] },
@@ -218,7 +258,7 @@ export const SECRET_SCRIPTS: Scenario[] = [
     consumers: ["security"],
     check(sb, r, secrets) {
       assert.equal(r.code, 0, r.stderr);
-      assert.equal(r.stdout, "importkey: ensemble-test-github/dotpm2026 imported\n");
+      assert.equal(r.stdout, "importkey: agentpm-test-github/dotpm2026 imported\n");
       const [password, item] = secrets;
       const security = stdinOf(sb, "security");
       assert.ok(security.includes(`unlock-keychain -p "${password}" login.keychain`));
@@ -282,6 +322,7 @@ export const SECRET_SCRIPTS: Scenario[] = [
     title: "prints the screen with every secret pattern hidden",
     args: () => ["1", "--after", ID],
     setup(sb) {
+      sb.mini();
       const { text, secrets } = screen();
       fs.mkdirSync(path.join(sb.home, "apm/state/done"), { recursive: true });
       fs.writeFileSync(path.join(sb.home, "apm/state/done", ID), "0\n");

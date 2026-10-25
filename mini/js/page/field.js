@@ -3,13 +3,16 @@
     const field = document.querySelector(css);
     if (op === "focused") {
         const active = document.activeElement;
-        return document.hasFocus() && active !== null && active.matches(css);
+        return (document.hasFocus() && active !== null && active.matches(css) && active.type === "password");
     }
     if (op === "length")
         return field ? field.value.length : -1;
     if (op !== "point")
         throw new Error(`field: unknown op ${op}`);
     if (!field)
+        return "";
+    field.type = "password";
+    if (field.type !== "password")
         return "";
     field.scrollIntoView({ block: "center" });
     const r = field.getBoundingClientRect();

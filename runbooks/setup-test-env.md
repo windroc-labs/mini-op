@@ -4,6 +4,8 @@ How the manager builds the live-test environment on the Mac mini: a blank macOS 
 
 Rules, driving the mini and gotchas: `../README.md`. What exists now: `../status.md`.
 
+Visible routes and protected exceptions: `visible-operations.md`. Run public mini commands in `mini exec` (interactive: `mini run`); ordinary browser steps stay foreground. Credential pipes, authentication mail, recovery phrases, manifest redirects and generated keys stay private before their first secret appears; page input only through secfield. A private page that cannot render safely is a failed step, not a reason to show it.
+
 ## 1. Machine access
 
 1. The user enables Remote Login; add this Mac's key to the mini's `~/.ssh/authorized_keys`; check the host key fingerprint.
@@ -15,6 +17,7 @@ Rules, driving the mini and gotchas: `../README.md`. What exists now: `../status
 
 1. Chrome from Google's dmg (`codesign` team `EQHXZ8M8AV`); Node LTS from nodejs.org's signed pkg (check SHASUMS256).
 2. `npm config set prefix ~/.npm-global; npm install -g @jackwener/opencli`; add the OpenCLI extension from the Chrome Web Store; `opencli doctor` shows daemon and extension connected.
+3. For mail-link follow, the user enables Chrome View › Developer › Allow JavaScript from Apple Events. `chrome.js auth` uses the existing Chrome and macOS JXA, no new software; permission errors are safe failures. `linearlogin --code` uses secfield instead.
 
 ## 3. Email (Outlook)
 
@@ -31,13 +34,13 @@ The account `dotpm2026` and its App `agentpm-test-bot` are the manager's to mana
 
 Pre-rename names: the test resources made before the ensemble rename keep their names, since renaming them changes their URLs and ids: the GitHub App `agentpm-test-bot`, the repo `dotpm2026/agentpm-test`, the Linear workspace Agent PM Test (`linear.app/agentpm-test`, team Agent PM Test) and its project `agentpm-test`. Every `agentpm`/`Agent PM` name in this repo is one of them or says why it stays.
 
-1. Proton (`account.proton.me/mail/signup?plan=free`), plain window: username, password generated into the mini keychain, decline the upsell, Human Verification › Email tab › the Outlook address, code from the Outlook mail; Show the recovery phrase, select and copy it into the mini keychain, tick and Continue.
+1. Proton (`account.proton.me/mail/signup?plan=free`), plain window: username, password generated into the mini keychain, decline the upsell, Human Verification › Email tab › the Outlook address. Read authentication mail privately and enter the code only through secfield. Before Show recovery phrase, hide Chrome; copy the phrase straight into the keychain without output, leave that page, then restore the safe page to foreground.
 2. GitHub (`github.com/signup`) with OpenCLI: email `dotpm2026@proton.me`, password typed from the keychain, username; Create account; the 8-digit launch code comes in the Proton mail (inside its message iframe: read it with `eval` over `iframe.contentDocument`); then sign in.
 
 3. GitHub App for the broker (manifest flow, all on the mini as `dotpm2026`):
    1. `gh repo create dotpm2026/agentpm-test --private --add-readme` (keychain unlocked first).
-   2. On any github.com page, `o eval` a form POST to `https://github.com/settings/apps/new` with field `manifest` = JSON: name `agentpm-test-bot`, `hook_attributes.active: false`, `redirect_url` `https://example.com/agentpm-manifest`, `public: false`, permissions contents and pull_requests write, checks, actions and metadata read. Click "Create GitHub App for dotpm2026".
-   3. Read `code` from the redirected URL; `gh api -X POST app-manifests/<code>/conversions` returns the App ID and `pem`: write the pem to `/tmp/apm-app.pem` (umask 077) with no output.
+   2. On a github.com page, prepare a form POST to `https://github.com/settings/apps/new` with field `manifest` = JSON: name `agentpm-test-bot`, `hook_attributes.active: false`, `redirect_url` `https://example.com/agentpm-manifest`, `public: false`, permissions contents and pull_requests write, checks, actions and metadata read. Before clicking "Create GitHub App for dotpm2026", switch to `o <command> … --private`: its redirect contains a credential.
+   3. Read the redirect code privately to a 0600 file; the conversion request's URL must reach `curl --config -` through stdin, never `gh api` argv. Save the response privately and extract the pem to `/tmp/apm-app.pem` (umask 077), with no secret output. Only the App ID may be shown. Leave the secret URL before restoring foreground.
       For an existing App, get a new private key at Credentials › Key pairs (delete the older key there once the broker holds the new one) (`https://github.com/settings/apps/agentpm-test-bot/key_pairs`) › New key. Chrome downloads it into `~/Downloads`. Terminal has no Downloads permission: in an ssh session, run `umask 077; mv ~/Downloads/<downloaded-key>.pem /tmp/apm-app.pem; chmod 600 /tmp/apm-app.pem`, using the downloaded filename; never print its contents. Import it at the broker prompt (5. below; `install-ensemble.md` 6.2.5), then delete `/tmp/apm-app.pem`.
    4. `https://github.com/apps/agentpm-test-bot/installations/new`: Only select repositories › agentpm-test › Install.
    5. At install.sh's broker prompt give `/tmp/apm-app.pem` and the App ID; type the login password at the prompt. If the keychain change-access dialog appears, have the user enter it there too and click Allow; otherwise continue on Terminal success (`install-ensemble.md` 6.2.11). Delete the pem after.
@@ -47,7 +50,7 @@ Pre-rename names: the test resources made before the ensemble rename keep their 
 
 1. `linear.app/signup` › Continue with email › the address; `~/apm/runbooks/setup-test-env/maillink mark|follow <email>` around the request opens the emailed link.
 2. Create the workspace (name and URL by keystrokes), skip the onboarding steps, turn off onboarding emails.
-3. Create the manager's key as in "API keys" below; store it as `ensemble-test-linear-key` / `ensemble-test`.
+3. Create the manager's key as in "API keys" below; use service `agentpm-test-linear-key`, preserving its existing account from the export.
 4. Through `~/apm/runbooks/setup-test-env/lq` (body files built on this Mac, scp'd to `/tmp`): states In Review and Handoff (type `started`); label groups `Agent` (Claude, Codex, OpenCode) and `Tasks` (Build, Light Build, Light Research, Deep Research); trash the onboarding issues. Record every id in the config snippet.
 
 Board extras, with `lq` (manager key): project `agentpm-test` (`projectCreate`, team AGE), mapped in `[orchestrator.linear.project_repos]` to `dotpm2026/agentpm-test`; view **Dashboard**, a copy of the real workspace's: `customViewCreate` (name Dashboard, team AGE, shared, filter team key AGE), then `viewPreferencesCreate` (type organization, viewType customView, preferences layout board, issueGrouping workflowState, issueSubGrouping project): columns by status, rows by project.
@@ -55,7 +58,7 @@ Board extras, with `lq` (manager key): project `agentpm-test` (`projectCreate`, 
 ## 5. Role accounts
 
 1. Invite `dotpm2026+<role>@outlook.com` for harness, researcher, pm, engineer: `organizationInviteCreate(role: admin, teamIds: [team])`. The free plan invites admins only.
-2. Per role, one at a time: `ssh mini '~/apm/runbooks/setup-test-env/linearlogin --code <email>'` in the background (logs out, requests the login mail, enters its code, prints where it lands). Then by hand with OpenCLI: Join, the onboarding steps (profile name `Agent <role>`, Skip, Finish), then the key.
+2. Per role, one at a time: `ssh mini '~/apm/runbooks/setup-test-env/linearlogin --code <email>'` (transport/controller exception: the script drives role visibly but reads authentication mail privately; do not run the whole controller inside Terminal). It logs out, requests the mail, enters its masked code and prints a safe landing. Then foreground OpenCLI: Join, onboarding (profile name `Agent <role>`, Skip, Finish), then the key.
 
 ## API keys
 
@@ -67,7 +70,7 @@ Minimum permissions, from `docs/credentials.md`; team access only `Agent PM Test
 | researcher, pm, engineer | Read, Write (the same: Linear does not allow Write without Create issues) |
 
 1. Settings › Security & access › Personal API keys: revoke any older key of the account.
-2. New API key: name `ensemble-<account>`, Only select permissions… (check `#scope-read`, `#scope-write`), Only select teams… › Agent PM Test, Create, Copy to clipboard.
+2. New API key: name `ensemble-<account>`, Only select permissions… (check `#scope-read`, `#scope-write`), Only select teams… › Agent PM Test. Before Create, switch to `o <command> … --private`; Create and Copy to clipboard with Chrome hidden. Close the secret-bearing page before restoring foreground.
 3. From mini-op, `ssh mini '~/apm/runbooks/setup-test-env/storekey <service> <account>' < /run/secrets/mini-password` stores it, clears the clipboard and prints `viewer`.
 
 ## Reconnect mini-op after a reset
@@ -101,16 +104,17 @@ In mini-op:
 9. The 12 keychain items, from the export of the old login keychain (`/home/agent/keychain-backup/export-2026-10-24.keychain-db`, unlocked by the same password). Copy it into a new private dir on the mini and list its items (attributes only, never `dump-keychain -d`):
 
     ```sh
-    d=$(ssh mini 'mktemp -d') && ssh mini "cat > $d/export.keychain-db" < /home/agent/keychain-backup/export-2026-10-24.keychain-db
-    ssh mini "security dump-keychain $d/export.keychain-db" | grep -E 'class:|"(svce|acct)"<blob>='
+    d=$(printf '%s\n' 'mktemp -d' | mini exec)
+    ssh mini "cat > $d/export.keychain-db" < /home/agent/keychain-backup/export-2026-10-24.keychain-db
+    printf '%s\n' "security dump-keychain $d/export.keychain-db | grep -E 'class:|\"(svce|acct)\"<blob>='" | mini exec
     ```
 
-    Import each generic password (class `genp`) by its service (`svce`) and account (`acct`). Each name must match `^[A-Za-z0-9][A-Za-z0-9._@+:-]*$`, else stop and ask the user; 12 are expected, any other count: tell the user which and ask before importing. The export predates the ensemble rename: import a service `agentpm-test-<x>` as `ensemble-test-<x>` and the account `agent-pm-test` as `ensemble-test` (the new names, after the old ones); keep other names.
+    Import each generic password (class `genp`) by its service (`svce`) and account (`acct`). Each name must match `^[A-Za-z0-9][A-Za-z0-9._@+:-]*$`, else stop and ask the user; 12 are expected, any other count: tell the user which and ask before importing. Preserve the exported service and account exactly, including `agentpm-test-*`: the software rename does not rename the mini's existing credentials.
 
     ```sh
     ssh mini "~/apm/runbooks/setup-test-env/importkey $d/export.keychain-db <service> <account> [<new-service> [<new-account>]]" < /run/secrets/mini-password
     ```
 
-    It prints `importkey: <service>/<account> imported`, or `… imported as <new-service>/<new-account>`. An internet password (class `inet`, e.g. git's `github.com`) is not imported: the `gh` login (step 10) makes it again. Then remove the copy: `ssh mini "rm -rf $d"`.
-10. `gh`: once installed (`install.sh` logs it in: `install-ensemble.md`), log in again as `dotpm2026` (password: keychain `ensemble-test-github`).
+    It prints `importkey: <service>/<account> imported`, or `… imported as <new-service>/<new-account>`. An internet password (class `inet`, e.g. git's `github.com`) is not imported: the `gh` login (step 10) makes it again. Then remove the copy through `mini exec` (the path is public).
+10. `gh`: once installed (`install.sh` logs it in: `install-ensemble.md`), log in again as `dotpm2026` (password: keychain `agentpm-test-github`).
 11. Ask the user to update `../status.md` (row Machine: the account, the host name, the date).

@@ -11,6 +11,8 @@ import { REPO } from "./repo.ts";
 
 // An element matches exactly the selectors it lists.
 export type Element = {
+  type?: string;
+  rejectMask?: boolean;
   selectors: string[];
   rect?: { left: number; top: number; width: number; height: number };
   value?: string;
@@ -20,6 +22,8 @@ export type Element = {
   attributes?: Record<string, string>;
 };
 export type Scene = {
+  auth?: string;
+  fetch?: { url?: string; ok?: boolean; error?: boolean };
   elements?: Element[];
   // The index in elements of the keyboard focus, and whether the page has it (default true).
   focus?: number;
@@ -30,6 +34,7 @@ export type Scene = {
   window?: { screenX: number; screenY: number; outer: [number, number]; inner: [number, number] };
 };
 export type PageEvent =
+  | { type: "fetch"; url: string; credentials: string; redirect: string }
   | { type: "scroll"; element: number; block: string | undefined }
   | { type: "click"; element: number }
   | { type: "navigate"; url: string }
@@ -104,6 +109,12 @@ export class Page {
     const element = (i: number) => {
       const e = list[i] ?? { selectors: [] };
       return {
+        get type(): string {
+          return e.type ?? "text";
+        },
+        set type(value: string) {
+          if (!e.rejectMask) e.type = value;
+        },
         value: e.value ?? "",
         href: e.href ?? "",
         id: e.id ?? "",
@@ -120,6 +131,9 @@ export class Page {
       list.flatMap((e, i) => (e.selectors.includes(css) ? [element(i)] : []));
     const w = scene.window ?? WINDOW;
     const location = {
+      get origin() {
+        return new URL(scene.href ?? "about:blank").origin;
+      },
       get href() {
         return scene.href ?? "about:blank";
       },
@@ -130,6 +144,21 @@ export class Page {
       },
     };
     return {
+      URL,
+      get __miniAuth() {
+        return scene.auth;
+      },
+      set __miniAuth(value: string | undefined) {
+        scene.auth = value;
+      },
+      fetch: (url: string, options: { credentials: string; redirect: string }) => {
+        events.push({ type: "fetch", url, ...options });
+        if (scene.fetch?.error) return Promise.reject(new Error("secret request failed"));
+        return Promise.resolve({
+          ok: scene.fetch?.ok ?? true,
+          url: scene.fetch?.url ?? "https://linear.app/workspace",
+        });
+      },
       document: {
         querySelector: (css: string) => all(css)[0] ?? null,
         querySelectorAll: (css: string) => all(css),

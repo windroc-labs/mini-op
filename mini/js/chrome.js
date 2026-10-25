@@ -2,9 +2,51 @@
 "use strict";
 // chrome activate|close <url-substring>: bring Chrome to the front, or close every tab whose URL
 // contains the text.
-const USAGE = "usage: chrome activate|close <url-substring>";
+ObjC.import("Foundation");
+const USAGE = "usage: chrome activate|close <url-substring>|hide|auth";
+function auth(chrome) {
+    try {
+        const data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+        const code = String(ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding)) ?? "");
+        if (!code)
+            throw new Error("empty program");
+        const tabs = chrome
+            .windows()
+            .flatMap((w) => w.tabs())
+            .filter((t) => t.url().startsWith("https://linear.app/"));
+        if (tabs.length !== 1)
+            throw new Error("ambiguous tab");
+        const tab = tabs[0];
+        if (tab.execute({ javascript: code }) !== "pending")
+            throw new Error("not started");
+        for (let i = 0; i <= 20; i++) {
+            const result = tab.execute({ javascript: "globalThis.__miniAuth || 'pending'" });
+            if (/^\/(?!auth(?:\/|$)|login(?:\/|$))[A-Za-z0-9_/-]*$/.test(result)) {
+                tab.url = `https://linear.app${result}`;
+                return "authenticated";
+            }
+            if (result !== "pending")
+                throw new Error("authentication failed");
+            if (i < 20)
+                delay(1);
+        }
+    }
+    catch {
+        throw new Error("chrome: authentication failed; check the Linear tab and JavaScript from Apple Events permission");
+    }
+    throw new Error("chrome: authentication timed out after 20 s");
+}
 function run(argv) {
     const chrome = Application("Google Chrome");
+    if (argv.length === 1 && argv[0] === "auth")
+        return auth(chrome);
+    if (argv.length === 1 && argv[0] === "hide") {
+        const process = Application("System Events").processes.byName("Google Chrome");
+        process.visible = false;
+        if (process.visible())
+            throw new Error("chrome: cannot hide Chrome");
+        return "hidden";
+    }
     if (argv.length === 1 && argv[0] === "activate") {
         chrome.activate();
         return "activated";

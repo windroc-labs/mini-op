@@ -7,8 +7,8 @@ tracker = "linear"
 team = "dd277963-4a78-4565-8902-0faa9b604bab"
 task_label_group = "9fcfffb3-1ffa-449f-a670-08e89db11201"
 agent_label_group = "30091a9e-fadd-499f-9c2b-8d4f17d80522"
-harness_key = "ensemble-test-linear-harness"
-manager_key = "ensemble-test-linear-key"
+harness_key = "agentpm-test-linear-harness"
+manager_key = "agentpm-test-linear-key"
 human_members = ["dotpm2026@outlook.com"]
 
 [orchestrator.linear.states]
@@ -33,15 +33,15 @@ opencode = "e9402b58-c48d-408c-b0b2-0f8c5c05cdb4"
 
 [orchestrator.linear.roles.researcher]
 account = "dotpm2026+researcher@outlook.com"
-key = "ensemble-test-linear-researcher"
+key = "agentpm-test-linear-researcher"
 
 [orchestrator.linear.roles.pm]
 account = "dotpm2026+pm@outlook.com"
-key = "ensemble-test-linear-pm"
+key = "agentpm-test-linear-pm"
 
 [orchestrator.linear.roles.engineer]
 account = "dotpm2026+engineer@outlook.com"
-key = "ensemble-test-linear-engineer"
+key = "agentpm-test-linear-engineer"
 
 [orchestrator.linear.project_repos]
 "6e020324-11da-409a-8eaa-4673b8090c34" = "dotpm2026/agentpm-test"
@@ -50,14 +50,8 @@ key = "ensemble-test-linear-engineer"
 opencode = 1
 claude = 1
 
-[delegate.roles.researcher.output]
-type = "github"
-repo = "dotpm2026/agentpm-test"
-branch = "main"
-dir = "Research/"
+[orchestrator.core.roles.researcher.output]
+type = "orchestrator"
 
-[delegate.roles.pm.output]
-type = "github"
-repo = "dotpm2026/agentpm-test"
-branch = "main"
-dir = "PRD/"
+[orchestrator.core.roles.pm.output]
+type = "orchestrator"

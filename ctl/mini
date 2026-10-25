@@ -1,6 +1,8 @@
 #!/usr/bin/env zsh
 setopt pipefail
-usage="mini run [secs] [--to <id>]   type stdin into the Terminal and wait; not for secrets: use mini pw
+usage="mini exec [secs]             run public stdin in Terminal; complete stdout/stderr and original rc
+mini exec --collect <id>      collect a retained job; never starts another command
+mini run [secs] [--to <id>]   type stdin into the Terminal and wait; not for secrets: use mini pw
                               (~/apm/bin/ans on the mini: secs default 60; --to <id> answers that
                               command's prompt)
 mini pw [--lock | --sa | --settings]
@@ -17,7 +19,9 @@ mini sync [--check]           copy mini/ with its VERSION stamp to the mini's ~/
                               ~/apm/state/; --check exits 1 unless the mini's ~/apm/VERSION matches
 pw and sudo send the mini account's password from \$(env_secrets_dir)/mini-password when it
 exists, else \$(secrets_dir)/mini-password, to ssh's stdin only. Exits 0, 1 (refused or failed), 2
-(usage error) or 124 (a wait timed out; its stderr line says which)."
+(usage error), 75 (run: look now, command not finished) or 124 (a wait timed out).
+Interactive installs use at most 30 s per wait. exec returns the captured original status.
+mini exec exits 255 on SSH failure; command completion is unknown."
 source ${0:A:h}/lib/ssh.zsh
 source ${0:A:h}/lib/version.sh
 source ${0:A:h}/lib/secrets.zsh
@@ -69,7 +73,7 @@ on_mini() {
   mini_ssh -o BatchMode=yes mini "$prefix; $2"
   local rc=$?
   case $rc in
-    0 | 1 | 124) exit $rc ;;
+    0 | 1 | 75 | 124) exit $rc ;;
     255) die "$sub: ssh to the mini failed" ;;
     *) die "$sub: the mini exited $rc" ;;
   esac
@@ -87,6 +91,34 @@ password_file() {
   local file
   file=$(mini_password_file "mini: $1" "$2") || exit 1
   print -r -- $file
+}
+
+exec_mini() {
+  local args=60
+  if [[ $# -eq 1 && $1 =~ '^[0-9]+$' ]]; then args=$1
+  elif [[ $# -eq 2 && $1 == --collect && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]]; then
+    args="--collect $2"
+  elif [[ $# -ne 0 ]]; then usage_error 'mini exec [secs] | --collect <id>'
+  fi
+  local transport frame bytes footer rc
+  exec_err=$(mktemp) || die 'exec: cannot make a temp file'
+  trap 'rm -f -- "${exec_err:?}"' EXIT
+  mini_ssh -o BatchMode=yes mini "~/apm/bin/visible $args; rc=\$?; printf '\\nmini-exec-rc:%s\\n' \$rc >&2; exit 0" 2>$exec_err
+  transport=$?
+  if (( transport != 0 )); then
+    cat $exec_err >&2
+    print -u2 -r -- 'mini: exec: ssh to the mini failed; completion unknown'
+    exit 255
+  fi
+  frame=$(tail -n 1 $exec_err)
+  rc=${frame#mini-exec-rc:}
+  [[ $frame == mini-exec-rc:* && $rc == <-> && ${#rc} -le 3 ]] && (( rc <= 255 )) ||
+    { cat $exec_err >&2; die 'exec: missing result status; completion unknown'; }
+  bytes=$(wc -c < $exec_err)
+  footer=$(( ${#frame} + 2 ))
+  (( bytes >= footer )) || die 'exec: missing result status; completion unknown'
+  head -c $((bytes - footer)) $exec_err >&2
+  exit $rc
 }
 
 run_mini() {
@@ -150,9 +182,10 @@ chord_mini() {
   on_mini chord "$(timed chord 10 'the chord' "$chord"); exit \$rc"
 }
 
-synopsis='mini run|pw|sudo|chord|sync …; mini -h for each'
+synopsis='mini exec|run|pw|sudo|chord|sync …; mini -h for each'
 case $1 in
   -h) [[ $# -eq 1 ]] || usage_error $synopsis; print -r -- $usage ;;
+  exec) shift; exec_mini "$@" ;;
   run) shift; run_mini "$@" ;;
   pw) shift; pw_mini "$@" ;;
   sudo) shift; sudo_mini "$@" ;;

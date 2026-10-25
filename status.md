@@ -6,15 +6,15 @@ One-off records: what exists now and where the work stopped. Procedures: `README
 
 | Item | Value |
 |---|---|
-| Machine | `dot@192.168.1.200` (`Dots-Mac-mini.local`), M4, macOS 26.7.1; `dot` (auto-login, admin) signed into no Apple Account |
-| Owner admin | a second local admin (2026-10-24), the user's only: its password differs from dot's and is never given to mini-op or the manager; signed into the user's Apple Account with only Find My Mac and the Find My network on (all iCloud sync off), so Activation Lock and remote erase stay with the user. mini-op's key is not authorized for it |
-| Email | `dotpm2026@outlook.com`, no recovery method; password: mini keychain `ensemble-test-outlook` / `outlook` |
+| Machine | `grit@192.168.1.200` (`Dots-Mac-mini.local`), M4, macOS 27.0.1; `grit` (auto-login, admin) signed into no Apple Account |
+| Owner admin | a second local admin (2026-10-24), the user's only: its password differs from grit's and is never given to mini-op or the manager; signed into the user's Apple Account with only Find My Mac and the Find My network on (all iCloud sync off), so Activation Lock and remote erase stay with the user. mini-op's key is not authorized for it |
+| Email | `dotpm2026@outlook.com`, no recovery method; password: mini keychain `agentpm-test-outlook` / `outlook` |
 | Linear workspace | https://linear.app/agentpm-test (Agent PM Test, free plan; pre-rename names: `runbooks/setup-test-env.md` 3b), team `AGE` `dd277963-4a78-4565-8902-0faa9b604bab` |
-| Manager account | Dot Tester, `dotpm2026@outlook.com`, owner; key: mini keychain `ensemble-test-linear-key` / `ensemble-test` |
-| Proton mail | `dotpm2026@proton.me` (for GitHub, which refuses Outlook); password: mini keychain `ensemble-test-proton`, recovery phrase `ensemble-test-proton-recovery` |
-| GitHub | user `dotpm2026`, email `dotpm2026@proton.me`; password: mini keychain `ensemble-test-github`; `gh` uninstalled from the mini 2026-10-24 (its keychain items `gh:github.com` and `~/.config/gh` kept; git's `github.com` internet password for `dotpm2026` kept) |
-| Docker | user `dotpm2026`, email `dotpm2026@outlook.com`, Personal (free); password: mini keychain `ensemble-test-docker` / `dotpm2026@outlook.com`. Docker Desktop and Docker Sandboxes `sbx` uninstalled from the mini 2026-10-24 (`~/.docker`, `~/.sbx`, `com.docker.sandboxes` and the `sandboxes-auth` keychain items removed); the `docker/tap` tap remains; reinstall sbx with `brew trust docker/tap; brew install docker/tap/sbx` |
-| Role accounts | `dotpm2026+<role>@outlook.com` for harness, researcher, pm, engineer, all admins; keys: mini keychain `ensemble-test-linear-<role>` / the address |
+| Manager account | Dot Tester, `dotpm2026@outlook.com`, owner; key: mini keychain `agentpm-test-linear-key` / `ensemble-test` |
+| Proton mail | `dotpm2026@proton.me` (for GitHub, which refuses Outlook); password: mini keychain `agentpm-test-proton`, recovery phrase `agentpm-test-proton-recovery` |
+| GitHub | user `dotpm2026`, email `dotpm2026@proton.me`; password: mini keychain `agentpm-test-github`; `gh` uninstalled from the mini 2026-10-24 (its keychain items `gh:github.com` and `~/.config/gh` kept; git's `github.com` internet password for `dotpm2026` kept) |
+| Docker | user `dotpm2026`, email `dotpm2026@outlook.com`, Personal (free); password: mini keychain `agentpm-test-docker` / `dotpm2026@outlook.com`. Docker Desktop and Docker Sandboxes `sbx` uninstalled from the mini 2026-10-24 (`~/.docker`, `~/.sbx`, `com.docker.sandboxes` and the `sandboxes-auth` keychain items removed); the `docker/tap` tap remains; reinstall sbx with `brew trust docker/tap; brew install docker/tap/sbx` |
+| Role accounts | `dotpm2026+<role>@outlook.com` for harness, researcher, pm, engineer, all admins; keys: mini keychain `agentpm-test-linear-<role>` / the address |
 | Strata | the OpenCode provider on the LAN (`runbooks/manager-on-mini.md`); key: mini keychain `strata-api-key` / `strata` |
 | Config ids | `runbooks/test-board.toml`; copy into the mini's `~/.ensemble/config.local.toml` |
 
