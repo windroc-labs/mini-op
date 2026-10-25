@@ -315,8 +315,24 @@ test("pw --sa types into SecurityAgent with --verify-field", async (t) => {
   onlyOnStdin(sb, r);
 });
 
-test("a refusal on the mini exits 1 for pw and pw --sa", async (t) => {
-  for (const args of [["pw"], ["pw", "--sa"]]) {
+test("pw --settings types into the System Settings sheet with --verify-field", async (t) => {
+  const sb = await sandbox(t, [
+    { program: "keys.js", stdout: "keys: typed the secret (12 characters); clicked OK\n" },
+  ]);
+  const r = await sb.run(["zsh", MINI, "pw", "--settings"]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, "keys: typed the secret (12 characters); clicked OK\n");
+  const keys = sb.calls("osascript");
+  assert.deepEqual(
+    keys.map((c) => c.argv.slice(-4)),
+    [["--front", "SettingsSheet", "--secret", "--verify-field"]],
+  );
+  assert.equal(keys[0]?.stdin, sb.canary);
+  onlyOnStdin(sb, r);
+});
+
+test("a refusal on the mini exits 1 for pw, pw --sa and pw --settings", async (t) => {
+  for (const args of [["pw"], ["pw", "--sa"], ["pw", "--settings"]]) {
     const sb = await sandbox(t, [
       {
         program: "keys.js",
@@ -383,6 +399,7 @@ test("pw's typing that runs out of time exits 124 with its killed line", async (
   for (const [args, secs] of [
     [["pw"], 15],
     [["pw", "--sa"], 25],
+    [["pw", "--settings"], 25],
     [["pw", "--lock"], 15],
   ] as const) {
     const sb = await lockScreen(t, 1);
@@ -400,6 +417,7 @@ test("pw and sudo without the password file exit 1 and call no ssh", async (t) =
     [["pw"], "typed nothing"],
     [["pw", "--lock"], "typed nothing"],
     [["pw", "--sa"], "typed nothing"],
+    [["pw", "--settings"], "typed nothing"],
     [["sudo", "-v"], "ran nothing"],
     [["sudo", "ls"], "ran nothing"],
   ] as const) {
@@ -570,7 +588,7 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
   const lines = r.stdout.split("\n");
   assert.match(lines[0] ?? "", /^mini run \[secs\] \[--to <id>\] .*not for secrets: use mini pw$/);
   for (const form of [
-    "mini pw [--lock | --sa] ",
+    "mini pw [--lock | --sa | --settings]",
     "mini sudo <command> [args] ",
     "mini chord <mods> <key code> ",
     "mini sync [--check] ",
@@ -660,8 +678,9 @@ test("other subcommands and arguments are usage errors", async (t) => {
     [["nope"], "mini run|pw|sudo|chord|sync …; mini -h for each"],
     [["-x"], "mini run|pw|sudo|chord|sync …; mini -h for each"],
     [["-h", "x"], "mini run|pw|sudo|chord|sync …; mini -h for each"],
-    [["pw", "x"], "mini pw [--lock | --sa]"],
-    [["pw", "--lock", "--sa"], "mini pw [--lock | --sa]"],
+    [["pw", "x"], "mini pw [--lock | --sa | --settings]"],
+    [["pw", "--lock", "--sa"], "mini pw [--lock | --sa | --settings]"],
+    [["pw", "--settings", "x"], "mini pw [--lock | --sa | --settings]"],
     [["sync", "--force"], "mini sync [--check]"],
     [["sync", "--check", "x"], "mini sync [--check]"],
   ] as const) {
