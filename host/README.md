@@ -55,7 +55,7 @@ ssh -F ~/.mini-op/ssh_config mini true
    docker exec -it mini-op zsh -fc 'stty -echo; printf "password: "; rm -f /run/secrets/mini-password; umask 277; head -n 1 > /run/secrets/mini-password; stty echo; echo'
    ```
 
-5. After every `start` (needs steps 2–3 done), check the network from inside the container. It prints a PASS/FAIL table (Claude answers, `ssh … echo ok` works; this Mac, the LAN, `example.com` and direct `1.1.1.1:443` are blocked) and exits 1 on any FAIL. `--egress-only` skips the Claude and `ssh` checks (CI's Image job runs it so).
+5. After every `start` (needs steps 2–3 done), check the network from inside the container. It prints a PASS/FAIL table (Claude answers, `ssh … echo ok` works; this Mac, the LAN, `example.com` and direct `1.1.1.1:443` are blocked) and exits 1 on any FAIL. `--egress-only` skips the Claude and `ssh` checks.
 
    ```sh
    ~/playground/mini-op/host/verify-egress
