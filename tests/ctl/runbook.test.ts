@@ -400,6 +400,9 @@ test("usage errors exit 2; -h exits 0; a missing workspace exits 1", async (t) =
   let r = await sb.run([SCRIPT, "-h"]);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /^runbook list /);
+  assert.match(r.stdout, /named by its origin repo/);
+  assert.match(r.stdout, /real \.mini-op\/runbooks/);
+  assert.match(r.stdout, /starting with \.\s+\(staging\)\s+are\s+ignored/);
   r = await sb.run([SCRIPT, "list", "--workspace", path.join(sb.dir, "none")]);
   assert.equal(r.code, 1);
   assert.equal(r.stderr, `runbook: no workspace ${path.join(sb.dir, "none")}\n`);

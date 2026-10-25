@@ -7,7 +7,10 @@ then the plugin's runbooks/*.md; each needs a when line in its frontmatter (clos
 lines and 64 KiB), the only part read.
 The workspace (default: the working directory) is a checkout when it holds .mini-op/runbooks/,
 the project named by its origin repo; else the projects are its snapshots,
-<workspace>/projects/<project>/.mini-op/runbooks/: --project names one, a lone one is used.
+<workspace>/projects/<project>/.mini-op/runbooks/: --project names one, a lone one is used. A
+snapshot (FR-216 writes them) is named by its origin repo like the checkout case and counts only
+with a real .mini-op/runbooks directory; entries under projects/ starting with . (staging) are
+ignored.
 list prints each candidate as <source> TAB <path> TAB <when>, source plugin or project:<name>;
 path prints the first candidate named <name> as <source> TAB <path>, a plugin one before any
 project is chosen. A project runbook named like a plugin one, a symlink or other non-regular

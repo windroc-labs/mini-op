@@ -143,7 +143,9 @@ test("README lists the plugin's marketplace and requirements, and the runbook lo
     assert.ok(row.includes(fact), `README › Layout's plugin/ row does not say ${fact}`);
   }
   const scripts = readme.split("\n").find((line) => line.startsWith("| `ctl/runbook ")) ?? "";
-  for (const fact of ["`<workspace>/projects/<project>/.mini-op/runbooks/`", "exits 3"]) {
-    assert.ok(scripts.includes(fact), `README › Scripts' ctl/runbook row does not say ${fact}`);
-  }
+  assert.ok(scripts.includes("`ctl/runbook -h`"), "README › Scripts' ctl/runbook row has no -h");
+  assert.ok(
+    !scripts.includes("<workspace>/projects/"),
+    "the snapshot rules live in ctl/runbook -h",
+  );
 });
