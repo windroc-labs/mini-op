@@ -106,7 +106,7 @@ In mini-op:
     ```sh
     d=$(printf '%s\n' 'mktemp -d' | mini exec)
     ssh mini "cat > $d/export.keychain-db" < /home/op/keychain-backup/export-2026-10-24.keychain-db
-    ssh mini "security dump-keychain $d/export.keychain-db" | grep -E 'class:|"(svce|acct)"<blob>='
+    printf '%s\n' "security dump-keychain $d/export.keychain-db | grep -E 'class:|\"(svce|acct)\"<blob>='" | mini exec
     ```
 
     Import each generic password (class `genp`) by its service (`svce`) and account (`acct`). Each name must match `^[A-Za-z0-9][A-Za-z0-9._@+:-]*$`, else stop and ask the user; 12 are expected, any other count: tell the user which and ask before importing. Preserve the exported service and account exactly, including `agentpm-test-*`: the software rename does not rename the mini's existing credentials.

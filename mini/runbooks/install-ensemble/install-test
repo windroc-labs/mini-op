@@ -12,6 +12,9 @@ if [[ $1 == --ref && $# -ge 2 && -n $2 && $2 != -* && $2 != *[[:space:]]* ]]; th
 [[ $# -eq 0 || $1 == -- ]] ||
   { print -u2 -r -- 'install-test: usage: install-test [--ref <ref>] [-- <install.sh flags>]'; exit 2; }
 shift $(( $# > 0 ))
+[[ $ref =~ '^[A-Za-z0-9_][A-Za-z0-9._/-]*$' && $ref != *..* && $ref != *//* &&
+  $ref != */.* && $ref != */ && $ref != *. && $ref != *.lock && $ref != *.lock/* ]] ||
+  { print -u2 -r -- 'install-test: invalid ref; use a safe branch or commit'; exit 2; }
 conf=${0:A:h}/strata.conf; oc=()
 if [[ -n $OC ]]; then
   typeset -A strata

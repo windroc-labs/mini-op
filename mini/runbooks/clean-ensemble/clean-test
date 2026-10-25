@@ -10,6 +10,9 @@ if [[ $1 == --ref && $# -ge 2 && -n $2 && $2 != -* && $2 != *[[:space:]]* ]]; th
 [[ $# -eq 0 || $1 == -- ]] ||
   { print -u2 -r -- 'clean-test: usage: clean-test [--ref <ref>] [-- <install-cleanup.sh flags>]'; exit 2; }
 shift $(( $# > 0 ))
+[[ $ref =~ '^[A-Za-z0-9_][A-Za-z0-9._/-]*$' && $ref != *..* && $ref != *//* &&
+  $ref != */.* && $ref != */ && $ref != *. && $ref != *.lock && $ref != *.lock/* ]] ||
+  { print -u2 -r -- 'clean-test: invalid ref; use a safe branch or commit'; exit 2; }
 url=https://raw.githubusercontent.com/windroc-labs/ensemble/$ref/scripts/install-cleanup.sh
 script=$(curl -fsSL $url) ||
   { print -u2 -r -- "clean-test: cannot fetch $url; ran nothing"; exit 1; }

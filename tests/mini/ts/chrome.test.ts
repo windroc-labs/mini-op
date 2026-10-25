@@ -55,6 +55,18 @@ test("hide verifies Chrome is hidden and does not activate it", () => {
   assert.deepEqual(jxa.events, [{ type: "hide", process: "Google Chrome" }]);
 });
 
+test("hide fails closed when the accessibility setter leaves Chrome visible", () => {
+  const s: Scene = {
+    processes: [{ name: "Google Chrome", visible: true, visibilityChanges: false }],
+  };
+  const jxa = Jxa.source("chrome", s);
+  const r = jxa.osascript(["hide"]);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /cannot hide Chrome/);
+  assert.equal(s.processes?.[0]?.visible, true);
+  assert.deepEqual(jxa.events, [{ type: "hide", process: "Google Chrome" }]);
+});
+
 test("auth consumes only stdin and navigates only a safe final path", () => {
   const s: Scene = {
     stdin: "trusted page program with secret",
@@ -71,6 +83,10 @@ test("auth consumes only stdin and navigates only a safe final path", () => {
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, "authenticated\n");
   assert.equal(s.chrome?.[0]?.tabs[0]?.url, "https://linear.app/workspace");
+  assert.deepEqual(
+    jxa.events.filter((event) => event.type === "execute").map((event) => event.javascript),
+    [s.stdin, "globalThis.__miniAuth || 'pending'", "globalThis.__miniAuth || 'pending'"],
+  );
   assert.ok(!(r.stdout + r.stderr).includes("secret"));
 });
 

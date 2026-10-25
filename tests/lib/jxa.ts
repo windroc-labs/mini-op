@@ -15,6 +15,7 @@ export type Window = { name?: string | null; buttons?: string[]; fields?: Field[
 export type Process = {
   name: string;
   visible?: boolean;
+  visibilityChanges?: boolean;
   backgroundOnly?: boolean;
   windows?: Window[];
   // Reading its windows throws, as for a process System Events cannot inspect.
@@ -41,6 +42,7 @@ export type Scene = {
 };
 
 export type JxaEvent =
+  | { type: "execute"; javascript: string }
   | { type: "keystroke"; text: string }
   | { type: "keyCode"; code: number; using?: string | string[] }
   | { type: "activate"; app: string }
@@ -218,7 +220,7 @@ export class Jxa {
       get: () => () => p.visible ?? true,
       set: (value: boolean) => {
         if (!value) harness.events.push({ type: "hide", process: p.name });
-        p.visible = value;
+        if (p.visibilityChanges !== false) p.visible = value;
       },
     });
     return process;
@@ -276,7 +278,8 @@ export class Jxa {
               set url(url: string) {
                 t.url = url;
               },
-              execute: () => {
+              execute: (options: { javascript: string }) => {
+                harness.events.push({ type: "execute", javascript: options.javascript });
                 if (t.javascriptError) throw new Error(t.javascriptError);
                 const result = t.javascript?.[0] ?? "pending";
                 if ((t.javascript?.length ?? 0) > 1) t.javascript?.shift();

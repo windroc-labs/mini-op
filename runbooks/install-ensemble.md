@@ -10,6 +10,8 @@ Visible routing and protected exceptions: `visible-operations.md`. Public setup,
 
 Pick `--ref <branch-or-commit>` (`REF` is also supported; CLI wins; default main). Both wrappers fetch from `windroc-labs/ensemble`; install-test also passes that ref to install.sh. clean-test uses it only for the download: upstream cleanup has no --ref. Pin the same ref for install and cleanup.
 
+Supported ref characters: ASCII letters, digits, `_ . / -`; refs cannot start with dot/slash/hyphen, contain `..`, repeated slashes, dot-leading components or `.lock` components, or end with slash/dot. Both CLI and REF reject traversal and URL metacharacters before any download.
+
 Pass decisions before starting: `--clients opencode`, `--board local` (or the chosen Linear board), `--no-docker`, `--no-launchd`, `--opencode-provider/url/model/context` (`OC=1` supplies the existing Strata settings), `--password-stdin`, and `--opencode-key-stdin`. Prepare a private input file by protected stdin/keychain pipes: account password on the first line, Strata key on the second. Never pipe the downloaded script through that credential stdin. Remove the input after the installer ends.
 
 ```sh

@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { REPO, Sandbox } from "../../lib/sandbox.ts";
 import { events, fakeTerminal, sleeps, typed, type TerminalScene } from "../../lib/terminal.ts";
+import { Jxa } from "../../lib/jxa.ts";
 
 const ANS = path.join(REPO, "mini/bin/ans");
 const MARKED =
@@ -124,6 +125,19 @@ test("--to returns the idle signal after a hidden answer with no screen echo", a
   assert.equal(typed(sb), "answer\n");
   assert.deepEqual(sleeps(sb), ["1", "1", "1"]);
   assert.match(r.stderr, /look now.*not finished/);
+});
+
+test("--to empty answers still press Return in the real keys program with fake JXA", async (t) => {
+  for (const input of ["", "\n", "\r\n"]) {
+    const { sb, r } = await ans(t, input, ["30", "--to", "1761200000-4242-17"], { runs: false });
+    assert.equal(r.code, 75, r.stderr);
+    const call = sb.calls("osascript").find((c) => c.program === "keys.js");
+    assert.ok(call);
+    const keys = Jxa.source("keys", { stdin: call.stdin, front: "Terminal" });
+    const result = keys.osascript(call.argv.slice(3));
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(keys.events, [{ type: "keyCode", code: 36 }]);
+  }
 });
 
 test("an answer to a running command is typed as is and waits for it", async (t) => {

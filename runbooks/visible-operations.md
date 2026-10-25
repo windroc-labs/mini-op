@@ -41,6 +41,7 @@
 | 安装器的 gh device code、Claude setup-token、broker 凭据生成/交接 | cannot be visible | 外部工具会打印凭据；从启动前就以 umask 077 把输出写私有文件，不先显示再清屏；凭据从文件/stdin 交接，页面输入仍只用 secfield；无法隔离的交互阶段停止，交经理处理 |
 | broker/router probe、docker info、sbx 创建/执行/reset/清理 | visible now | 公开命令用 exec，交互用 run；需要会话的 keychain 从已登录 Terminal；凭据读写、secret 操作及敏感输出另走隐藏管道 |
 | manager、worker、router 的 tmux 输入 | already visible | 先在 Terminal 附着目标 session/pane 并确认可见，再 send-keys；不向不可见 pane 发工作；capture-pane 只作回读；秘密不经 send-keys |
+| tmux list-clients/list-panes/capture-pane 的控制端读取 | cannot be visible | 从 SSH 仅读会话状态；TUI 已占用目标 pane，不能用 exec 把检查命令当聊天发入；实际工作仍在已确认可见的 pane |
 | clean：文件/launch agents/daemons/login items/process/btm 前后基线 | visible now | mini-op 停止后在本 Mac 的 ctl/mini exec/run 发起公开检查，完整结果保存本 Mac 文件；sudo 由用户在 mini 的隐藏提示输入；差异判断/异常隔离规则不变 |
 | Downloads 的 App pem 移动、Docker Containers 的目录删除 | cannot be visible | Terminal 缺少相应文件访问权限，sshd 已有授权；SSH 只处理指定文件且不读秘密内容，不能扩大为普通文件管理的例外 |
 | reconnect：公开文件创建/清理、keychain 属性清单、权限/主机指纹检查 | visible now | GUI 就绪后 run/exec；密码和导出库按隐藏例外；known_hosts/配置编辑在操作端 |
@@ -58,4 +59,4 @@
 
 ## 合并后验证
 
-经理通过 mini-op 执行：公开长输出/空白/stderr/rc 7/255，观察 Terminal；超时后 collect，确认不重跑；普通网页前台；private 邮件不显示；已有 Chrome 的 View › Developer › Allow JavaScript from Apple Events 由用户启用后测 follow、code 与 Junk 分支；拒绝权限时只见安全错误。任何秘密显屏立即停止。工程师本轮不连接 mini。
+待 WDRC-99 结束且经理安排后，通过 mini-op 执行：公开长输出/空白/stderr/rc 7/255，观察 Terminal；超时后 collect，确认不重跑；普通网页前台；private 邮件不显示；已有 Chrome 的 View › Developer › Allow JavaScript from Apple Events 由用户启用后测 follow、code 与 Junk 分支；拒绝权限时只见安全错误。任何秘密显屏立即停止。工程师本轮不连接 mini，也不操作 live mini-op 容器。

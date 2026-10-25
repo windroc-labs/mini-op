@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
 import { REPO, Sandbox } from "../../../lib/sandbox.ts";
+import { UNSAFE_REFS } from "../ref-cases.ts";
 
 const CLEAN_TEST = path.join(REPO, "mini/runbooks/clean-ensemble/clean-test");
 const URL = (ref: string) =>
@@ -54,6 +55,18 @@ test("--ref selects a branch or commit without forwarding an unsupported cleanup
     assert.equal(sb.calls("curl")[0]?.argv.at(-1), URL(ref));
     assert.deepEqual(args(), ["install-cleanup.sh", "--yes"]);
   }
+});
+
+test("cleanup rejects traversal and URL syntax from both ref inputs before download", async (t) => {
+  const { sb, run, args } = await sandbox(t);
+  for (const ref of UNSAFE_REFS) {
+    const cli = await run(["--ref", ref]);
+    assert.equal(cli.code, 2, ref);
+    const env = await run([], { REF: ref });
+    assert.equal(env.code, 2, ref);
+  }
+  assert.equal(args(), null);
+  assert.deepEqual(sb.calls("curl"), []);
 });
 
 test("install-cleanup.sh exiting non-zero exits 1 with its rc on stdout", async (t) => {

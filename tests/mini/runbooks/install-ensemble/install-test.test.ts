@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
 import { REPO, Sandbox } from "../../../lib/sandbox.ts";
+import { UNSAFE_REFS } from "../ref-cases.ts";
 
 const INSTALL_TEST = path.join(REPO, "mini/runbooks/install-ensemble/install-test");
 const URL = (ref: string) =>
@@ -71,6 +72,17 @@ test("--ref selects a branch or commit for both download and installer", async (
     assert.equal(sb.calls("curl")[0]?.argv.at(-1), URL(ref));
     assert.deepEqual(args(), ["install.sh", "--ref", ref, "--clients", "opencode"]);
   }
+});
+
+test("CLI and REF cannot escape the ensemble repository or supply URL metacharacters", async (t) => {
+  const { sb, run } = await sandbox(t);
+  for (const ref of UNSAFE_REFS) {
+    for (const envMode of [false, true]) {
+      const r = await run(envMode ? [] : ["--ref", ref], envMode ? { REF: ref } : {});
+      assert.equal(r.code, 2, `${ref} via ${envMode ? "REF" : "CLI"}`);
+    }
+  }
+  assert.deepEqual(sb.calls("curl"), []);
 });
 
 // FR-56: a copy of install-test beside its own strata.conf, so a test can change the settings.

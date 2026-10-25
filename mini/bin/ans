@@ -48,7 +48,7 @@ before=$(hist) || {
   print -u2 -r -- 'ans: cannot read Terminal; typed nothing'; exit 1
 }
 keys=(osascript -l JavaScript ~/apm/js/keys.js --enter)
-(( ! answer )) || keys+=(--secret)
+if (( answer )) && [[ -n $input && $input != $'\n' && $input != $'\r\n' ]]; then keys+=(--secret); fi
 print -rn -- "$text" | with_timeout 15 $keys >/dev/null || {
   killed 15 typing
   print -u2 -r -- 'ans: typing failed; not waiting'; exit 1
