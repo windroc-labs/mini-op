@@ -1,3 +1,7 @@
+---
+when: cleaning ensemble off the mini (clean-test) and checking its login and launch items afterwards
+---
+
 # Clean ensemble off the mini
 
 Rules, waiting and answering: `../README.md`.

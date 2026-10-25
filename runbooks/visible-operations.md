@@ -1,3 +1,7 @@
+---
+when: choosing how to run any mini-side operation visibly (mini exec, mini run, o), its protected exceptions, or recovering a lost or timed-out result
+---
+
 # Visible mini operation inventory
 
 Source: WDRC-156. Covers mini-side operations in `mini/`, `ctl/`, all runbooks and `host/README.md`. Container builds, configuration, proxy setup and file preparation on the host do not run on the mini.

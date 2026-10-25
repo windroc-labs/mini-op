@@ -1,0 +1,193 @@
+#!/usr/bin/env zsh
+setopt pipefail extendedglob
+usage="runbook list [--project <name>] [--workspace <dir>]
+runbook path <name> [--project <name>] [--workspace <dir>]
+Finds /mini-op:run's runbook. Candidates, in order: the current project's .mini-op/runbooks/*.md,
+then the plugin's runbooks/*.md; each needs a when line in its frontmatter (closed within 100
+lines and 64 KiB), the only part read.
+The workspace (default: the working directory) is a checkout when it holds .mini-op/runbooks/,
+the project named by its origin repo; else the projects are its snapshots,
+<workspace>/projects/<project>/.mini-op/runbooks/: --project names one, a lone one is used. A
+snapshot (FR-216 writes them) is named by its origin repo like the checkout case and counts only
+with a real .mini-op/runbooks directory; entries under projects/ starting with . (staging) are
+ignored.
+list prints each candidate as <source> TAB <path> TAB <when>, source plugin or project:<name>;
+path prints the first candidate named <name> as <source> TAB <path>, a plugin one before any
+project is chosen. A project runbook named like a plugin one, a symlink or other non-regular
+file, and a name that is not plain are skipped, each with a stderr line
+'runbook: skipped <path>: <reason>'. Exits 0, 1 (refused or not found), 2 (usage error) or 3
+(several projects and no --project: ask the user which one)."
+synopsis="runbook list|path <name> [--project <name>] [--workspace <dir>]"
+export LC_ALL=C
+zmodload -F zsh/system b:sysopen b:sysread
+zmodload -F zsh/stat b:zstat
+root=${0:A:h:h}
+die() { print -u2 -r -- "runbook: $1"; exit 1; }
+usage_error() { print -u2 -r -- "runbook: usage: $1"; exit 2; }
+plain() { [[ $1 == [A-Za-z0-9_][A-Za-z0-9._-]# ]]; }
+# shown <text>: the text, $'…'-quoted when it holds anything but name and path characters.
+shown() { [[ $1 == [A-Za-z0-9._/+-]# ]] && print -r -- $1 || print -r -- ${(qqqq)1}; }
+skip() { print -u2 -r -- "runbook: skipped $(shown $1): $2"; }
+
+# realdir <path>: 0 for a directory that is not a symlink, 1 when nothing is there; anything else
+# is reported and returns 2.
+realdir() {
+  [[ -d $1 && ! -L $1 ]] && return 0
+  [[ -e $1 || -L $1 ]] || return 1
+  skip $1 "not a real directory"
+  return 2
+}
+
+# read_when <file>: prints the value of the first when: line in its frontmatter, which must close
+# within its first 100 lines and 64 KiB, the only part read: one read, so no line can stall it.
+# Opened without following a symlink or waiting on a FIFO, and read only once it is a regular file.
+read_when() {
+  local fd buf= line value= seen=
+  local -a lines
+  local -A st
+  sysopen -r -o nofollow,nonblock,cloexec -u fd $1 2>/dev/null || return 1
+  if zstat -H st -f $fd 2>/dev/null && (((st[mode] & 8#170000) == 8#100000)); then
+    sysread -i $fd -s 65536 buf
+  fi
+  exec {fd}<&-
+  lines=("${(@f)buf}")
+  # A full buffer may end mid-line: that last piece is no line.
+  ((${#buf} == 65536)) && lines[-1]=()
+  [[ $lines[1] == --- ]] || return 1
+  for line in $lines[2,101]; do
+    if [[ $line == --- ]]; then
+      value=${${value## }% }
+      [[ -n $value ]] && print -r -- $value
+      return
+    fi
+    if [[ -z $seen && $line == when:* ]]; then
+      seen=1 value=${${line#when:}//[[:space:]]##/ }
+    fi
+  done
+  return 1
+}
+
+# origin_url <dir>: its origin remote's URL, giving git 5 s, as an untrusted checkout's config
+# (a FIFO, an include) can block it.
+origin_url() {
+  local url pid
+  coproc git -C $1 remote get-url origin 2>/dev/null
+  pid=$!
+  if ! IFS= read -r -t 5 -p url; then
+    kill $pid 2>/dev/null
+    return 1
+  fi
+  wait $pid && print -r -- $url
+}
+
+typeset -a project_rows plugin_rows
+typeset -A plugin_names plugin_paths project_paths
+# scan <dir> <source>: the candidates in <dir> into the rows, skipping and reporting the rest.
+scan() {
+  local f n w
+  for f in $1/*.md(N); do
+    n=${f:t:r}
+    if ! plain $n; then
+      skip $f "not a plain runbook name"
+    elif [[ ! -f $f || -L $f ]]; then
+      skip $f "not a regular file"
+    elif [[ $2 != plugin ]] && ((${+plugin_names[$n]})); then
+      skip $f "the plugin has a runbook named $n"
+    else
+      [[ $2 == plugin ]] && plugin_names[$n]=1
+      if ! w=$(read_when $f); then
+        skip $f "no when in its frontmatter"
+      elif [[ $2 == plugin ]]; then
+        plugin_rows+=("plugin"$'\t'"$f"$'\t'"$w")
+        plugin_paths[$n]="plugin"$'\t'"$f"
+      else
+        project_rows+=("$2"$'\t'"$f"$'\t'"$w")
+        project_paths[$n]="$2"$'\t'"$f"
+      fi
+    fi
+  done
+}
+
+cmd= name= named= project= projset= workspace=$PWD
+case $1 in
+  -h | --help)
+    print -r -- $usage
+    exit 0
+    ;;
+  list | path) cmd=$1 ;;
+  *) usage_error $synopsis ;;
+esac
+shift
+while (($#)); do
+  case $1 in
+    -h | --help)
+      print -r -- $usage
+      exit 0
+      ;;
+    --project | --workspace)
+      (($# >= 2)) || usage_error "$1 needs a value"
+      if [[ $1 == --project ]]; then
+        project=$2 projset=1
+      else
+        workspace=$2
+      fi
+      shift 2
+      ;;
+    -*) usage_error $synopsis ;;
+    *)
+      [[ $cmd == path && -z $named ]] || usage_error $synopsis
+      name=$1 named=1
+      shift
+      ;;
+  esac
+done
+[[ $cmd == path && -z $named ]] && usage_error $synopsis
+[[ -n $named ]] && ! plain $name && die "not a plain name: $(shown $name)"
+[[ -n $projset ]] && ! plain $project && die "not a plain name: $(shown $project)"
+[[ -d $workspace ]] || die "no workspace $(shown $workspace)"
+ws=${workspace:A}
+
+scan $root/runbooks plugin
+if [[ $cmd == path && -n ${plugin_paths[$name]} ]]; then
+  print -r -- ${plugin_paths[$name]}
+  exit 0
+fi
+
+pname= pdir=
+if realdir $ws/.mini-op && realdir $ws/.mini-op/runbooks; then
+  [[ -n $projset ]] && die "--project $project given, but $(shown $ws) is itself a checkout"
+  url=$(origin_url $ws) && pname=${${url%%/##}%.git} &&
+    pname=${pname##*[/:]} && plain $pname ||
+    die "cannot name the checkout's project from its origin remote"
+  pdir=$ws/.mini-op/runbooks
+else
+  typeset -a projects
+  if realdir $ws/projects; then
+    for d in $ws/projects/*(N); do
+      if ! plain ${d:t}; then
+        skip $d "not a plain project name"
+      elif realdir $d && realdir $d/.mini-op && realdir $d/.mini-op/runbooks; then
+        projects+=(${d:t})
+      fi
+    done
+  fi
+  have=${(j:, :)projects}
+  if [[ -n $projset ]]; then
+    ((${projects[(Ie)$project]})) || die "no project $project in $(shown $ws/projects) (have: ${have:-none})"
+    pname=$project
+  elif (($#projects == 1)); then
+    pname=$projects[1]
+  elif (($#projects > 1)); then
+    print -u2 -r -- "runbook: several projects ($have); ask the user which one and pass --project <name>"
+    exit 3
+  fi
+  [[ -n $pname ]] && pdir=$ws/projects/$pname/.mini-op/runbooks
+fi
+[[ -n $pdir ]] && scan $pdir project:$pname
+
+if [[ $cmd == list ]]; then
+  (($#project_rows + $#plugin_rows)) && print -rl -- $project_rows $plugin_rows
+  exit 0
+fi
+[[ -n ${project_paths[$name]} ]] || die "no runbook named $name"
+print -r -- ${project_paths[$name]}

@@ -8,11 +8,20 @@ import { containerToRepo, PLUGIN_ROOT, REPO } from "../../lib/repo.ts";
 const ROOT = `${PLUGIN_ROOT}/`;
 const read = (file: string) => fs.readFileSync(path.join(REPO, file), "utf8");
 const skill = () => read("plugin/skills/run/SKILL.md");
+const SECTIONS = [
+  "Rules",
+  "Driving the mini",
+  "Browser",
+  "Waiting and answering",
+  "Scripts",
+  "Gotchas",
+];
 
-test("plugin.json names the plugin mini-op, with a version and a description", () => {
+// The version is optional: host/Dockerfile stamps mini-op's commit into the image's copy.
+test("plugin.json names the plugin mini-op with a description; a version is optional", () => {
   const manifest = JSON.parse(read("plugin/.claude-plugin/plugin.json"));
   assert.equal(manifest.name, "mini-op");
-  assert.match(manifest.version, /^\S+$/);
+  if ("version" in manifest) assert.match(manifest.version, /^\S+$/);
   assert.match(manifest.description, /\S/);
 });
 
@@ -55,4 +64,88 @@ test("the skill relies on no PATH, working directory or /home/agent", () => {
   const bare = new RegExp(`(?<![\\w/.-])(?:mini (?:${subs.join("|")})\\b|mini-autologin)`, "g");
   assert.deepEqual([...text.matchAll(bare)].map(String), []);
   assert.doesNotMatch(text, /\/home\/agent|\bPATH\b|\bcwd\b/);
+});
+
+test("the connectivity runbook is read-only: ssh mini echo ok and mini sync --check only", () => {
+  const text = read("runbooks/check-connection.md");
+  assert.match(text, /^---\nwhen: \S.*\n---\n/);
+  const spans = [...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1] ?? "");
+  assert.ok(spans.includes("ssh mini echo ok"));
+  assert.ok(spans.includes(`${ROOT}ctl/mini sync --check`));
+  assert.doesNotMatch(text, /mini sync(?! --check)/);
+  assert.match(read("ctl/CLAUDE.md"), /^\| [^|]+ \| `runbooks\/check-connection\.md` \|$/m);
+});
+
+test("the plugin has one skill", () => {
+  assert.deepEqual(fs.readdirSync(path.join(REPO, "plugin/skills")), ["run"]);
+});
+
+test("the skill reads CLAUDE.md and the README sections before the lookup", () => {
+  const text = skill();
+  const readme = read("README.md");
+  for (const named of ["CLAUDE.md", "README.md"]) assert.ok(text.includes(ROOT + named), named);
+  for (const section of SECTIONS) {
+    assert.ok(text.includes(section), `the skill does not name README › ${section}`);
+    assert.match(readme, new RegExp(`^#{2,3} ${section}$`, "m"), `README has no ${section}`);
+  }
+  assert.ok(text.indexOf(`${ROOT}README.md`) < text.indexOf(`${ROOT}ctl/runbook`));
+});
+
+test("the skill finds the runbook in order with ctl/runbook", () => {
+  const text = skill().slice(skill().indexOf("Find the runbook"));
+  const order = [
+    "steps inline",
+    `${ROOT}ctl/runbook path <name>`,
+    `${ROOT}ctl/runbook list`,
+    "one-off runbook",
+  ];
+  const at = order.map((s) => text.indexOf(s));
+  assert.ok(
+    at.every((i) => i >= 0),
+    `missing one of ${order.join(", ")}`,
+  );
+  assert.deepEqual(
+    [...at].sort((a, b) => a - b),
+    at,
+  );
+  assert.match(text, /--project <project>/);
+  assert.match(text, /`when` values alone/);
+  assert.match(text, /open only the chosen runbook/);
+  assert.match(text, /Exit 3[^\n]*ask the user which project[^\n]*run nothing/);
+  assert.match(text, /no runbook named <name>/);
+  assert.match(text, /Exit 2 means a malformed call/);
+});
+
+test("every result names the runbook's source and path", () => {
+  const text = skill();
+  for (const line of [
+    "`Runbook: inline (request)`",
+    "`Runbook: plugin <path>`",
+    "`Runbook: project:<name> <path>`",
+    "`Runbook: one-off (full text below)`",
+  ]) {
+    assert.ok(text.includes(line), `no ${line}`);
+  }
+  assert.match(text, /success or failure/);
+  assert.match(text, /`runbook: skipped …`/);
+  assert.match(text, /full text in a fenced block/);
+});
+
+test("README lists the plugin's marketplace and requirements, and the runbook lookup", () => {
+  const readme = read("README.md");
+  const row = readme.split("\n").find((line) => line.startsWith("| `plugin/` |")) ?? "";
+  for (const fact of [
+    "marketplace `windroc`",
+    "`windroc-labs/agent-plugins-marketplace`",
+    "access to `windroc/mini-op`",
+    "only in the mini-op image",
+  ]) {
+    assert.ok(row.includes(fact), `README › Layout's plugin/ row does not say ${fact}`);
+  }
+  const scripts = readme.split("\n").find((line) => line.startsWith("| `ctl/runbook ")) ?? "";
+  assert.ok(scripts.includes("`ctl/runbook -h`"), "README › Scripts' ctl/runbook row has no -h");
+  assert.ok(
+    !scripts.includes("<workspace>/projects/"),
+    "the snapshot rules live in ctl/runbook -h",
+  );
 });
