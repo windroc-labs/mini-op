@@ -7,6 +7,8 @@ export const violation = {
   "mini/bin/pw": "#!/bin/zsh\nkeychain_read 'mini-op-password' | ssh mini x\n",
   "host/key":
     "#!/bin/zsh\nsecurity delete-generic-password -s Mini-Op-Password\nkeychain_has mini-password\n",
+  "config/env.toml": '[x]\nitem = "mini-op-password"\n',
+  "config/env.yaml": "secrets:\n  - item: mac-mini-x-password\n",
 };
 
 export const clean = {
@@ -21,6 +23,20 @@ export const clean = {
   "mini/bin/pw": "#!/bin/zsh\nkeychain_read strata-api-key strata | ssh mini x\n",
   "host/key":
     "#!/bin/zsh\nsecurity add-generic-password -s x -w /run/ensemble/secrets/env/mini-password\n",
+  "host/vars": [
+    "#!/bin/zsh",
+    'security unlock-keychain -p "$mini_password" login.keychain',
+    'security add-generic-password -s ensemble-env/mini-op-password -w "$(cat /run/ensemble/secrets/env/mini-password)"',
+    "",
+  ].join("\n"),
+  "config/env.toml": [
+    "[x]",
+    'item = "ensemble-env/mini-op-password"',
+    'file = "mini-password"',
+    '# item = "mini-op-password"',
+    "",
+  ].join("\n"),
+  "config/env.yaml": "secrets:\n  - item: ensemble-env/mini-op-password\n",
 };
 
 const message = (name: string) =>
@@ -34,4 +50,6 @@ export const expected = [
   `host/key:2: ${message("Mini-Op-Password")}`,
   `README.md:4: ${message(other)}`,
   `host/key:3: ${message("mini-password")}`,
+  `config/env.toml:2: ${message("mini-op-password")}`,
+  `config/env.yaml:2: ${message("mac-mini-x-password")}`,
 ];
