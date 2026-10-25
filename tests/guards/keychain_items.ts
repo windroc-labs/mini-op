@@ -1,6 +1,6 @@
 import { lineAt, type Guard, type Violation } from "../lib/guard.ts";
-import { isShipped, scanned } from "../lib/repo.ts";
-import { docShellViews, shellSources } from "../lib/scripts.ts";
+import { isShipped } from "../lib/repo.ts";
+import { docShellSources, shellSources } from "../lib/scripts.ts";
 import { commands, type Command } from "../lib/shell.ts";
 
 // FR-61: every keychain item that code or a doc names, by service or service and account, is in
@@ -55,12 +55,10 @@ export const guard: Guard = {
     const table = view.files.includes(STATUS) ? rows(view.read(STATUS)) : [];
     const listed = ({ service, account }: Item) =>
       table.some((row) => row.has(service) && (account === undefined || row.has(account)));
-    const sources = shellSources(view).filter((s) => isShipped(s.file));
-    for (const file of scanned(view)) {
-      if (file.endsWith(".md") && !file.startsWith("tests/")) {
-        sources.push({ file, views: docShellViews(view.read(file)) });
-      }
-    }
+    const sources = [
+      ...shellSources(view).filter((s) => isShipped(s.file)),
+      ...docShellSources(view),
+    ];
     for (const source of sources) {
       const text = view.read(source.file);
       for (const v of source.views) {

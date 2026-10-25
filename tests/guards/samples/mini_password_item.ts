@@ -2,18 +2,32 @@ const item = "mac-mini-" + "alice-password";
 const other = "mac-mini-" + "x.y_z-password";
 
 export const violation = {
-  "README.md": `# x\n\nThe password: \`${item}\`.\n`,
-  "ctl/mini": `#!/bin/zsh\nsecurity find-generic-password -s ${other} -w | ssh mini x\n`,
+  "README.md": `# x\n\nRead it: \`keychain_read ${item} alice\`.\n`,
+  "ctl/mini": `#!/bin/zsh\nsecurity add-generic-password -s ${other} -w x\n`,
+  "mini/bin/pw": "#!/bin/zsh\nkeychain_read 'mini-op-password' | ssh mini x\n",
+  "host/key": "#!/bin/zsh\nsecurity delete-generic-password -s Mini-Op-Password\n",
 };
 
 export const clean = {
-  "README.md":
-    "The mini's password: mini-op's secrets dir, typed in by the user; not mac-mini-password.\n",
-  "ctl/mini": '#!/bin/zsh\nssh mini x < "$pwfile"\n',
+  "README.md": [
+    `The mini's password: \`ensemble-env/mini-op-password\`, never ${item}.`,
+    "Read it: `keychain_read ensemble-env/mini-op-password`.",
+    "",
+  ].join("\n"),
+  "ctl/mini":
+    '#!/bin/zsh\nssh mini x < /run/ensemble/secrets/env/mini-password\nf="mini-password"\n',
+  "mini/bin/pw": "#!/bin/zsh\nkeychain_read strata-api-key strata | ssh mini x\n",
+  "host/key":
+    "#!/bin/zsh\nsecurity add-generic-password -s x -w /run/ensemble/secrets/env/mini-password\n",
 };
+
+const message = (name: string) =>
+  `names the mini's password item ${name} outside ensemble-env/; import it with ensemble-broker login env`;
 
 // Every violation the sample must produce, as "<file>:<line>: <message>".
 export const expected = [
-  "README.md:3: names a MacBook keychain item for the mini's password; the user types the password in",
-  "ctl/mini:2: names a MacBook keychain item for the mini's password; the user types the password in",
+  `README.md:3: ${message(item)}`,
+  `ctl/mini:2: ${message(other)}`,
+  `mini/bin/pw:2: ${message("mini-op-password")}`,
+  `host/key:2: ${message("Mini-Op-Password")}`,
 ];
