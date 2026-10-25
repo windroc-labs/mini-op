@@ -47,6 +47,7 @@ RUN set -eux; \
     chmod -R a+rX,go-w .
 # Host mini itself (the address and account) is only in the env stage below.
 COPY host/ssh_config.container /etc/ssh/ssh_config.d/mini-proxy.conf
+COPY host/ssh_config.keys /etc/ssh/ssh_config.d/mini-keys.conf
 
 LABEL mini-op.version=$MINI_OP_VERSION
 ENV LANG=C.UTF-8 \
@@ -56,7 +57,9 @@ USER agent
 WORKDIR /opt/windroc/plugins/mini-op
 CMD ["sleep", "infinity"]
 
-# The default target host/start builds: the mini's ssh config from its generated context (named
-# build context mini). CI builds the image stage only, so its image holds no mini address.
+# The default target host/start builds: the mini's ssh config and host keys from its generated
+# context (named build context mini). CI builds the image stage only, so its image holds no mini
+# address.
 FROM image AS env
 COPY --from=mini --chmod=0644 ssh_config /etc/ssh/ssh_config.d/mini.conf
+COPY --from=mini --chmod=0644 known_hosts /etc/ssh/mini_known_hosts

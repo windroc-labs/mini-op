@@ -78,6 +78,7 @@ test("the plugin root holds plugin/, ctl/, mini/, README.md and runbooks/, never
     `runbooks/ ${root}runbooks/`,
     `README.md ${root}`,
     "host/ssh_config.container /etc/ssh/ssh_config.d/mini-proxy.conf",
+    "host/ssh_config.keys /etc/ssh/ssh_config.d/mini-keys.conf",
   ]);
   assert.doesNotMatch(TEXT, /status\.md|host\/config\b/);
   const run = image?.text ?? "";
@@ -114,13 +115,14 @@ test("PATH starts with the plugin root's ctl/, mini/ stays off it, and the plugi
   assert.deepEqual(lines(TEXT, "WORKDIR"), [PLUGIN_ROOT]);
 });
 
-test("the last stage, env, adds the mini's ssh config from the generated context; image has none", () => {
+test("the last stage, env, adds the mini's ssh config and host keys from the generated context; image has none", () => {
   assert.equal(image?.name, "image");
   assert.equal(env?.name, "env");
   assert.deepEqual(more, []);
   assert.match(env?.text ?? "", /^FROM image AS env$/m);
   assert.deepEqual(lines(env?.text ?? "", "COPY"), [
     "--from=mini --chmod=0644 ssh_config /etc/ssh/ssh_config.d/mini.conf",
+    "--from=mini --chmod=0644 known_hosts /etc/ssh/mini_known_hosts",
   ]);
   assert.doesNotMatch(image?.text ?? "", /--from=mini|mini\.conf|mini_known_hosts/);
 });

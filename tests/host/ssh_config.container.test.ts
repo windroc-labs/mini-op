@@ -81,6 +81,7 @@ test("the image installs the proxy hop into ssh's config dir, and nc for the Pro
     copies.map((m) => [m[1], m[2]]),
     [
       ["host/ssh_config.container", "/etc/ssh/ssh_config.d/mini-proxy.conf"],
+      ["host/ssh_config.keys", "/etc/ssh/ssh_config.d/mini-keys.conf"],
       ["ssh_config", mini],
     ],
   );

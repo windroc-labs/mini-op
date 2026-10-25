@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { SECRETS_LITERAL } from "../lib/literals.ts";
 import { REPO, Sandbox, type FakeRule } from "../lib/sandbox.ts";
+import { FAKE_LOCAL, MINI_HOST } from "../lib/ssh_config.ts";
 
 const START = path.join(REPO, "host/start");
 const UID = /^ARG AGENT_UID=(\d+)$/m.exec(
@@ -18,6 +19,15 @@ const GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"];
 // The fake build keeps a copy of the named context mini=<dir>, which start removes on exit.
 const KEEP_CONTEXT =
   'for a; do [[ $a == mini=* ]] && cp -R "${a#mini=}" "$FAKE_DIR/context"; done; true';
+// The mini's confirmed host keys as ssh-keygen -F prints them: a # line, a hashed and a plain entry.
+const HOST_KEYS = [
+  "|1|c2FsdA==|aGFzaA== ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostKey",
+  `${MINI_HOST} ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIHostKey`,
+];
+const KEYGEN: FakeRule = {
+  argv: ["-F"],
+  stdout: `# Host ${MINI_HOST} found: line 3\n${HOST_KEYS.join("\n")}\n`,
+};
 
 // fake docker for a host with no mini-op-net yet, where every step works; `extra` rules come
 // first, so they override a step's answer.
@@ -43,9 +53,11 @@ async function start(
   args: string[] = [],
   script = START,
   sandbox?: Sandbox,
+  keygen: FakeRule[] = [KEYGEN],
 ) {
   const sb = sandbox ?? (await Sandbox.create(t));
   sb.fake("docker", docker(extra));
+  sb.fake("ssh-keygen", keygen);
   sb.fake("sleep", [{ ignoresStdin: true }]);
   const r = await sb.run(["bash", script, ...args]);
   // A call as `docker <first two args>` plus the container it names (--name, or rm's last arg).
@@ -191,17 +203,62 @@ test("mini-op runs only on mini-op-net, with the proxy env and agent's home volu
   assert.deepEqual(values(run, "--restart"), ["unless-stopped"]);
 });
 
-test("the build's named context mini holds only the generated ssh config, removed on exit", async (t) => {
+test("the build's named context mini holds the generated ssh config and the mini's host keys, removed on exit", async (t) => {
   const { sb, r } = await start(t);
   assert.equal(r.code, 0, r.stderr);
   const kept = path.join(sb.dir, "context");
-  assert.deepEqual(fs.readdirSync(kept), ["ssh_config"]);
+  assert.deepEqual(fs.readdirSync(kept).sort(), ["known_hosts", "ssh_config"]);
   assert.equal(
     fs.readFileSync(path.join(kept, "ssh_config"), "utf8"),
     fs.readFileSync(path.join(sb.home, ".mini-op/ssh_config"), "utf8"),
   );
-  assert.equal(fs.statSync(path.join(kept, "ssh_config")).mode & 0o077, 0);
+  assert.equal(
+    fs.readFileSync(path.join(kept, "known_hosts"), "utf8"),
+    `${HOST_KEYS.join("\n")}\n`,
+  );
+  for (const file of ["ssh_config", "known_hosts"]) {
+    assert.equal(fs.statSync(path.join(kept, file)).mode & 0o077, 0, file);
+  }
   assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
+});
+
+test("the host keys come from this Mac's known_hosts entry for the mini's address and port", async (t) => {
+  for (const [port, entry] of [
+    ["22", MINI_HOST],
+    ["2222", `[${MINI_HOST}]:2222`],
+  ] as const) {
+    const sb = await Sandbox.create(t);
+    fs.writeFileSync(
+      path.join(sb.home, ".mini-op/config.local.yaml"),
+      `${FAKE_LOCAL}mini_port: ${port}\n`,
+    );
+    const { r } = await start(t, [], [], START, sb);
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(
+      sb.calls("ssh-keygen").map(({ argv }) => argv),
+      [["-F", entry, "-f", path.join(sb.home, ".ssh/known_hosts")]],
+    );
+  }
+});
+
+test("no confirmed host key for the mini exits 1, naming the entry, before any docker call", async (t) => {
+  const cases: FakeRule[] = [
+    { exit: 1 },
+    { stdout: "" },
+    { stdout: `# Host ${MINI_HOST} found: line 3\n` },
+    { stderr: "ssh-keygen: No such file or directory\n", exit: 255 },
+  ];
+  for (const rule of cases) {
+    const { sb, r } = await start(t, [], [], START, undefined, [rule]);
+    assert.equal(r.code, 1, JSON.stringify(rule));
+    assert.equal(r.stdout, "");
+    assert.equal(
+      r.stderr,
+      `start: ~/.ssh/known_hosts has no host key for ${MINI_HOST}; check the mini's fingerprint,` +
+        " confirm it once with ssh -F ~/.mini-op/ssh_config mini true, then rerun\n",
+    );
+    assert.deepEqual(sb.calls("docker"), []);
+  }
 });
 
 test("the proxy is built from host/proxy with the generated named context and the policy label, and runs read-only on bridge before joining mini-op-net", async (t) => {
@@ -399,6 +456,7 @@ test("-h prints the usage to stdout and runs nothing", async (t) => {
   const { sb, r } = await start(t, [], ["-h"]);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /^start /);
+  assert.match(r.stdout, /host key[^.]*~\/\.ssh\/known_hosts/);
   assert.equal(r.stderr, "");
   assert.deepEqual(sb.calls(), []);
 });

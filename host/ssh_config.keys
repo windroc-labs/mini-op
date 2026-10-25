@@ -1,0 +1,10 @@
+# ssh to the mini: the environment's key if given, else the volume's; only the baked host key.
+Match originalhost mini exec "test -r /run/ensemble/secrets/env/mini-ssh-key"
+    IdentityFile /run/ensemble/secrets/env/mini-ssh-key
+Match originalhost mini !exec "test -r /run/ensemble/secrets/env/mini-ssh-key"
+    IdentityFile ~/.ssh/id_ed25519
+Match originalhost mini
+    IdentitiesOnly yes
+    StrictHostKeyChecking yes
+    UserKnownHostsFile /dev/null
+    GlobalKnownHostsFile /etc/ssh/mini_known_hosts

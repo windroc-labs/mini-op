@@ -2,18 +2,20 @@
 set -euo pipefail
 usage="start   run host/config (exits 1 before anything else when it fails), stamp this checkout
 (its commit, -dirty when anything is uncommitted; not a git checkout, or untracked files under
-ctl/, mini/, runbooks/ or plugin/: exits 1 before any build), build image mini-op:env from the repo
+ctl/, mini/, runbooks/ or plugin/: exits 1 before any build), take the mini's host key from this
+Mac's ~/.ssh/known_hosts (none: exits 1 before any build), build image mini-op:env from the repo
 root (host/Dockerfile: plugin/, ctl/, mini/, README.md and runbooks/ in the plugin root
 /opt/windroc/plugins/mini-op, versioned with the stamp; the generated ~/.mini-op/ssh_config as its
-ssh config) and the proxy image mini-op-proxy:v0.1.0 (proxy/, with the generated ~/.mini-op/proxy/
-files as its config, labelled with their policy hash), make the internal network mini-op-net if
-missing, check both images (claude runs; the proxy loads its config and keeps running), then
-(re)create container mini-op-proxy (default bridge + mini-op-net) and container mini-op
-(mini-op-net only, so the proxy is its only way out), make agent's ssh key if the home volume has
-none (prints its public key), and set promptSuggestionEnabled false in agent's
-~/.claude/settings.json, keeping its other keys. No host path is mounted; agent's home is the named
-volume mini-op-home; /run/secrets is an empty tmpfs. Exits 0, 1 (a step failed; a failed build or
-check leaves the existing containers as they were) or 2 (usage error)."
+ssh config and that host key as the only one its ssh trusts) and the proxy image
+mini-op-proxy:v0.1.0 (proxy/, with the generated ~/.mini-op/proxy/ files as its config, labelled
+with their policy hash), make the internal network mini-op-net if missing, check both images
+(claude runs; the proxy loads its config and keeps running), then (re)create container
+mini-op-proxy (default bridge + mini-op-net) and container mini-op (mini-op-net only, so the proxy
+is its only way out), make agent's ssh key if the home volume has none (prints its public key), and
+set promptSuggestionEnabled false in agent's ~/.claude/settings.json, keeping its other keys. No
+host path is mounted; agent's home is the named volume mini-op-home; /run/secrets is an empty
+tmpfs. Exits 0, 1 (a step failed; a failed build or check leaves the existing containers as they
+were) or 2 (usage error)."
 if [ $# -eq 1 ] && [ "$1" = -h ]; then
   printf '%s\n' "$usage"
   exit 0
@@ -42,11 +44,23 @@ if [[ -n $untracked ]]; then
     "them" >&2
   exit 1
 fi
+# The mini's host key, as ssh -F ~/.mini-op/ssh_config mini confirmed it on this Mac.
+host=$("$here/config" get mini_host)
+port=$("$here/config" get mini_port)
+entry=$host
+[[ $port == 22 ]] || entry="[$host]:$port"
+keys=$(ssh-keygen -F "$entry" -f "$HOME/.ssh/known_hosts" 2>/dev/null | grep -v '^#') || keys=
+if [[ -z $keys ]]; then
+  echo "start: ~/.ssh/known_hosts has no host key for $entry; check the mini's fingerprint," \
+    "confirm it once with ssh -F ~/.mini-op/ssh_config mini true, then rerun" >&2
+  exit 1
+fi
 # The build's named context mini: what the image's last stage adds about the mini.
 umask 077
 context=$(mktemp -d)
 trap 'rm -rf -- "${context:?}"' EXIT
 cp "$HOME/.mini-op/ssh_config" "$context/ssh_config"
+printf '%s\n' "$keys" >"$context/known_hosts"
 
 uid=$(sed -n 's/^ARG AGENT_UID=//p' "$here/Dockerfile")
 image=mini-op:env

@@ -4,9 +4,9 @@ A Docker container on this Mac running Claude Code as user `agent`, made to oper
 
 | What | How |
 | --- | --- |
-| Image | `mini-op:env`, whatever the Claude Code version: Debian `trixie-20261005-slim` (digest-pinned), Claude Code from its signed apt repo (version: `ARG CLAUDE_CODE_VERSION` in `Dockerfile`), git, openssh-client, netcat-openbsd (ssh's proxy hop), tmux, curl, jq, zsh, Debian's Node.js and npm (the registry tarball, pinned by SHA-256 in `Dockerfile`). User `agent` (uid and gid 1000), no sudo. The plugin root `/opt/windroc/plugins/mini-op/`, the working directory, root-owned and read-only to `agent`: the plugin (`../plugin/`), `../ctl/` (on `PATH`) with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/windroc/plugins/mini-op/CLAUDE.md`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`), `../README.md` and `../runbooks/`. The mini's ssh settings (`~/.mini-op/ssh_config`) are built in. No python3 (FR-68): Claude Code's apt package runs without it, which CI's Image job checks on every image change and weekly (`claude --version` passes, `command -v python3` finds nothing). No secrets. |
+| Image | `mini-op:env`, whatever the Claude Code version: Debian `trixie-20261005-slim` (digest-pinned), Claude Code from its signed apt repo (version: `ARG CLAUDE_CODE_VERSION` in `Dockerfile`), git, openssh-client, netcat-openbsd (ssh's proxy hop), tmux, curl, jq, zsh, Debian's Node.js and npm (the registry tarball, pinned by SHA-256 in `Dockerfile`). User `agent` (uid and gid 1000), no sudo. The plugin root `/opt/windroc/plugins/mini-op/`, the working directory, root-owned and read-only to `agent`: the plugin (`../plugin/`), `../ctl/` (on `PATH`) with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/windroc/plugins/mini-op/CLAUDE.md`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`), `../README.md` and `../runbooks/`. The mini's ssh settings (`~/.mini-op/ssh_config`) and its host key (this Mac's `~/.ssh/known_hosts` entry) are built in: the image's ssh (`ssh_config.keys`) trusts only that key, never asks about or adds one, and uses `/run/ensemble/secrets/env/mini-ssh-key` when an environment gives it, else the volume's key. No python3 (FR-68): Claude Code's apt package runs without it, which CI's Image job checks on every image change and weekly (`claude --version` passes, `command -v python3` finds nothing). No secrets. |
 | Host files | none mounted: `start` bakes the Image's files in at build, stamped with this checkout's commit (plus `-dirty` when anything is uncommitted) as the plugin's version and mini/'s `VERSION`; it refuses to build outside a git checkout or with untracked files under `../ctl/`, `../mini/`, `../runbooks/` or `../plugin/`. `../status.md` stays on this Mac. `ctl/`'s `mini pw`, `mini sudo` and `mini-autologin` read `/run/secrets/mini-password` |
-| Persistent state | named volume `mini-op-home` (`/home/agent`): Claude login (`~/.claude/.credentials.json`), Claude settings (`~/.claude/settings.json`; `start` sets `promptSuggestionEnabled` false, keeping other keys), ssh key `~/.ssh/id_ed25519` (comment `mini-op container`), `known_hosts` |
+| Persistent state | named volume `mini-op-home` (`/home/agent`): Claude login (`~/.claude/.credentials.json`), Claude settings (`~/.claude/settings.json`; `start` sets `promptSuggestionEnabled` false, keeping other keys), ssh key `~/.ssh/id_ed25519` (comment `mini-op container`) |
 | Secrets | `/run/secrets`, a 64k tmpfs only `agent` can read; empty after every container start |
 | Hardening | `--cap-drop ALL`, `no-new-privileges`, non-root user |
 | Network | only `mini-op-net`, a Docker `--internal` network: no direct way out. Its one exit is the container `mini-op-proxy` ([smokescreen](https://github.com/stripe/smokescreen) v0.1.0, the official release tarball pinned by SHA-256 in `proxy/Dockerfile`; on `mini-op-net` and the default bridge, read-only, no published port). It allows `config.yaml`'s `proxy_allowed_domains` (Claude Code's API and claude.ai login) and, of the mini, only its `mini_port` (22; ssh goes through it via `ssh_config.container`'s `ProxyCommand`); `config` generates its smokescreen config and ACL into `~/.mini-op/proxy/` and `start` builds them in. Everything else is denied: this Mac (`host.docker.internal`, the gateway), the LAN and other private ranges, every other internet host. The container's `HTTPS_PROXY`/`HTTP_PROXY` point at it, with `NODE_USE_ENV_PROXY=1`. |
@@ -25,6 +25,12 @@ printf 'mini_host: %s\nmini_user: %s\n' '<the mini LAN IPv4>' '<the mini account
 ~/playground/mini-op/host/config
 ```
 
+Then, once per mini and after its host key changes (`../runbooks/setup-test-env.md`, section Reconnect mini-op after a reset): note the mini's host-key fingerprint (on the mini, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`) and confirm it on this Mac, answering yes only when ssh shows the same fingerprint. `start` bakes this Mac's `~/.ssh/known_hosts` entry for the mini into the image and exits 1 without one.
+
+```sh
+ssh -F ~/.mini-op/ssh_config mini true
+```
+
 1. Build and check the images (claude runs; the proxy loads its config), then (re)create `mini-op-net` (if missing), `mini-op-proxy` and `mini-op`; a failed build or check exits nonzero and leaves the running containers as they were. It prints `agent`'s public key; it makes one only when the volume has none. This restarts the container and clears its tmpfs secrets and tmux sessions.
 
    ```sh
@@ -35,7 +41,6 @@ printf 'mini_host: %s\nmini_user: %s\n' '<the mini LAN IPv4>' '<the mini account
 
    ```sh
    docker exec mini-op cat /home/agent/.ssh/id_ed25519.pub | ssh -F ~/.mini-op/ssh_config mini 'k=$(cat); f=~/.ssh/authorized_keys; sed -i "" "/ mini-op container\$/d" "$f"; printf "%s\n" "$k" >> "$f"'
-   docker exec mini-op ssh -o StrictHostKeyChecking=accept-new mini hostname
    ```
 
 3. Log Claude Code in (once per volume). Open the printed URL in a browser on this Mac and paste the code it shows back at `Paste code here if prompted`.
@@ -95,7 +100,8 @@ ssh mini 'cd ~/apm && rc=0; for f in bin/* runbooks/*/*; do [ -x "$f" ] || conti
   ~/playground/mini-op/host/start
   ```
 
-  This rebuilds `mini-op:env` with the new `ctl/`, `mini/`, docs and ssh config (`~/.mini-op/ssh_config`) and recreates both containers: redo step 4 and reattach (step 6). Nothing is copied into a running container. The mini's `~/apm/` changes only with `mini sync` (Deploy to the mini).
+  This rebuilds `mini-op:env` with the new `ctl/`, `mini/`, docs, ssh config (`~/.mini-op/ssh_config`) and host key and recreates both containers: redo step 4 and reattach (step 6). Nothing is copied into a running container. The mini's `~/apm/` changes only with `mini sync` (Deploy to the mini).
+- The mini's host key changed (ssh in the container fails): `../runbooks/setup-test-env.md`, section Reconnect mini-op after a reset, steps 5–6: drop it on this Mac only, confirm the new one, then `stop` and `start`.
 - Allow another host: set `proxy_allowed_domains` in `~/.mini-op/config.local.yaml` to the whole list, `config.yaml`'s hosts plus the new one (another mini port: `mini_port`), rerun `start`, then `verify-egress`. Claude Code's host list: https://code.claude.com/docs/en/network-config; telemetry, update and plugin hosts stay blocked on purpose.
 - Newer Claude Code: set `ARG CLAUDE_CODE_VERSION` to a version the stable repo lists (`curl -fsSL https://downloads.claude.ai/claude-code/apt/stable/dists/stable/main/binary-arm64/Packages | grep ^Version`), then `stop` and `start`: `mini-op:env` then names the new image.
 - Remove everything:

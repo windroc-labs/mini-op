@@ -42,6 +42,13 @@
     ]
   },
   {
+    "file": "host/ssh_config.keys",
+    "reason": "the image's ssh identity for the mini (the environment's key, else the volume's) and its only trusted host key",
+    "tests": [
+      "tests/host/ssh_config.keys.test.ts"
+    ]
+  },
+  {
     "file": "mini/lib/chord.applescript",
     "reason": "the held-modifier chord program: AppleScript, as JXA's keyDown sends nothing useful (tests/registry/applescript.json)",
     "tests": [
