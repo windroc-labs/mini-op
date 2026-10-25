@@ -45,7 +45,7 @@ RUN set -eux; \
     mv plugin.json.new .claude-plugin/plugin.json; \
     chown -R root:root .; \
     chmod -R a+rX,go-w .
-# Host mini itself (the address and account) is only in the env stage below.
+# ssh settings without the mini's address or account: only the env stage below adds those.
 COPY host/ssh_config.container /etc/ssh/ssh_config.d/mini-proxy.conf
 COPY host/ssh_config.keys /etc/ssh/ssh_config.d/mini-keys.conf
 

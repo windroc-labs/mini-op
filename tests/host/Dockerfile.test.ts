@@ -170,3 +170,14 @@ test("a claude-code version range or a missing pin fails", () => {
   const unpinned = TEXT.replace('"claude-code=${CLAUDE_CODE_VERSION}"', "claude-code");
   assert.match(dockerfileProblems(unpinned).join("\n"), /claude-code is not installed at/);
 });
+
+test("the comment above the image stage's ssh_config.d COPY lines says only env adds the mini's address", () => {
+  const raw = TEXT.slice(0, TEXT.search(/^FROM image AS env$/m)).split("\n");
+  const first = raw.findIndex((line) =>
+    /^COPY host\/ssh_config\.\S+ \/etc\/ssh\/ssh_config\.d\//.test(line),
+  );
+  assert.match(raw[first + 1] ?? "", /^COPY host\/ssh_config\.\S+ \/etc\/ssh\/ssh_config\.d\//);
+  const comment = raw[first - 1] ?? "";
+  assert.match(comment, /^# .*\bwithout the mini's address or account\b/);
+  assert.match(comment, /\bonly the env stage\b.*\badds\b/);
+});
