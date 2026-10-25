@@ -1,3 +1,7 @@
+---
+when: running an OpenCode or Claude manager on the mini
+---
+
 # Manager on the mini
 
 Strata is a PC on the LAN with one slot: run at most one OpenCode manager and one OpenCode worker at a time (the user, 2026-10-21), and close both when a test ends.

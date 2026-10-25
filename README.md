@@ -27,6 +27,7 @@ the task. Each fact has one home; the others point to it.
 | `runbooks/clean-ensemble.md` | cleanup (`clean-test`) and the post-test check of the mini's login and launch items |
 | `runbooks/manager-on-mini.md` | the OpenCode/Claude manager on the mini |
 | `runbooks/return-mini.md` | erasing the mini before it goes back |
+| `runbooks/check-connection.md` | the read-only check that mini-op reaches the mini and the mini's `~/apm` is in sync |
 | `host/README.md` | the mini-op container that operates the mini |
 
 ## Layout

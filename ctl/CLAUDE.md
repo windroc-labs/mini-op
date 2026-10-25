@@ -11,6 +11,7 @@
 | Machine access, browser, Outlook, GitHub (`dotpm2026`), Linear, API keys | `runbooks/setup-test-env.md` |
 | The manager on the mini | `runbooks/manager-on-mini.md` |
 | Erasing the mini | `runbooks/return-mini.md` |
+| Checking mini-op reaches the mini | `runbooks/check-connection.md` |
 | Reconnecting mini-op after the mini was reset | `runbooks/setup-test-env.md` › Reconnect mini-op after a reset |
 | Secrets and the mini's password | `README.md` › Rules |
 | Screen, clicks, typing, browser | `README.md` › Driving the mini |

@@ -56,3 +56,13 @@ test("the skill relies on no PATH, working directory or /home/agent", () => {
   assert.deepEqual([...text.matchAll(bare)].map(String), []);
   assert.doesNotMatch(text, /\/home\/agent|\bPATH\b|\bcwd\b/);
 });
+
+test("the connectivity runbook is read-only: ssh mini echo ok and mini sync --check only", () => {
+  const text = read("runbooks/check-connection.md");
+  assert.match(text, /^---\nwhen: \S.*\n---\n/);
+  const spans = [...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1] ?? "");
+  assert.ok(spans.includes("ssh mini echo ok"));
+  assert.ok(spans.includes(`${ROOT}ctl/mini sync --check`));
+  assert.doesNotMatch(text, /mini sync(?! --check)/);
+  assert.match(read("ctl/CLAUDE.md"), /^\| [^|]+ \| `runbooks\/check-connection\.md` \|$/m);
+});

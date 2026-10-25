@@ -1,3 +1,7 @@
+---
+when: setting up the mini's test environment (machine access, browser, Outlook, GitHub, the Linear workspace, role accounts, API keys), or reconnecting mini-op to a reset mini
+---
+
 # Set up the test environment
 
 How the manager builds the live-test environment on the Mac mini: a blank macOS machine, its own email, its own Linear workspace with role accounts, and their keys in the mini's keychain. This folder (`~/playground/mini-op/`) holds it all: the mini's scripts in `mini/` (installed there as `~/apm/` by `ctl/mini sync`: `host/README.md`, Deploy to the mini), the board's config ids in `runbooks/test-board.toml`.

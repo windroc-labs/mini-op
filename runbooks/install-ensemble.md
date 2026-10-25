@@ -1,3 +1,7 @@
+---
+when: running ensemble's install.sh live tests on the mini (install-test), reruns and upgrades in place
+---
+
 # Install ensemble on the mini
 
 Rules, waiting and answering: `../README.md`. Accounts, keys and the GitHub App: `setup-test-env.md`.
