@@ -9,7 +9,9 @@ import { commands } from "../lib/shell.ts";
 // both mini and password, so mac-mini-*-password too), or a config line's `item = "<name>"` (TOML)
 // or `item: <name>` (YAML). Paths, such as a secret's file, and $ expansions are not item names.
 const PREFIX = "ensemble-env/";
-const CONFIG = /^[ \t]*(?:-[ \t]+)?item[ \t]*[=:][ \t]*(["']?)([^"'\s#]+)\1[ \t]*(?:#.*)?$/gm;
+// `item` at a line's start, a YAML list item's, or in an inline table after { or ,.
+const CONFIG =
+  /(?:^[ \t]*(?:-[ \t]+)?|[{,][ \t]*)item[ \t]*[=:][ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#"',}]+))/g;
 const PATH = /^(?:\/|~\/|\.\.?\/)/;
 const READERS = new Set(["security", "keychain_read", "keychain_has", "storekey"]);
 
@@ -34,9 +36,13 @@ export const guard: Guard = {
     for (const file of scanned(view)) {
       if (file.startsWith("tests/")) continue;
       const text = view.read(file);
-      for (const m of text.matchAll(CONFIG)) {
-        if (misplaced(m[2] ?? "")) at(file, lineAt(text, m.index), m[2] ?? "");
-      }
+      text.split("\n").forEach((line, i) => {
+        if (/^[ \t]*#/.test(line)) return;
+        for (const m of line.matchAll(CONFIG)) {
+          const name = m[1] ?? m[2] ?? m[3] ?? "";
+          if (misplaced(name)) at(file, i + 1, name);
+        }
+      });
     }
     const sources = [...shellSources(view), ...docShellSources(view)];
     for (const source of sources) {

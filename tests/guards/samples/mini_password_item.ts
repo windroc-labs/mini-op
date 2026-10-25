@@ -7,7 +7,13 @@ export const violation = {
   "mini/bin/pw": "#!/bin/zsh\nkeychain_read 'mini-op-password' | ssh mini x\n",
   "host/key":
     "#!/bin/zsh\nsecurity delete-generic-password -s Mini-Op-Password\nkeychain_has mini-password\n",
-  "config/env.toml": '[x]\nitem = "mini-op-password"\n',
+  "config/env.toml": [
+    "[x]",
+    'item = "mini-op-password"',
+    'item = "Mac Mini Password"',
+    'env = { item = "mini-password", file = "x" }',
+    "",
+  ].join("\n"),
   "config/env.yaml": "secrets:\n  - item: mac-mini-x-password\n",
 };
 
@@ -34,6 +40,8 @@ export const clean = {
     'item = "ensemble-env/mini-op-password"',
     'file = "mini-password"',
     '# item = "mini-op-password"',
+    '# env = { item = "mini-op-password" }',
+    "s = { item = 'ensemble-env/mini-op-password' }",
     "",
   ].join("\n"),
   "config/env.yaml": "secrets:\n  - item: ensemble-env/mini-op-password\n",
@@ -51,5 +59,7 @@ export const expected = [
   `README.md:4: ${message(other)}`,
   `host/key:3: ${message("mini-password")}`,
   `config/env.toml:2: ${message("mini-op-password")}`,
+  `config/env.toml:3: ${message("Mac Mini Password")}`,
+  `config/env.toml:4: ${message("mini-password")}`,
   `config/env.yaml:2: ${message("mac-mini-x-password")}`,
 ];
