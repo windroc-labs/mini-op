@@ -83,11 +83,13 @@ At the mini (the user):
 On this Mac (the user, in this checkout):
 
 4. If the account or address changed, set `mini_user` or `mini_host` in `~/.mini-op/config.local.yaml` and run `~/playground/mini-op/host/config`.
-5. Drop the mini's old host key on this Mac only (the container trusts just the key `host/start` bakes in):
+5. Drop the mini's old host key on this Mac only (the container trusts just the key `host/start` bakes in), under the entry `host/start` looks up: the address, or `[<address>]:<port>` when `mini_port` is not 22:
 
    ```sh
-   address=$(ssh -G -F ~/.mini-op/ssh_config mini | awk '$1 == "hostname" {print $2}')
-   ssh-keygen -R "$address" -f ~/.ssh/known_hosts
+   host=$(~/playground/mini-op/host/config get mini_host)
+   port=$(~/playground/mini-op/host/config get mini_port)
+   entry=$host; [ "$port" = 22 ] || entry="[$host]:$port"
+   ssh-keygen -R "$entry" -f ~/.ssh/known_hosts
    ```
 
 6. Add mini-op's key to the account's `~/.ssh/authorized_keys` with the command of `host/README.md` step 2: ssh asks to accept the new host key (only when its fingerprint equals step 3's) and for the account's password. Then `~/playground/mini-op/host/stop` and `~/playground/mini-op/host/start`: the rebuilt image carries the new host key, `ctl/` and ssh config (redo `host/README.md` steps 4–5).

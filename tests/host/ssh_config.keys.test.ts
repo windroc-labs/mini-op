@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { fromRoot, isShipped, SAMPLES_DIR } from "../lib/repo.ts";
 import { REPO, Sandbox } from "../lib/sandbox.ts";
+import { FAKE_LOCAL, MINI_HOST } from "../lib/ssh_config.ts";
 
 const KEYS = fs.readFileSync(path.join(REPO, "host/ssh_config.keys"), "utf8");
 const DOCKERFILE = fs.readFileSync(path.join(REPO, "host/Dockerfile"), "utf8");
@@ -82,4 +83,36 @@ test("no doc or shipped file accepts a host key inside the container (AC12b)", (
     .filter((f) => (isShipped(f) || f.endsWith(".md")) && !f.startsWith(SAMPLES_DIR))
     .filter((f) => accepts.test(view.read(f)));
   assert.deepEqual(named, []);
+});
+
+// Reconnect step 5's sh block in runbooks/setup-test-env.md.
+function reconnectStep5(): string {
+  const runbook = fs.readFileSync(path.join(REPO, "runbooks/setup-test-env.md"), "utf8");
+  const step = runbook.slice(runbook.search(/^5\. Drop the mini's old host key/m));
+  const block = /^ *```sh\n([\s\S]*?)^ *```$/m.exec(step)?.[1] ?? "";
+  return block.replace(/^ +/gm, "");
+}
+
+test("Reconnect step 5 drops the old host key under host/start's entry for the mini's port", async (t) => {
+  const block = reconnectStep5();
+  assert.ok(!block.includes('ssh-keygen -R "$address"'), block);
+  for (const [port, entry] of [
+    ["22", MINI_HOST],
+    ["2222", `[${MINI_HOST}]:2222`],
+  ] as const) {
+    const sb = await Sandbox.create(t);
+    fs.mkdirSync(path.join(sb.home, "playground"));
+    fs.symlinkSync(REPO, path.join(sb.home, "playground/mini-op"));
+    fs.writeFileSync(
+      path.join(sb.home, ".mini-op/config.local.yaml"),
+      `${FAKE_LOCAL}mini_port: ${port}\n`,
+    );
+    sb.fake("ssh-keygen", [{ argv: ["-R"] }]);
+    const r = await sb.run(["bash", "-euc", block]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(
+      sb.calls("ssh-keygen").map(({ argv }) => argv),
+      [["-R", entry, "-f", path.join(sb.home, ".ssh/known_hosts")]],
+    );
+  }
 });
