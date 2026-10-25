@@ -14,6 +14,7 @@
 | Reconnecting mini-op after the mini was reset | `runbooks/setup-test-env.md` › Reconnect mini-op after a reset |
 | Secrets and the mini's password | `README.md` › Rules |
 | Screen, clicks, typing, browser | `README.md` › Driving the mini |
+| Visible routes, protected exceptions, complete result recovery | `runbooks/visible-operations.md` |
 | Typing commands, waiting, answering prompts | `README.md` › Waiting and answering |
 | Anything unexpected | `README.md` › Gotchas |
 | The mini stopped at the login window (console user `root`) | `README.md` › Gotchas |
@@ -32,3 +33,5 @@
 6. Run `mini sync --check` at the start of every session.
 7. On the mini's Terminal, answer and wait only with `mini run` and `~/apm/bin/termwait`; never a script of your own.
 8. Install nothing on the mini and never call python3 there.
+9. Public commands run visibly: `mini exec` for complete noninteractive results, `mini run` for interactive work. Ordinary browser work uses `o` foreground. SSH only transports, reads results or performs a documented exception. Attach the target tmux pane before sending work.
+10. Secrets never reach the screen, window titles or shell history. Credential/mail/key-generation steps use protected stdin/files or `o --private`; private replies never print secrets. Page secrets only through secfield; Terminal passwords only at confirmed no-echo prompts. Stop when an external tool cannot isolate its secret output before launch.
