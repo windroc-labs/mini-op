@@ -4,7 +4,7 @@ usage="runbook list [--project <name>] [--workspace <dir>]
 runbook path <name> [--project <name>] [--workspace <dir>]
 Finds /mini-op:run's runbook. Candidates, in order: the current project's .mini-op/runbooks/*.md,
 then the plugin's runbooks/*.md; each needs a when line in its frontmatter (closed within 100
-lines), the only part read.
+lines and 64 KiB), the only part read.
 The workspace (default: the working directory) is a checkout when it holds .mini-op/runbooks/,
 the project named by its origin repo; else the projects are its snapshots,
 <workspace>/projects/<project>/.mini-op/runbooks/: --project names one, a lone one is used.
@@ -16,7 +16,7 @@ file, and a name that is not plain are skipped, each with a stderr line
 (several projects and no --project: ask the user which one)."
 synopsis="runbook list|path <name> [--project <name>] [--workspace <dir>]"
 export LC_ALL=C
-zmodload -F zsh/system b:sysopen
+zmodload -F zsh/system b:sysopen b:sysread
 zmodload -F zsh/stat b:zstat
 root=${0:A:h:h}
 die() { print -u2 -r -- "runbook: $1"; exit 1; }
@@ -35,28 +35,33 @@ realdir() {
   return 2
 }
 
-# read_when <file>: prints the value of the first when: line in its frontmatter (closed within
-# 100 lines), reading no line past the closing ---; fails without one. Opened without following a
-# symlink or waiting on a FIFO, and read only once it is a regular file.
+# read_when <file>: prints the value of the first when: line in its frontmatter, which must close
+# within its first 100 lines and 64 KiB, the only part read: one read, so no line can stall it.
+# Opened without following a symlink or waiting on a FIFO, and read only once it is a regular file.
 read_when() {
-  local fd line value= seen= closed= n=0
+  local fd buf= line value= seen=
+  local -a lines
   local -A st
   sysopen -r -o nofollow,nonblock,cloexec -u fd $1 2>/dev/null || return 1
   if zstat -H st -f $fd 2>/dev/null && (((st[mode] & 8#170000) == 8#100000)); then
-    if IFS= read -r -u $fd line && [[ $line == --- ]]; then
-      while ((++n <= 100)) && { IFS= read -r -u $fd line || [[ -n $line ]]; }; do
-        [[ $line == --- ]] && { closed=1; break; }
-        if [[ -z $seen && $line == when:* ]]; then
-          seen=1 value=${${line#when:}//[[:space:]]##/ }
-        fi
-        line=
-      done
-    fi
+    sysread -i $fd -s 65536 buf
   fi
   exec {fd}<&-
-  value=${${value## }% }
-  [[ -n $closed && -n $value ]] || return 1
-  print -r -- $value
+  lines=("${(@f)buf}")
+  # A full buffer may end mid-line: that last piece is no line.
+  ((${#buf} == 65536)) && lines[-1]=()
+  [[ $lines[1] == --- ]] || return 1
+  for line in $lines[2,101]; do
+    if [[ $line == --- ]]; then
+      value=${${value## }% }
+      [[ -n $value ]] && print -r -- $value
+      return
+    fi
+    if [[ -z $seen && $line == when:* ]]; then
+      seen=1 value=${${line#when:}//[[:space:]]##/ }
+    fi
+  done
+  return 1
 }
 
 # origin_url <dir>: its origin remote's URL, giving git 5 s, as an untrusted checkout's config

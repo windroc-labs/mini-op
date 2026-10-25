@@ -179,6 +179,24 @@ test("a runbook without when is skipped and reported", async (t) => {
   );
 });
 
+test("only the first 64 KiB of a runbook is read", async (t) => {
+  const sb = await Sandbox.create(t);
+  const ws = workspace(sb);
+  const long = "a".repeat(5_000_000);
+  const dir = snapshot(ws, "p", {
+    "big.md": `---\nwhen: x${long}\n---\n`,
+    "late.md": `---\nwhen: late\nx: ${long}\n---\n`,
+    "tail.md": `---\nwhen: fine\n---\n${long}\n`,
+  });
+  const r = await sb.run([SCRIPT, "list", "--workspace", ws], { timeoutMs: 5000 });
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(lines(r.stdout), [`project:p\t${dir}/tail.md\tfine`, ...pluginRows()]);
+  assert.deepEqual(
+    lines(r.stderr),
+    ["big", "late"].map((n) => `runbook: skipped ${dir}/${n}.md: no when in its frontmatter`),
+  );
+});
+
 test("a plugin runbook without when is skipped and reported", async (t) => {
   const sb = await Sandbox.create(t);
   const root = path.join(sb.dir, "root");
