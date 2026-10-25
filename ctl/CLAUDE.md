@@ -7,7 +7,10 @@
 | Before any task | `README.md` › Start here |
 | Working from this container | `host/README.md` |
 | The environment definition for ensemble | `host/README.md` › Environment definition |
-| Machine access, browser | `runbooks/setup-test-env.md` |
+| Install tests, reruns, upgrades in place | `runbooks/install-ensemble.md` |
+| Cleanup and the post-test check | `runbooks/clean-ensemble.md` |
+| Machine access, browser, Outlook, GitHub (`dotpm2026`), Linear, API keys | `runbooks/setup-test-env.md` |
+| The manager on the mini | `runbooks/manager-on-mini.md` |
 | Erasing the mini | `runbooks/return-mini.md` |
 | Reconnecting mini-op after the mini was reset | `runbooks/setup-test-env.md` › Reconnect mini-op after a reset |
 | Secrets and the mini's password | `README.md` › Rules |

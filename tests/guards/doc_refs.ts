@@ -15,10 +15,12 @@ const CLAUDE = "ctl/CLAUDE.md";
 const RETIRED = /^\/opt\/mini-op(?:\/|$)/;
 // Paths in other repos, named as such in the docs.
 const ELSEWHERE = new Set(["docs/credentials.md"]);
-// README.md › Start here: the records and the two runbooks stay, even without a reference to them.
+// README.md › Start here: the records and the five runbooks stay, even without a reference to them.
 const REQUIRED = [
   "status.md",
-  ...["setup-test-env", "return-mini"].map((name) => `runbooks/${name}.md`),
+  ...["setup-test-env", "install-ensemble", "clean-ensemble", "manager-on-mini", "return-mini"].map(
+    (name) => `runbooks/${name}.md`,
+  ),
 ];
 const TOP = new Set([...SHIPPED_DIRS, "runbooks", "tests", "proxy", ".github", ".githooks"]);
 const PATH = /^(?:\.\.\/)*[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)*\/?$/;

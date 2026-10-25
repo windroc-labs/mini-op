@@ -27,7 +27,7 @@ export const violation = {
     "# Setup",
     "",
     "Then `keychain_read strata-api-key strata | ~/apm/bin/ans 120`.",
-    "Check it: `keychain_has ensemble-test-x a@b.c`.",
+    "Store it: `~/apm/runbooks/setup-test-env/storekey ensemble-test-x a@b.c`.",
     "",
   ].join("\n"),
 };
@@ -46,7 +46,7 @@ export const clean = {
     "# Setup",
     "",
     "Then `keychain_read ensemble-test-github | ~/apm/bin/secfield s '#pw'`.",
-    "Check it: `keychain_has <service> <account>`.",
+    "Store it: `~/apm/runbooks/setup-test-env/storekey <service> <account>`.",
     "",
   ].join("\n"),
   "tests/x.test.ts": 'const s = "keychain_read nowhere-listed";\n',
