@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 usage="start   run host/config (exits 1 before anything else when it fails), stamp this checkout
-(its commit, -dirty when anything is uncommitted; not a git checkout, or untracked files under
-ctl/, mini/, runbooks/ or plugin/: exits 1 before any build), take the mini's host key from this
-Mac's ~/.ssh/known_hosts (none: exits 1 before any build), build image mini-op:env from the repo
-root (host/Dockerfile: plugin/, ctl/, mini/, README.md and runbooks/ in the plugin root
-/opt/windroc/plugins/mini-op, versioned with the stamp; the generated ~/.mini-op/ssh_config as its
-ssh config and that host key as the only one its ssh trusts) and the proxy image
-mini-op-proxy:v0.1.0 (proxy/, with the generated ~/.mini-op/proxy/ files as its config, labelled
-with their policy hash), make the internal network mini-op-net if missing, check both images
-(claude runs; the proxy loads its config and keeps running), then (re)create container
+(its commit, -dirty when anything is uncommitted; not a git checkout, or untracked or ignored
+files the build takes under ctl/, mini/, runbooks/ or plugin/: exits 1 before any build), take the
+mini's host key from this Mac's ~/.ssh/known_hosts (none: exits 1 before any build), build image
+mini-op:env from the repo root (host/Dockerfile: plugin/, ctl/, mini/, README.md and runbooks/ in
+the plugin root /opt/windroc/plugins/mini-op, versioned with the stamp; the generated
+~/.mini-op/ssh_config as its ssh config and that host key as the only one its ssh trusts) and the
+proxy image mini-op-proxy:v0.1.0 (proxy/, with the generated ~/.mini-op/proxy/ files as its config,
+labelled with their policy hash), make the internal network mini-op-net if missing, check both
+images (claude runs; the proxy loads its config and keeps running), then (re)create container
 mini-op-proxy (default bridge + mini-op-net) and container mini-op (mini-op-net only, so the proxy
 is its only way out), make agent's ssh key if the home volume has none (prints its public key), and
 set promptSuggestionEnabled false in agent's ~/.claude/settings.json, keeping its other keys. No
@@ -37,11 +37,13 @@ stamp=$(apm_version "$repo") || {
   echo "start: $repo is not a git checkout; cannot stamp the plugin version" >&2
   exit 1
 }
-untracked=$(git -C "$repo" status --porcelain --untracked-files=all -- ctl mini runbooks plugin |
-  sed -n 's/^?? //p' | tr '\n' ' ')
-if [[ -n $untracked ]]; then
-  echo "start: untracked files would be built into the image: ${untracked% }; commit or remove" \
-    "them" >&2
+# Ignored files count too, except what host/Dockerfile.dockerignore keeps out of the build.
+listed=$(git -C "$repo" status --porcelain --untracked-files=all --ignored -- ctl mini runbooks \
+  plugin | sed -nE 's/^(\?\?|!!) //p' |
+  { grep -Ev '^mini/VERSION$|(^|/)(node_modules|\.tools)(/|$)' || true; } | tr '\n' ' ')
+if [[ -n $listed ]]; then
+  echo "start: untracked or ignored files would be built into the image: ${listed% }; commit or" \
+    "remove them" >&2
   exit 1
 fi
 # The mini's host key, as ssh -F ~/.mini-op/ssh_config mini confirmed it on this Mac.

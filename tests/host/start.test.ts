@@ -391,11 +391,73 @@ test("untracked files the image would take exit 1, naming them, before any docke
   assert.equal(r.code, 1);
   assert.equal(
     r.stderr,
-    "start: untracked files would be built into the image: plugin/skills/new/SKILL.md" +
+    "start: untracked or ignored files would be built into the image:" +
+      " plugin/skills/new/SKILL.md" +
       " runbooks/x.md; commit or remove them\n",
   );
   assert.equal(r.stdout, "");
   assert.deepEqual(sb.calls("docker"), []);
+});
+
+// Writes `file` in the checkout copy; CI's shipped dirs are read-only, and the copy keeps their modes.
+function put(copy: string, file: string): void {
+  fs.chmodSync(path.join(copy, file.split("/")[0]!), 0o755);
+  fs.mkdirSync(path.dirname(path.join(copy, file)), { recursive: true });
+  fs.writeFileSync(path.join(copy, file), "x\n");
+}
+
+test("ignored files the image would take exit 1, naming them, before any docker call", async (t) => {
+  const sb = await Sandbox.create(t);
+  const copy = await checkout(sb);
+  fs.appendFileSync(path.join(copy, ".git/info/exclude"), ".DS_Store\n");
+  put(copy, "mini/.DS_Store");
+  const { r } = await start(t, [], [], path.join(copy, "host/start"), sb);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.stderr,
+    "start: untracked or ignored files would be built into the image: mini/.DS_Store; commit or" +
+      " remove them\n",
+  );
+  assert.equal(r.stdout, "");
+  assert.deepEqual(sb.calls("docker"), []);
+});
+
+// A path for each exclusion line of host/Dockerfile.dockerignore: the build never takes it.
+const EXCLUDED: Record<string, string> = {
+  "mini/VERSION": "mini/VERSION",
+  "**/node_modules": "ctl/node_modules/x",
+  "**/.tools": "plugin/.tools/x",
+};
+
+test("each exclusion of host/Dockerfile.dockerignore after its allowlist has a case here", () => {
+  const lines = fs
+    .readFileSync(path.join(REPO, "host/Dockerfile.dockerignore"), "utf8")
+    .split("\n")
+    .filter((line) => line && !line.startsWith("#"));
+  const excluded = lines.slice(lines.findLastIndex((line) => line.startsWith("!")) + 1);
+  assert.deepEqual(excluded, Object.keys(EXCLUDED));
+  for (const [line, file] of Object.entries(EXCLUDED)) {
+    const name = line.replace(/^\*\*\//, "");
+    assert.ok(line === name ? file === name : file.split("/").includes(name), line);
+  }
+});
+
+test("ignored files host/Dockerfile.dockerignore leaves out do not stop the build", async (t) => {
+  const sb = await Sandbox.create(t);
+  const copy = await checkout(sb);
+  for (const file of Object.values(EXCLUDED)) put(copy, file);
+  const status = await sb.run([
+    ...["git", "-C", copy, "status", "--porcelain", "--untracked-files=all", "--ignored"],
+  ]);
+  assert.deepEqual(
+    status.stdout.split("\n").filter(Boolean).sort(),
+    Object.values(EXCLUDED)
+      .map((file) => `!! ${file}`)
+      .sort(),
+  );
+  const { r } = await start(t, [], [], path.join(copy, "host/start"), sb);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stderr, "");
 });
 
 test("outside a git checkout it exits 1 before any docker call", async (t) => {
