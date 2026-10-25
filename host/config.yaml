@@ -3,7 +3,7 @@
 # generates the ssh and proxy configs into ~/.mini-op/. A key not listed here is an error.
 # The mini's LAN IPv4 address. Empty: not set; set it in ~/.mini-op/config.local.yaml.
 mini_host: ""
-# The mini's account (ssh User; mini-op's password file is named after it). Empty: not set; set it in ~/.mini-op/config.local.yaml.
+# The mini's account (ssh User). Empty: not set; set it in ~/.mini-op/config.local.yaml.
 mini_user: ""
 # The mini's ssh port: ssh's Port, and the only port the proxy opens to the mini.
 mini_port: 22

@@ -34,3 +34,13 @@ test("a pipe into a loop or group feeds every command in it", () => {
     "read",
   ]);
 });
+
+test("a path from mini_password_file or env_secrets_dir is a secret path", () => {
+  const fed = (text: string) => {
+    const { all, scope } = parsed(text);
+    return [...stdinFed(all, scope)].map((c) => c.name);
+  };
+  assert.deepEqual(fed('f=$(mini_password_file "x: pw" y) || exit 1\nssh mini x < $f'), ["ssh"]);
+  assert.deepEqual(fed('f=$(env_secrets_dir)/mini-password\nssh mini x < "$f"'), ["ssh"]);
+  assert.deepEqual(fed('f=$(mini_user x)\nssh mini x < "$f"'), []);
+});

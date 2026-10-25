@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { APM_DIRS, REPO } from "./repo.ts";
 import { SECRETS_LITERAL } from "./literals.ts";
-import { FAKE_LOCAL, FAKE_SSH_CONFIG, MINI_USER } from "./ssh_config.ts";
+import { FAKE_LOCAL, FAKE_SSH_CONFIG } from "./ssh_config.ts";
 import { SandboxError, Tripwire } from "./tripwire.ts";
 
 export { REPO, SandboxError };
@@ -189,7 +189,7 @@ export class Sandbox {
   readonly dir: string;
   readonly home: string;
   readonly secrets: string;
-  // The mini account's password file in the secrets dir: it holds the canary.
+  // The mini password file in the secrets dir: it holds the canary.
   readonly passwordFile: string;
   readonly canary: string;
   private readonly bin: string;
@@ -205,7 +205,7 @@ export class Sandbox {
     this.dir = dir;
     this.home = path.join(dir, "home");
     this.secrets = path.join(dir, "secrets");
-    this.passwordFile = path.join(this.secrets, MINI_USER);
+    this.passwordFile = path.join(this.secrets, "mini-password");
     this.bin = path.join(dir, "bin");
     this.path = `${this.bin}:${path.join(dir, "allow")}`;
     this.canary = `canary-${randomBytes(8).toString("hex")}`;

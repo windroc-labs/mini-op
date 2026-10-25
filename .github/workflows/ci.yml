@@ -71,7 +71,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: .github/tools install
       - name: Make shipped code read-only
-        run: chmod -R a-w ctl host mini
+        run: chmod -R a-w ctl host mini plugin
       - run: npm test
       - name: Require unchanged checkout
         run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
@@ -94,7 +94,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: .github/tools install
       - name: Make shipped code read-only
-        run: chmod -R a-w ctl host mini
+        run: chmod -R a-w ctl host mini plugin
       - run: npm run coverage
         env:
           COVERAGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -135,13 +135,14 @@ jobs:
       - name: Require bash 3.2.57 first on PATH
         run: bash --version | grep -F 'version 3.2.57'
       - name: Make shipped code read-only
-        run: chmod -R a-w ctl host mini
+        run: chmod -R a-w ctl host mini plugin
       - run: node --test --test-timeout=60000 'tests/host/**/*.test.ts'
       - name: Require unchanged checkout
         run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
 
-  # Builds and checks both images as host/start runs them, when an image input changed and weekly;
-  # otherwise it reports that no build is needed. It never reaches the mini (block-mini).
+  # Builds host/Dockerfile's image target and checks it in containers without a network, never
+  # running host/start or reaching the mini, when an image input changed and weekly; otherwise it
+  # reports that no build is needed.
   image:
     name: Image
     runs-on: ubuntu-24.04
@@ -168,24 +169,15 @@ jobs:
         if: steps.changes.outputs.build != 'true'
         run: |
           echo "No build needed (无需构建): no image input changed." | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Reject traffic to the mini
+      - name: Build the image target
         if: steps.changes.outputs.build == 'true'
-        run: sudo .github/image-check block-mini
-      - name: Build both images and start both containers
-        if: steps.changes.outputs.build == 'true'
-        run: host/start
-      - name: No secret in the images' history
+        run: .github/image-check build
+      - name: No secret or mini ssh config in the image history
         if: steps.changes.outputs.build == 'true'
         run: .github/image-check history
-      - name: Container smoke
+      - name: Image smoke
         if: steps.changes.outputs.build == 'true'
         run: .github/image-check smoke
-      - name: Egress only through the proxy
-        if: steps.changes.outputs.build == 'true'
-        run: host/verify-egress --egress-only
-      - name: Nothing was sent to the mini
-        if: always() && steps.changes.outputs.build == 'true'
-        run: sudo .github/image-check mini-untouched
       - name: Require unchanged checkout
         run: test -z "$(git status --porcelain --untracked-files=all)" || { git status --short; exit 1; }
 
