@@ -15,12 +15,19 @@ export type Window = { name?: string | null; buttons?: string[]; fields?: Field[
 export type Process = {
   name: string;
   visible?: boolean;
+  visibilityChanges?: boolean;
   backgroundOnly?: boolean;
   windows?: Window[];
   // Reading its windows throws, as for a process System Events cannot inspect.
   unreadable?: boolean;
 };
-export type Tab = { url?: string; history?: string; contents?: string };
+export type Tab = {
+  url?: string;
+  history?: string;
+  contents?: string;
+  javascript?: string[];
+  javascriptError?: string;
+};
 export type Scene = {
   // The frontmost process (default Finder); activate() makes the app frontmost unless activates
   // is false.
@@ -35,6 +42,7 @@ export type Scene = {
 };
 
 export type JxaEvent =
+  | { type: "execute"; javascript: string }
   | { type: "keystroke"; text: string }
   | { type: "keyCode"; code: number; using?: string | string[] }
   | { type: "activate"; app: string }
@@ -212,7 +220,7 @@ export class Jxa {
       get: () => () => p.visible ?? true,
       set: (value: boolean) => {
         if (!value) harness.events.push({ type: "hide", process: p.name });
-        p.visible = value;
+        if (p.visibilityChanges !== false) p.visible = value;
       },
     });
     return process;
@@ -264,7 +272,19 @@ export class Jxa {
         (this.scene.chrome ?? []).map((w, window) => ({
           tabs: elements(() =>
             w.tabs.map((t) => ({
-              url: () => t.url ?? "",
+              get url(): () => string {
+                return () => t.url ?? "";
+              },
+              set url(url: string) {
+                t.url = url;
+              },
+              execute: (options: { javascript: string }) => {
+                harness.events.push({ type: "execute", javascript: options.javascript });
+                if (t.javascriptError) throw new Error(t.javascriptError);
+                const result = t.javascript?.[0] ?? "pending";
+                if ((t.javascript?.length ?? 0) > 1) t.javascript?.shift();
+                return result;
+              },
               close: () => {
                 harness.events.push({ type: "close", url: t.url ?? "" });
                 w.tabs.splice(w.tabs.indexOf(t), 1);

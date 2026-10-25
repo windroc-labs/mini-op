@@ -16,18 +16,20 @@ s", naming any folder that did not render on some look).'
   { print -u2 -r -- 'maillink: usage: maillink mark|follow|code <email>'; exit 2; }
 source ${0:A:h}/../../lib/timeout.zsh || exit 1
 source ${0:A:h}/../../lib/opencli.zsh || exit 1
+umask 077
 cmd=$1; E=$2; S=~/apm/state/maillink.${E//[^A-Za-z0-9]/_}
 folders=(https://outlook.live.com/mail/0/ https://outlook.live.com/mail/0/junkemail)
-m(){ ~/apm/bin/o "$@" --session mail; }
+m(){ ~/apm/bin/o "$@" --session mail --private; }
 listed(){ R=$(m eval "$(page_js outlook rows Linear)" | opencli_data) && [[ $R != - ]]; }
 # rows <folder> [<tries>]: R, the ids of its Linear mails, newest first; 1 when it did not render.
 rows(){
-  m open $1 >/dev/null; ~/apm/bin/front outlook.live.com >/dev/null
+  m open $1 >/dev/null || return 1
   poll ${2:-16} 1 listed
 }
 case $cmd in
   mark)
     mkdir -p ~/apm/state 2>/dev/null || { print -u2 -r -- 'maillink: cannot make ~/apm/state'; exit 1; }
+    rm -f -- "${S:?}" || { print -u2 -r -- 'maillink: cannot remove old mark; marked nothing'; exit 1; }
     seen=()
     for f in $folders; do
       rows $f || { print -u2 -r -- "maillink: $f did not render in 15 s; marked nothing"; exit 1; }
@@ -73,8 +75,8 @@ case $cmd in
     # $L comes from mail: open only a Linear login link.
     [[ $L =~ '^https://linear\.app/auth/email/[A-Za-z0-9._%@/+-]+$' ]] ||
       { print -u2 -r -- 'maillink: the fresh link is not a Linear login link'; exit 1; }
-    ~/apm/bin/o eval "$(page_js go $L)" --session role >/dev/null ||
+    page_js auth "$L" | osascript -l JavaScript ~/apm/js/chrome.js auth >/dev/null 2>&1 ||
       { print -u2 -r -- 'maillink: cannot open the link in the Linear tab'; exit 1; }
-    ~/apm/bin/front linear.app/auth >/dev/null
+    ~/apm/bin/front linear.app >/dev/null
     echo followed ;;
 esac

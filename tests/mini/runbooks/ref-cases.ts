@@ -1,0 +1,15 @@
+export const UNSAFE_REFS = [
+  "../../attacker/repo/main",
+  "a/../b",
+  "a//b",
+  "a/.hidden",
+  "a/",
+  "a.",
+  "a.lock",
+  "a.lock/b",
+  "a%2f..",
+  "a?query=1",
+  "a#fragment",
+  "a\\b",
+  "-main",
+];

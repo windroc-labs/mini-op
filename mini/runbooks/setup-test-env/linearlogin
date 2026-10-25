@@ -13,7 +13,7 @@ code=; [[ $# -eq 2 && $1 == --code ]] && { code=1; shift; }
 source ${0:A:h}/../../lib/timeout.zsh || exit 1
 source ${0:A:h}/../../lib/opencli.zsh || exit 1
 E=$1; T='input[name=authToken]'
-o(){ ~/apm/bin/o "$@" --session role --window foreground; }
+o(){ ~/apm/bin/o "$@" --session role; }
 page(){ o eval "$(page_js where)" | opencli_data; }
 on(){ [[ $(page) == *"$1"* ]]; }
 codefield(){ local n; n=$(o eval "$(page_js field length $T)" | opencli_data) && [[ $n == <-> ]]; }

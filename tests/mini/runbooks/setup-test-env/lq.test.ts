@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { REPO, Sandbox, type FakeRule } from "../../../lib/sandbox.ts";
 
 const LQ = path.join(REPO, "mini/runbooks/setup-test-env/lq");
-const KEYCHAIN = ["find-generic-password", "-s", "ensemble-test-linear-key", "-a", "ensemble-test"];
+const KEYCHAIN = ["find-generic-password", "-s", "agentpm-test-linear-key"];
 const NOT_FOUND: FakeRule = {
   argv: ["find-generic-password"],
   stderr: "security: SecKeychainSearchCopyNext: The specified item could not be found.\n",
@@ -65,7 +65,7 @@ test("no key in the keychain exits 1 without sending a request", async (t) => {
   const r = await run();
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
-  assert.equal(r.stderr, "lq: no ensemble-test-linear-key key in the keychain\n");
+  assert.equal(r.stderr, "lq: no agentpm-test-linear-key key in the keychain\n");
   assert.deepEqual(sb.calls("curl"), []);
   assert.deepEqual(
     sb.calls("security").map((c) => c.argv),

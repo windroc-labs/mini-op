@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { REPO, Sandbox } from "../../lib/sandbox.ts";
 import { events, fakeTerminal, sleeps, typed, type TerminalScene } from "../../lib/terminal.ts";
+import { Jxa } from "../../lib/jxa.ts";
 
 const ANS = path.join(REPO, "mini/bin/ans");
 const MARKED =
@@ -105,14 +106,38 @@ test("the closing brace on its own line keeps semicolons, comments and heredocs 
 });
 
 test("a command still running times out and names its id", async (t) => {
-  const { sb, r } = await ans(t, "install-test", ["3"], { runs: false });
+  const { sb, r } = await ans(t, "install-test", ["2"], { runs: false });
   assert.equal(r.code, 124);
   const id = path.basename(marked(sb).marker);
-  assert.deepEqual(sleeps(sb), ["1", "1", "1"]);
+  assert.deepEqual(sleeps(sb), ["1", "1"]);
   assert.equal(
     r.stderr,
-    `termwait: still running: ${id} (after 3 s); keep waiting with termwait <secs> --after ${id}\n`,
+    `termwait: still running: ${id} (after 2 s); keep waiting with termwait <secs> --after ${id}\n`,
   );
+});
+
+test("--to returns the idle signal after a hidden answer with no screen echo", async (t) => {
+  const { sb, r } = await ans(t, "answer\n", ["300", "--to", "1761200000-4242-17"], {
+    runs: false,
+    lands: false,
+  });
+  assert.equal(r.code, 75, r.stderr);
+  assert.equal(typed(sb), "answer\n");
+  assert.deepEqual(sleeps(sb), ["1", "1", "1"]);
+  assert.match(r.stderr, /look now.*not finished/);
+});
+
+test("--to empty answers still press Return in the real keys program with fake JXA", async (t) => {
+  for (const input of ["", "\n", "\r\n"]) {
+    const { sb, r } = await ans(t, input, ["30", "--to", "1761200000-4242-17"], { runs: false });
+    assert.equal(r.code, 75, r.stderr);
+    const call = sb.calls("osascript").find((c) => c.program === "keys.js");
+    assert.ok(call);
+    const keys = Jxa.source("keys", { stdin: call.stdin, front: "Terminal" });
+    const result = keys.osascript(call.argv.slice(3));
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(keys.events, [{ type: "keyCode", code: 36 }]);
+  }
 });
 
 test("an answer to a running command is typed as is and waits for it", async (t) => {
