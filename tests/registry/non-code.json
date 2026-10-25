@@ -56,13 +56,6 @@
     ]
   },
   {
-    "file": "mini/runbooks/install-ensemble/strata.conf",
-    "reason": "install-test's Strata OpenCode URL, model and context (FR-56)",
-    "tests": [
-      "tests/mini/runbooks/install-ensemble/install-test.test.ts"
-    ]
-  },
-  {
     "file": "plugin/.claude-plugin/plugin.json",
     "reason": "the mini-op plugin manifest: its name; the image build stamps its version",
     "tests": [

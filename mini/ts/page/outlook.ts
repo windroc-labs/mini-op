@@ -1,4 +1,4 @@
-// outlook rows <text>|open <id>|link <email>|code, for maillink: the ids of the listed messages
+// outlook rows <text>|open <id>|link <email>|code, for login mails: the ids of the listed messages
 // whose label holds <text> (data-convid, else the row id), newest first ("-" until the list or its
 // empty state has rendered, or while such a row has no id: its label changes once read);
 // open the message with that id ("ok", "" with none); the first Linear login link for <email> in

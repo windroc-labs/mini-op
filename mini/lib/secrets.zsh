@@ -1,6 +1,6 @@
-# The one home of the secret patterns (FR-34): termwait hides them, shot refuses them, storekey
-# checks a key with them, .github/image-check scans image history for them. Sourced by zsh and by
-# bash, so it keeps to what both run. EREs, for awk on macOS and Linux; callers pick by key.
+# The one home of the secret patterns (FR-34): termwait hides them, shot refuses them,
+# .github/image-check scans image history for them. Sourced by zsh and by bash, so it keeps to
+# what both run. EREs, for awk on macOS and Linux; callers pick by key.
 # The three arrays stay index-aligned: key, display name and pattern of each secret.
 SECRET_KEYS=(anthropic linear github github-pat private-key)
 SECRET_NAMES=(sk-ant- lin_api_ 'gh[pousr]_' github_pat_ 'private key')

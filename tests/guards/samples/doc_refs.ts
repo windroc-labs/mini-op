@@ -1,9 +1,6 @@
 // The docs every view needs; the violation lacks return-mini.md.
 const runbooks = Object.fromEntries(
-  ["setup-test-env", "install-ensemble", "clean-ensemble", "manager-on-mini"].map((name) => [
-    `runbooks/${name}.md`,
-    `# ${name}\n`,
-  ]),
+  ["setup-test-env"].map((name) => [`runbooks/${name}.md`, `# ${name}\n`]),
 );
 const required = {
   ...runbooks,

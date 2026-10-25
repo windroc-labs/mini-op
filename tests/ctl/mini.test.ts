@@ -63,7 +63,7 @@ test("the image's plugin root syncs to ~/apm with its baked mini/VERSION", async
   assert.equal(r.stdout, `mini: synced mini/ to the mini's ~/apm at ${commit}\n`);
   assert.equal(fs.readFileSync(apm(sb, "VERSION"), "utf8"), `${commit}\n`);
   assert.ok(fs.existsSync(apm(sb, "bin/termwait")));
-  assert.ok(fs.existsSync(apm(sb, "runbooks/setup-test-env/maillink")));
+  assert.ok(fs.existsSync(apm(sb, "js/page/go.js")));
   const [call] = sb.calls("ssh");
   assert.deepEqual(call?.argv.slice(0, -1), ["-o", "BatchMode=yes", "mini"]);
 });
