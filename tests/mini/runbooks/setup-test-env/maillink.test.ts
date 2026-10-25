@@ -10,10 +10,11 @@ const EMAIL = "role+1@x.com";
 const MARK = "home/apm/state/maillink.role_1_x_com";
 const link = (n: number) => `https://linear.app/auth/email/${EMAIL}/code${n}`;
 
-// Where a go.js eval sends the tab.
+// The private auth program consumes the link through stdin, never a navigation argv.
 const goTo = (code = "") =>
-  Page.run(code).page.events.flatMap((e: PageEvent) => (e.type === "navigate" ? [e.url] : []));
-const GO = "(function page(url)";
+  Page.run(code, { href: "https://linear.app/login" }).page.events.flatMap((e: PageEvent) =>
+    e.type === "fetch" ? [e.url] : [],
+  );
 
 // The stand-in ~/apm/bin/o (a fake, never mini/bin/o) answers the newest-link read with the
 // lines of $FAKE_DIR/links in turn, the last one again once they run out.
@@ -23,7 +24,6 @@ const O = `case $1:$2 in
     links=("\${(@f)$(<$FAKE_DIR/links)}")
     print -r -- "{\\"data\\":\\"\${links[$n]:-\${links[-1]}}\\"}";;
   eval:*'})("open")') print -r -- '{"ok":true,"data":"ok"}';;
-  eval:'(function page(url)'*) [[ ! -e $FAKE_DIR/open-fails ]] || exit 1;;
 esac`;
 
 async function sandbox(t: Parameters<typeof Sandbox.create>[0], links: string[]) {
@@ -36,12 +36,15 @@ async function sandbox(t: Parameters<typeof Sandbox.create>[0], links: string[])
     fs.symlinkSync(path.join(sb.dir, "bin", name), path.join(sb.home, "apm/bin", name));
   }
   sb.fake("sleep", [{ ignoresStdin: true }]);
+  sb.fake("osascript", [
+    { program: "chrome.js", args: ["auth"], shell: "[[ ! -e $FAKE_DIR/open-fails ]]" },
+  ]);
   const run = (args: string[]) => sb.run(["zsh", MAILLINK, ...args]);
   const opened = () =>
     sb
-      .calls("o")
-      .filter((c) => c.argv[1]?.startsWith(GO))
-      .map((c) => [c.argv[0], ...goTo(c.argv[1]), ...c.argv.slice(2)]);
+      .calls("osascript")
+      .filter((c) => c.program === "chrome.js" && c.argv.at(-1) === "auth")
+      .map((c) => ["auth", ...goTo(c.stdin)]);
   const sleeps = () =>
     sb
       .calls("sleep")
@@ -62,7 +65,9 @@ test("mark remembers the newest link without printing it", async (t) => {
   assert.equal(r.stdout, "marked\n");
   assert.equal(r.stderr, "");
   assert.equal(fs.readFileSync(path.join(sb.dir, MARK), "utf8"), `${link(1)}\n`);
-  assert.deepEqual(sb.calls("front")[0]?.argv, ["outlook.live.com"]);
+  assert.deepEqual(sb.calls("front"), []);
+  assert.ok(sb.calls("o").every((c) => c.argv.includes("--private")));
+  assert.equal(fs.statSync(path.join(sb.dir, MARK)).mode & 0o777, 0o600);
   noLink(sb, r);
 });
 
@@ -74,7 +79,8 @@ test("follow waits for a link other than the marked one and opens it in the Line
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, "followed\n");
   assert.equal(r.stderr, "");
-  assert.deepEqual(opened(), [["eval", link(2), "--session", "role"]]);
+  assert.deepEqual(opened(), [["auth", link(2)]]);
+  assert.ok(sb.calls().every((c) => !c.argv.some((arg) => arg.includes("code2"))));
   assert.deepEqual(sb.calls("front").at(-1)?.argv, ["linear.app/auth"]);
   assert.equal(sleeps(), "5 3 5 3 10 3");
   assert.ok(!fs.existsSync(path.join(sb.dir, MARK)));

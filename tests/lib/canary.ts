@@ -68,6 +68,37 @@ const ctl = ({ script, title, args }: CtlRow): Scenario => ({
 });
 
 export const SECRET_SCRIPTS: Scenario[] = [
+  {
+    script: "mini/runbooks/setup-test-env/maillink",
+    title: "consumes a mail login link through JXA stdin without token argv",
+    args: () => ["follow", "role@example.com"],
+    setup(sb) {
+      sb.mini();
+      sb.fake("sleep", [{ ignoresStdin: true }]);
+      sb.fake("opencli", [
+        {
+          stdout:
+            JSON.stringify({
+              data: `https://linear.app/auth/email/role@example.com/${sb.canary}`,
+            }) + "\n",
+        },
+      ]);
+      sb.fake("osascript", [{}]);
+    },
+    consumers: ["osascript"],
+    check(sb, r) {
+      assert.equal(r.code, 0, r.stderr);
+      assert.equal(r.stdout, "followed\n");
+      const auth = sb
+        .calls("osascript")
+        .filter((c) => c.program === "chrome.js" && c.argv.at(-1) === "auth");
+      assert.equal(auth.length, 1);
+      assert.ok(auth[0]?.stdin.includes(sb.canary));
+      assert.ok(
+        sb.calls("opencli").every((c) => c.argv.slice(-2).join(" ") === "--window background"),
+      );
+    },
+  },
   ctl({ script: "ctl/mini", title: "pw types the password into the Terminal", args: ["pw"] }),
   ctl({
     script: "ctl/mini",

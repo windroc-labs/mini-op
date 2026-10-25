@@ -33,6 +33,7 @@ interface JxaProcess {
   name(): string;
   exists(): boolean;
   set visible(value: boolean);
+  get visible(): () => boolean;
   readonly windows: JxaElements<JxaWindow>;
   readonly attributes: JxaElements<JxaAttribute>;
 }
@@ -59,7 +60,9 @@ interface JxaTerminal {
 }
 
 interface JxaChromeTab {
-  url(): string;
+  get url(): () => string;
+  set url(value: string);
+  execute(options: { javascript: string }): string;
   close(): void;
 }
 

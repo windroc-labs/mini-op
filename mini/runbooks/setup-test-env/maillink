@@ -11,10 +11,11 @@ not a Linear login link, or the tab does not take the link), 2 (usage error) or 
   { print -u2 -r -- 'maillink: usage: maillink mark|follow <email>'; exit 2; }
 source ${0:A:h}/../../lib/timeout.zsh || exit 1
 source ${0:A:h}/../../lib/opencli.zsh || exit 1
+umask 077
 cmd=$1; E=$2; S=~/apm/state/maillink.${E//[^A-Za-z0-9]/_}
-m(){ ~/apm/bin/o "$@" --session mail; }
+m(){ ~/apm/bin/o "$@" --session mail --private; }
 newest(){
-  m open https://outlook.live.com/mail/0/ >/dev/null; ~/apm/bin/front outlook.live.com >/dev/null
+  m open https://outlook.live.com/mail/0/ >/dev/null || return 1
   m wait text "Focused" >/dev/null 2>&1
   m eval "$(page_js outlook open)" >/dev/null
   sleep 3
@@ -35,7 +36,7 @@ case $cmd in
     # $L comes from mail: open only a Linear login link.
     [[ $L =~ '^https://linear\.app/auth/email/[A-Za-z0-9._%@/+-]+$' ]] ||
       { print -u2 -r -- 'maillink: the fresh link is not a Linear login link'; exit 1; }
-    ~/apm/bin/o eval "$(page_js go $L)" --session role >/dev/null ||
+    page_js auth "$L" | osascript -l JavaScript ~/apm/js/chrome.js auth >/dev/null 2>&1 ||
       { print -u2 -r -- 'maillink: cannot open the link in the Linear tab'; exit 1; }
     ~/apm/bin/front linear.app/auth >/dev/null
     echo followed ;;

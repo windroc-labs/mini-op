@@ -20,7 +20,13 @@ export type Process = {
   // Reading its windows throws, as for a process System Events cannot inspect.
   unreadable?: boolean;
 };
-export type Tab = { url?: string; history?: string; contents?: string };
+export type Tab = {
+  url?: string;
+  history?: string;
+  contents?: string;
+  javascript?: string[];
+  javascriptError?: string;
+};
 export type Scene = {
   // The frontmost process (default Finder); activate() makes the app frontmost unless activates
   // is false.
@@ -253,7 +259,18 @@ export class Jxa {
         (this.scene.chrome ?? []).map((w, window) => ({
           tabs: elements(() =>
             w.tabs.map((t) => ({
-              url: () => t.url ?? "",
+              get url(): () => string {
+                return () => t.url ?? "";
+              },
+              set url(url: string) {
+                t.url = url;
+              },
+              execute: () => {
+                if (t.javascriptError) throw new Error(t.javascriptError);
+                const result = t.javascript?.[0] ?? "pending";
+                if ((t.javascript?.length ?? 0) > 1) t.javascript?.shift();
+                return result;
+              },
               close: () => {
                 harness.events.push({ type: "close", url: t.url ?? "" });
                 w.tabs.splice(w.tabs.indexOf(t), 1);
