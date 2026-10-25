@@ -14,7 +14,7 @@ description: Run a task on the Mac mini through mini-op. Loads its rules, finds 
    3. Run `/opt/windroc/plugins/mini-op/ctl/runbook list`, adding `--project <project>` when the request names a project. Each line is a runbook's source, path and `when`, tab-separated: the current project's runbooks first, then the plugin's. Choose by the `when` values alone, and open only the chosen runbook's file, never the others.
    4. No `when` fits: write a one-off runbook, numbered steps for this request, then follow it.
 
-   Exit 3 from `runbook` means several project snapshots and none named: ask the user which project, and run nothing until they answer. Any other exit 1: report its message and run nothing.
+   A runbook file `<name>.md` has the name `<name>`, e.g. `return-mini`. Exit 3 from `runbook` means several project snapshots and none named: ask the user which project, and run nothing until they answer. Exit 2 means a malformed call: fix the call and run it again. Any other exit 1: report its message and run nothing.
 5. Do the request, following the runbook.
 6. Start the result, success or failure, with one line naming the runbook used:
    - `Runbook: inline (request)`

@@ -3,7 +3,8 @@ setopt pipefail extendedglob
 usage="runbook list [--project <name>] [--workspace <dir>]
 runbook path <name> [--project <name>] [--workspace <dir>]
 Finds /mini-op:run's runbook. Candidates, in order: the current project's .mini-op/runbooks/*.md,
-then the plugin's runbooks/*.md; each needs a when line in its frontmatter, the only part read.
+then the plugin's runbooks/*.md; each needs a when line in its frontmatter (closed within 100
+lines), the only part read.
 The workspace (default: the working directory) is a checkout when it holds .mini-op/runbooks/,
 the project named by its origin repo; else the projects are its snapshots,
 <workspace>/projects/<project>/.mini-op/runbooks/: --project names one, a lone one is used.
@@ -34,17 +35,21 @@ realdir() {
   return 2
 }
 
-# read_when <file>: prints its frontmatter's when value, reading no line past the closing ---;
-# fails without one. Opened without following a symlink, and read only once it is a regular file.
+# read_when <file>: prints the value of the first when: line in its frontmatter (closed within
+# 100 lines), reading no line past the closing ---; fails without one. Opened without following a
+# symlink or waiting on a FIFO, and read only once it is a regular file.
 read_when() {
-  local fd line value= closed= n=0
+  local fd line value= seen= closed= n=0
   local -A st
-  sysopen -r -o nofollow,cloexec -u fd $1 2>/dev/null || return 1
+  sysopen -r -o nofollow,nonblock,cloexec -u fd $1 2>/dev/null || return 1
   if zstat -H st -f $fd 2>/dev/null && (((st[mode] & 8#170000) == 8#100000)); then
     if IFS= read -r -u $fd line && [[ $line == --- ]]; then
-      while ((++n <= 100)) && IFS= read -r -u $fd line; do
+      while ((++n <= 100)) && { IFS= read -r -u $fd line || [[ -n $line ]]; }; do
         [[ $line == --- ]] && { closed=1; break; }
-        [[ -z $value && $line == when:* ]] && value=${${line#when:}//[[:space:]]##/ }
+        if [[ -z $seen && $line == when:* ]]; then
+          seen=1 value=${${line#when:}//[[:space:]]##/ }
+        fi
+        line=
       done
     fi
   fi
@@ -52,6 +57,19 @@ read_when() {
   value=${${value## }% }
   [[ -n $closed && -n $value ]] || return 1
   print -r -- $value
+}
+
+# origin_url <dir>: its origin remote's URL, giving git 5 s, as an untrusted checkout's config
+# (a FIFO, an include) can block it.
+origin_url() {
+  local url pid
+  coproc git -C $1 remote get-url origin 2>/dev/null
+  pid=$!
+  if ! IFS= read -r -t 5 -p url; then
+    kill $pid 2>/dev/null
+    return 1
+  fi
+  wait $pid && print -r -- $url
 }
 
 typeset -a project_rows plugin_rows
@@ -130,7 +148,7 @@ fi
 pname= pdir=
 if realdir $ws/.mini-op && realdir $ws/.mini-op/runbooks; then
   [[ -n $projset ]] && die "--project $project given, but $(shown $ws) is itself a checkout"
-  url=$(git -C $ws remote get-url origin 2>/dev/null) && pname=${${url%%/##}%.git} &&
+  url=$(origin_url $ws) && pname=${${url%%/##}%.git} &&
     pname=${pname##*[/:]} && plain $pname ||
     die "cannot name the checkout's project from its origin remote"
   pdir=$ws/.mini-op/runbooks

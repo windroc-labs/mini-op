@@ -112,6 +112,7 @@ test("the skill finds the runbook in order with ctl/runbook", () => {
   assert.match(text, /open only the chosen runbook/);
   assert.match(text, /Exit 3[^\n]*ask the user which project[^\n]*run nothing/);
   assert.match(text, /no runbook named <name>/);
+  assert.match(text, /Exit 2 means a malformed call/);
 });
 
 test("every result names the runbook's source and path", () => {

@@ -160,13 +160,22 @@ test("a runbook without when is skipped and reported", async (t) => {
     "c.md": "---\nwhen:   \n---\n",
     "d.md": "---\nwhen: never closed\n",
     "e.md": book("fine"),
+    "f.md": "---\nwhen:\nwhen: a second line does not count\n---\n",
+    "g.md": "---\nwhen: closed on the last line\n---",
+    "h.md": `---\nwhen: too long\n${"x: y\n".repeat(100)}---\n`,
   });
   const r = await run(sb, ws, "list");
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), [`project:ensemble\t${dir}/e.md\tfine`, ...pluginRows()]);
+  assert.deepEqual(lines(r.stdout), [
+    `project:ensemble\t${dir}/e.md\tfine`,
+    `project:ensemble\t${dir}/g.md\tclosed on the last line`,
+    ...pluginRows(),
+  ]);
   assert.deepEqual(
     lines(r.stderr),
-    ["a", "b", "c", "d"].map((n) => `runbook: skipped ${dir}/${n}.md: no when in its frontmatter`),
+    ["a", "b", "c", "d", "f", "h"].map(
+      (n) => `runbook: skipped ${dir}/${n}.md: no when in its frontmatter`,
+    ),
   );
 });
 
@@ -227,6 +236,22 @@ test("checkout case: the workspace's own .mini-op/runbooks is the project, named
   assert.equal(r.stderr, "runbook: not a plain name: ../x\n");
   await sb.run([...GIT, "-C", ws, "remote", "set-url", "origin", "https://example.com/o/bad name"]);
   r = await run(sb, ws, "list");
+  assert.equal(r.code, 1);
+  assert.equal(r.stdout, "");
+  assert.equal(r.stderr, "runbook: cannot name the checkout's project from its origin remote\n");
+});
+
+test("checkout case: a git config that blocks makes the lookup give up, not hang", async (t) => {
+  const sb = await Sandbox.create(t);
+  const ws = path.join(sb.dir, "ensemble");
+  runbooks(path.join(ws, ".mini-op/runbooks"), { "install.md": book("install") });
+  let r = await sb.run([...GIT, "-C", ws, "init", "-q"]);
+  assert.equal(r.code, 0, r.stderr);
+  fs.rmSync(path.join(ws, ".git/config"));
+  const config = path.join(ws, ".git/config");
+  r = await sb.run(["perl", "-MPOSIX", "-e", "mkfifo($ARGV[0], 0644) or die", config]);
+  assert.equal(r.code, 0, r.stderr);
+  r = await sb.run([SCRIPT, "list", "--workspace", ws], { timeoutMs: 12000 });
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
   assert.equal(r.stderr, "runbook: cannot name the checkout's project from its origin remote\n");
