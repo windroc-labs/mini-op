@@ -105,14 +105,25 @@ test("the closing brace on its own line keeps semicolons, comments and heredocs 
 });
 
 test("a command still running times out and names its id", async (t) => {
-  const { sb, r } = await ans(t, "install-test", ["3"], { runs: false });
+  const { sb, r } = await ans(t, "install-test", ["2"], { runs: false });
   assert.equal(r.code, 124);
   const id = path.basename(marked(sb).marker);
-  assert.deepEqual(sleeps(sb), ["1", "1", "1"]);
+  assert.deepEqual(sleeps(sb), ["1", "1"]);
   assert.equal(
     r.stderr,
-    `termwait: still running: ${id} (after 3 s); keep waiting with termwait <secs> --after ${id}\n`,
+    `termwait: still running: ${id} (after 2 s); keep waiting with termwait <secs> --after ${id}\n`,
   );
+});
+
+test("--to returns the idle signal after a hidden answer with no screen echo", async (t) => {
+  const { sb, r } = await ans(t, "answer\n", ["300", "--to", "1761200000-4242-17"], {
+    runs: false,
+    lands: false,
+  });
+  assert.equal(r.code, 75, r.stderr);
+  assert.equal(typed(sb), "answer\n");
+  assert.deepEqual(sleeps(sb), ["1", "1", "1"]);
+  assert.match(r.stderr, /look now.*not finished/);
 });
 
 test("an answer to a running command is typed as is and waits for it", async (t) => {

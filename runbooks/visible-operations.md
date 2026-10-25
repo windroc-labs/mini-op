@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `ctl/mini exec`、`mini/bin/visible` | visible now | Terminal 显示公开命令和输出；完整 stdout/stderr 分开捕获，原子 rc 回读；退出 0–255 不归一化 |
 | `ctl/mini run`、`mini/bin/ans` 新命令和 `--to` 回答 | already visible | Terminal 输入、滚到底部；marker 判定结束；只在已确认关闭回显的密码提示回答秘密 |
-| `mini/bin/termwait`、`visible --collect` | cannot be visible | 读取完成文件和已有结果属于机器回读；原命令已经可视，收集不能重新执行 |
+| `mini/bin/termwait`、`mini/bin/termtail`、`visible --collect` | cannot be visible | 读取屏幕/完成文件/已有结果属于机器回读；75 仅提示空闲后查看，marker 才证明结束；原命令已经可视，收集不能重新执行 |
 | `terminal.js activate/front/bottom` | already visible | 激活、确认前台、滚到底部；不改窗口位置或尺寸 |
 | `terminal.js history/contents`、`--all` | cannot be visible | 屏幕读回与秘密检查；通过 `termwait` 脱敏，不能把原始历史打印到 Terminal |
 | `keys.js`、`click.js`、`ctl/mini chord`、`chord.applescript` | already visible | 前台键鼠；秘密仅 stdin、`--secret` 和已确认的隐藏提示；页面秘密走 secfield |

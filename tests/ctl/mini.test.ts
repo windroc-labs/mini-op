@@ -306,6 +306,7 @@ test("run sends stdin to ans and passes its rc", async (t) => {
     [[], 0, ""],
     [["300", "--to", "1761200000-4242-17"], 1, "keys: Terminal not frontmost; typed nothing\n"],
     [["5"], 124, "ans: still running: 1-2-3; keep waiting with termwait 5 --after 1-2-3\n"],
+    [["30", "--to", "1761200000-4242-17"], 75, "termwait: look now; not finished\n"],
   ] as const) {
     const sb = await sandbox(t);
     ans(sb, `print 'mini ~ %'; print -u2 -n -- ${JSON.stringify(stderr)}; exit ${rc}`);

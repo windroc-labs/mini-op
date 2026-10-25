@@ -40,12 +40,20 @@ if [[ $mode == execute ]]; then
   exit 0
 fi
 if [[ $mode == run ]]; then
-  print -r -- "~/apm/bin/visible --execute $id" | ~/apm/bin/ans $secs >/dev/null; wait_rc=$?
-  if [[ ! -e $job/rc && $wait_rc != 0 && $wait_rc != 124 ]]; then
+  end=$(( $(date +%s) + secs ))
+  print -r -- "~/apm/bin/visible --execute $id" | ~/apm/bin/ans $secs >/dev/null 2>$job/launch.stderr; wait_rc=$?
+  if (( wait_rc == 75 )); then
+    source ${0:A:h}/../lib/timeout.zsh || exit 1
+    remaining=$(( end - $(date +%s) )); (( remaining >= 0 )) || remaining=0
+    poll $((remaining + 1)) 1 test -e $job/rc
+  fi
+  if [[ ! -e $job/rc && $wait_rc != 0 && $wait_rc != 75 && $wait_rc != 124 ]]; then
+    cat $job/launch.stderr >&2
     die "Terminal launch failed; retained $id"
   fi
 fi
 if [[ ! -e $job/rc ]]; then
+  [[ $mode != run ]] || cat $job/launch.stderr >&2
   print -u2 -r -- "visible: still running or launch uncertain: $id; recover with mini exec --collect $id"
   exit 124
 fi

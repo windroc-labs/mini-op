@@ -49,7 +49,8 @@ Files sit by where they run.
 | `mini/runbooks/install-ensemble/install-test [-- <install.sh flags>]` | runs PR #547's `install.sh` as a user would, in the Terminal, sudo password typed at its prompt by mini-op's `mini pw`; `OC=1` adds the Strata OpenCode flags from `mini/runbooks/install-ensemble/strata.conf` |
 | `mini/runbooks/clean-ensemble/clean-test [-- <install-cleanup.sh flags>]` | same for PR #547's `install-cleanup.sh` |
 | `mini/bin/ans [secs] [--to <id>]` | types stdin into the mini's Terminal plus Enter (a command with an exit-code marker; with `--to`, an answer to command `<id>` as is), scrolls to bottom, then runs `termwait` (Waiting and answering) |
-| `mini/bin/termwait <secs> --after <id>` | waits for command `<id>`'s marker file, prints the last 25 lines with tokens redacted and `<id> exited <rc>`; exits 0, 1 or 124 (Waiting and answering) |
+| `mini/bin/termwait <secs> --after <id>` | marker proves completion; unchanged readable contents for 3 s returns 75 (look now, never completion); limit is 124; last lines redacted (Waiting and answering) |
+| `mini/bin/termtail [N \| --all]` | read-only redacted Terminal tail (default 25 nonblank lines); --all reads the full snapshot; never types, activates or scrolls |
 | `mini/js/keys.js [--enter] [--front Terminal\|Chrome\|SecurityAgent\|SettingsSheet] [--secret] [--verify-field] [--wake]` | JXA: types stdin as keystrokes, less one trailing newline; `--enter` adds Enter, `--front` types only into that app (Chrome: only while it is frontmost; SecurityAgent: its one focused secure field; SettingsSheet: System Settings frontmost with a focused secure field), `--verify-field` checks the field got every character and clicks Allow (SettingsSheet: OK), `--secret` keeps the text out of every message |
 | `mini/js/click.js <x> <y>` | JXA: click at screen coordinates |
 | `mini/js/terminal.js activate\|front\|history [--all]\|contents\|bottom`, `mini/js/chrome.js activate\|close <url-substring>\|hide\|auth` | JXA: Terminal (activate hides Chrome; bottom is Cmd+End); Chrome hide verifies it is hidden; auth consumes a trusted page program on stdin, never a token argv, and fails safely unless one Linear tab and JavaScript from Apple Events are available |
@@ -103,13 +104,26 @@ Outside a page: screenshots only with `~/apm/bin/shot`, scp back, then `sips -Z 
 
 ### Waiting and answering
 
-Type a command into the mini's Terminal, from this Mac or mini-op, with `printf '%s\n' '<cmd>' | mini run <secs>` (on the mini: `~/apm/bin/ans <secs>`), never with a wait or answer script of your own: when `mini run` or `termwait` falls short, stop and tell the user what it missed, so the shared script gets fixed.
+During an interactive install, wait **at most 30 s at a time**, then read `~/apm/bin/termtail [N]` (default 25 nonblank lines, redacted). Never wait 240–600 s through a prompt. Start a public interactive command with `printf '%s\n' '<cmd>' | mini run 30`; on the mini, `ans 30` does the same. Public noninteractive work needing complete stdout/stderr uses `mini exec` instead.
 
-How waiting works: `ans` types the command wrapped so that, when it ends, it writes its exit code to the marker file `~/apm/state/done/<id>` on the mini; `termwait <secs> --after <id>` (which `ans` runs) checks that file every second, nothing on the screen. It then prints the Terminal's last 25 nonblank lines with tokens hidden and `<id> exited <rc>`, deletes the marker and exits 0 when `<rc>` is 0, else 1. After `<secs>` without the marker it prints the same lines, then `termwait: still running: <id> (after <secs> s); keep waiting with termwait <secs> --after <id>` on stderr, and exits 124: the command is still running, often at a prompt shown in those lines. Keep waiting with `ssh mini '~/apm/bin/termwait <secs> --after <id>'`. Markers over a day old are deleted. The Command Line Tools install prints nothing for minutes ("Installing Command Line Tools for Xcode …"): wait 240 s at a time.
+`ans` types a command wrapped to write its exit status atomically to `~/apm/state/done/<id>` (`<id>.tmp` then rename). **Only that marker proves completion.** `termwait <secs> --after <id>` checks it and reads full redacted Terminal contents: three seconds unchanged returns **75**, a “look now” signal, including for a quiet command still doing work. Prompt text never proves completion. Read failures do not count as idle. 0 means the marker held 0; 1 means a nonzero/malformed marker or failure; 124 means the wait limit was reached. Each wait result attempts a redacted tail; read failures print a diagnostic. 75/124 keep the command pending; only a completed marker is consumed. Markers older than a day are cleaned up.
 
-`ans`, and `mini run` through it, exit as `termwait` does, and also 124 when a wait of their own runs out: `ans: timed out after 5 s: typed text did not land; not waiting` when the Terminal's text did not change after typing (nothing to wait for), `ans: killed after <N> s: <step>` when a Terminal call hung before or during that wait (typing 15 s, the others 5 s); when no read of the typed text's landing answered, the 124 line names `<id>` and the hint `termwait <secs> --after <id>`, as the text may have landed (`ans: killed after 5 s: reading Terminal; …` if a read hung, else `ans: timed out after 5 s: cannot read Terminal; …`). A hung scroll after `termwait` only prints `ans: note: killed after 5 s: …`, and `ans` exits with termwait's code. They exit 1 when they refused or failed before waiting (e.g. `ans: Terminal not frontmost; typed nothing`) and 2 on a usage error. `mini run` also exits 1 when ssh fails (`mini: run: ssh to the mini failed`), when the mini has no `~/apm/lib/timeout.zsh` yet (run `mini sync`) and on any other rc from the mini (`mini: run: the mini exited <rc>`).
+```mermaid
+flowchart TD
+  A[mini run 30] --> B{result}
+  B -->|0 or 1 plus exited rc| C[completed marker]
+  B -->|75 or 124| D[termtail]
+  D --> E{input required?}
+  E -->|confirmed prompt| F[mini run 30 --to id]
+  E -->|still working| G[termwait 30 --after id]
+  F --> B
+  G --> B
+```
+The signal never authorizes an automatic answer; inspect the actual prompt first.
 
-Answer at once when a wait times out at a prompt: a prompt waits silently, and the user's view of the Terminal may not have scrolled down to it. `printf y | mini run 300 --to <id>` types the answer as is (no marker) plus Enter, scrolls to the bottom (Cmd+End, `key code 119 using command down`), and waits for `<id>` again. A plain `mini run` or `ans` (no `--to`) is only for a new command at the shell prompt: its marker suffix would be typed into the prompt. By hand: `osascript -l JavaScript ~/apm/js/terminal.js activate` (hides Chrome, activates Terminal), then `printf y | osascript -l JavaScript ~/apm/js/keys.js --enter`; a password or key from a keychain the same way, piped; then `termwait <secs> --after <id>`, also when someone else answered.
+Answer a running command with `printf '%s' '<public answer>' | mini run 30 --to <id>`. `--to` types it as is plus Enter, scrolls to the bottom, then uses the same idle signal, so an unchanged hidden answer returns after a few seconds. A fresh `run` adds a command marker and must only be used at a shell prompt. Passwords/keys reach a confirmed no-echo prompt only by protected stdin (`mini pw` for the account password); page secrets use secfield. Never type a secret merely because 75 was returned.
+
+`ans` refuses before typing unless Terminal is frontmost. New commands require their text to land within 5 s; typing has a 15 s bound and other Terminal calls a 5 s bound. A launch/read/scroll timeout returns 124, naming the id when the command may have started: keep that id and inspect instead of resending. A scroll timeout after waiting preserves the wait's status. `mini run` preserves 0/1/75/124, maps SSH failure/other unexpected statuses to 1, and asks for `mini sync` if the timeout helper is absent. `termtail` is read-only; it never activates, scrolls or types. More result and connection recovery: `runbooks/visible-operations.md`.
 
 ## Gotchas
 

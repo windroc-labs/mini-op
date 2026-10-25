@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
 import { REPO, Sandbox } from "../../lib/sandbox.ts";
-import { fakeTerminal, typed, type TerminalScene } from "../../lib/terminal.ts";
+import { fakeTerminal, SLEEP, typed, type TerminalScene } from "../../lib/terminal.ts";
 
 const VISIBLE = path.join(REPO, "mini/bin/visible");
 const ID = "1761200000-4242-17";
@@ -80,6 +80,19 @@ test("frontmost refusal never runs the command", async (t) => {
   assert.equal(r.code, 1, r.stderr);
   assert.match(r.stderr, /Terminal not frontmost/);
   assert.equal(typed(sb), undefined);
+});
+
+test("exec keeps waiting after an idle signal and returns only the final captured streams", async (t) => {
+  const sb = await setup(t, { runs: false });
+  sb.fake("sleep", [
+    {
+      shell: `${SLEEP}\n[[ $(cat $FAKE_DIR/clock) == 5 ]] && zsh -f -c "$(cat $FAKE_DIR/typed)" > "$FAKE_DIR/screen" 2>&1; exit 0`,
+    },
+  ]);
+  const r = await sb.run(["zsh", VISIBLE, "30"], { input: "printf completed; printf warning >&2" });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, "completed");
+  assert.equal(r.stderr, "warning");
 });
 
 test("collect refuses missing, damaged or incomplete results and preserves evidence", async (t) => {

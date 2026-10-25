@@ -4,18 +4,19 @@ A command is typed as \`{ <stdin>\`, a newline, then \`}; printf '%s\\n' \$? > <
 <marker>.tmp <marker>\`, the marker ~/apm/state/done/<id> with a new <id>, so termwait ends when it
 ends; trailing newlines are dropped, and an unbalanced \`}\` in stdin closes the group early: no
 marker. --to <id>: stdin answers a prompt of the still-running command <id> (a [y/N], a key): typed
-as is, then waits for <id>. Types only if Terminal is frontmost, and does not wait if its scrollback
-is unchanged 5 s after typing. Exits 0 (the command exited 0), 1 (refused or failed, or the command
-exited non-zero: \"<id> exited <rc>\" on stdout), 2 (usage error) or 124 (a wait timed out: \"still
+as is, then waits for <id>. --to permits no screen echo (hidden answers); new commands refuse to
+wait if scrollback is unchanged 5 s after typing. Types only into the front Terminal.
+Exits 0 (the command exited 0), 1 (refused or failed, or the command exited non-zero), 2 (usage),
+75 (unchanged readable contents for 3 s: look now, not completion) or 124 (a wait timed out: \"still
 running: <id>\", \"killed after <N> s\" or \"timed out after <N> s\" on stderr)."
 synopsis='ans [secs] [--to <id>]'
 usage_error() { print -u2 -r -- "ans: usage: $synopsis$1"; exit 2; }
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
-q=60; id=""
+q=60; id=""; answer=0
 if [[ $# -gt 0 && $1 == <-> ]]; then q=$1; shift; fi
 if [[ ${1:-} == --to ]]; then
   [[ $# -eq 2 && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error
-  id=$2; shift 2
+  id=$2; answer=1; shift 2
 fi
 [[ $# -eq 0 ]] || usage_error
 source ${0:A:h}/../lib/timeout.zsh || exit 1
@@ -47,6 +48,7 @@ before=$(hist) || {
   print -u2 -r -- 'ans: cannot read Terminal; typed nothing'; exit 1
 }
 keys=(osascript -l JavaScript ~/apm/js/keys.js --enter)
+(( ! answer )) || keys+=(--secret)
 print -rn -- "$text" | with_timeout 15 $keys >/dev/null || {
   killed 15 typing
   print -u2 -r -- 'ans: typing failed; not waiting'; exit 1
@@ -61,14 +63,16 @@ landed() {
   now=$(hist) || { (( $? != 124 )) || read_killed=1; return 1; }
   read_any=1; [[ $now != $before ]]
 }
-poll 10 0.5 landed || {
+if (( ! answer )); then
+  poll 10 0.5 landed || {
   if (( ! read_any && read_killed )); then
     print -u2 -r -- "ans: killed after 5 s: reading Terminal; $typed"; exit 124
   elif (( ! read_any )); then
     print -u2 -r -- "ans: timed out after 5 s: cannot read Terminal; $typed"; exit 124
   fi
   print -u2 -r -- 'ans: timed out after 5 s: typed text did not land; not waiting'; exit 124
-}
+  }
+fi
 with_timeout 5 $terminal bottom >/dev/null || killed 5 "scrolling Terminal; $typed"
 ~/apm/bin/termwait "$q" --after "$id"; rc=$?
 with_timeout 5 $terminal bottom >/dev/null || (( $? != 124 )) ||

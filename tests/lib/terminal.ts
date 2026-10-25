@@ -17,7 +17,8 @@ const ACTIVATE = `print activate >> "$FAKE_DIR/events"
 front=$(<"$FAKE_DIR/front")
 [[ $front == Terminal ]] || { print -u2 -- "terminal: Terminal not frontmost ($front)"; exit 1; }
 print Terminal`;
-export const SLEEP = `print -r -- "$1" >> "$FAKE_DIR/sleeps"`;
+export const SLEEP = `print -r -- "$1" >> "$FAKE_DIR/sleeps"
+clock=$(cat "$FAKE_DIR/clock" 2>/dev/null || print 0); print $(( clock + $1 )) > "$FAKE_DIR/clock"`;
 
 export type TerminalScene = { front?: string; lands?: boolean; runs?: boolean; screen?: string };
 
@@ -37,6 +38,12 @@ export function fakeTerminal(sb: Sandbox, scene: TerminalScene = {}, sleep = SLE
     { program: "keys.js", args: ["--enter"], shell: TYPE },
   ]);
   sb.fake("sleep", [{ shell: sleep }]);
+  sb.fake("date", [
+    {
+      shell: 'clock=$(cat "$FAKE_DIR/clock" 2>/dev/null || print 0); print -r -- "${clock%.*}"',
+      ignoresStdin: true,
+    },
+  ]);
 }
 
 function readIfExists(file: string): string | undefined {
