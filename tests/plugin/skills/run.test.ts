@@ -128,3 +128,20 @@ test("every result names the runbook's source and path", () => {
   assert.match(text, /`runbook: skipped …`/);
   assert.match(text, /full text in a fenced block/);
 });
+
+test("README lists the plugin's marketplace and requirements, and the runbook lookup", () => {
+  const readme = read("README.md");
+  const row = readme.split("\n").find((line) => line.startsWith("| `plugin/` |")) ?? "";
+  for (const fact of [
+    "marketplace `windroc`",
+    "`windroc-labs/agent-plugins-marketplace`",
+    "access to `windroc/mini-op`",
+    "only in the mini-op image",
+  ]) {
+    assert.ok(row.includes(fact), `README › Layout's plugin/ row does not say ${fact}`);
+  }
+  const scripts = readme.split("\n").find((line) => line.startsWith("| `ctl/runbook ")) ?? "";
+  for (const fact of ["`<workspace>/projects/<project>/.mini-op/runbooks/`", "exits 3"]) {
+    assert.ok(scripts.includes(fact), `README › Scripts' ctl/runbook row does not say ${fact}`);
+  }
+});
