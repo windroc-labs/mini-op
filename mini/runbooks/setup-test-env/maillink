@@ -1,9 +1,9 @@
 #!/usr/bin/env zsh
 usage='maillink mark|follow <email>   find the Linear login link for <email> in Outlook (session mail)
-mark: before requesting the link, remember the newest one; follow: after, wait 30 s for the mail,
-then up to 12 reads 10 s apart for a link other than the marked one, and open it in the Linear tab
-(session role). The link never prints. Outlook renders no list in a hidden tab, so its tab is raised
-before each read. Prints "marked" or "followed"; exits 0, 1 (the mark cannot be written, the link is
+mark: before requesting the link, remember the newest one; follow: after, wait 5 s for the mail,
+then read for a link other than the marked one, again after 5, 10, 20, 40, 40 and 20 s (140 s in
+all), and open it in the Linear tab (session role). The link never prints. Outlook renders no list
+in a hidden tab, so its tab is raised before each read. Prints "marked" or "followed"; exits 0, 1 (the mark cannot be written, the link is
 not a Linear login link, or the tab does not take the link), 2 (usage error) or 124 (no fresh link:
 "timed out after 140 s").'
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
@@ -27,8 +27,8 @@ case $cmd in
   follow)
     OLD=$(cat $S 2>/dev/null)
     fresh(){ L=$(newest); [[ -n $L && $L != $OLD ]]; }
-    sleep 30
-    poll 12 10 fresh; rc=$?
+    sleep 5
+    backoff 135 5 40 fresh; rc=$?
     rm -f -- "${S:?}"
     (( rc == 0 )) ||
       { print -u2 -r -- "maillink: timed out after 140 s: no fresh link for $E"; exit 124; }

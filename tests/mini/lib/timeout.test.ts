@@ -88,8 +88,33 @@ test("poll returns 124 after its tries, with no sleep after the last", async (t)
   }
 });
 
+test("backoff returns 0 once the command succeeds, doubling its gaps up to the cap", async (t) => {
+  const call =
+    'n=0; try() { n=$((n + 1)); [ "$n" -ge 5 ]; }; backoff 60 1 4 try; echo "rc=$? n=$n"';
+  for (const r of await lib(t, call, { setup: countSleeps })) {
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.stdout, "rc=0 n=5\n", r.shell);
+    assert.deepEqual(sleeps(r.sb), ["1", "2", "4", "4"], r.shell);
+  }
+  for (const r of await lib(t, "backoff 60 1 4 true", { setup: countSleeps })) {
+    assert.equal(r.code, 0, r.shell);
+    assert.deepEqual(sleeps(r.sb), [], r.shell);
+  }
+});
+
+test("backoff returns 124 once its seconds ran out, the last gap cut to fit", async (t) => {
+  for (const r of await lib(t, "backoff 20 2 8 false", { setup: countSleeps })) {
+    assert.equal(r.code, 124, r.shell);
+    assert.deepEqual(sleeps(r.sb), ["2", "4", "8", "6"], r.shell);
+  }
+  for (const r of await lib(t, "backoff 1 5 5 false", { setup: countSleeps })) {
+    assert.equal(r.code, 124, r.shell);
+    assert.deepEqual(sleeps(r.sb), ["1"], r.shell);
+  }
+});
+
 // AC15: secs and tries match ^[1-9][0-9]*$, so 0 and a leading zero are refused; the interval
-// matches ^[0-9]+(\.[0-9]+)?$.
+// matches ^[0-9]+(\.[0-9]+)?$. backoff's three numbers are secs-like, its first gap within its cap.
 test("bad arguments return 2 and run nothing", async (t) => {
   const calls = [
     "with_timeout",
@@ -111,6 +136,16 @@ test("bad arguments return 2 and run nothing", async (t) => {
     "poll 3 1.2.3 touch ran",
     "poll 3 -1 touch ran",
     "poll 3 '1;x' touch ran",
+    "backoff",
+    "backoff 9 1 4",
+    "backoff 0 1 4 touch ran",
+    "backoff 9 0 4 touch ran",
+    "backoff 9 01 4 touch ran",
+    "backoff 9 1 1.5 touch ran",
+    "backoff 9 1 -4 touch ran",
+    "backoff 9 '1;x' 4 touch ran",
+    "backoff 9 '' 4 touch ran",
+    "backoff 9 5 4 touch ran",
   ];
   for (const call of calls) {
     for (const r of await lib(t, call, { setup: countSleeps })) {
