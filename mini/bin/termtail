@@ -4,7 +4,7 @@ truncation. Read-only: never activates, scrolls or types. Exits 0, 1 (unreadable
 or 124 (the Terminal read timed out after 5 s). --all returns the full redacted snapshot.'
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
 [[ $# -eq 0 || ($# -eq 1 && ($1 == <1-> || $1 == --all)) ]] ||
-  { print -u2 -r -- 'termtail: usage: termtail [N]'; exit 2; }
+  { print -u2 -r -- 'termtail: usage: termtail [N | --all]'; exit 2; }
 source ${0:A:h}/../lib/secrets.zsh || exit 1
 source ${0:A:h}/../lib/timeout.zsh || exit 1
 text=$(with_timeout 5 osascript -l JavaScript ~/apm/js/terminal.js contents 2>/dev/null); rc=$?

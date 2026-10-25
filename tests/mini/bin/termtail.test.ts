@@ -72,9 +72,10 @@ test("termtail rejects bad arguments and help reads nothing", async (t) => {
   for (const args of [["0"], ["-1"], ["x"], ["2", "3"], ["--bad"], ["-h", "x"]]) {
     const r = await sb.run(["zsh", TAIL, ...args]);
     assert.equal(r.code, 2);
+    assert.equal(r.stderr, "termtail: usage: termtail [N | --all]\n");
   }
   const help = await sb.run(["zsh", TAIL, "-h"]);
   assert.equal(help.code, 0);
-  assert.match(help.stdout, /^termtail /);
+  assert.match(help.stdout, /^termtail \[N \| --all\]/);
   assert.deepEqual(sb.calls(), []);
 });

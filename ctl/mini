@@ -20,7 +20,8 @@ mini sync [--check]           copy mini/ with its VERSION stamp to the mini's ~/
 pw and sudo send the mini account's password from \$(secrets_dir)/<account> (<account>:
 mini_user in ~/.mini-op/config.local.yaml) to ssh's stdin only. Exits 0, 1 (refused or failed), 2
 (usage error), 75 (run: look now, command not finished) or 124 (a wait timed out).
-Interactive installs use at most 30 s per wait. exec returns the captured original status."
+Interactive installs use at most 30 s per wait. exec returns the captured original status.
+mini exec exits 255 on SSH failure; command completion is unknown."
 source ${0:A:h}/lib/ssh.zsh
 source ${0:A:h}/lib/version.sh
 source ${0:A:h}/lib/secrets.zsh

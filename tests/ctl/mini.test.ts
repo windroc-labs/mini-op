@@ -635,6 +635,7 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
   const r = await sb.run(["zsh", MINI, "-h"]);
   assert.equal(r.code, 0);
   assert.equal(r.stderr, "");
+  assert.match(r.stdout, /exec.*255.*SSH.*completion.*unknown/i);
   const lines = r.stdout.split("\n");
   assert.match(lines[0] ?? "", /^mini exec \[secs\]/);
   assert.match(lines[2] ?? "", /^mini run \[secs\] \[--to <id>\] .*not for secrets: use mini pw$/);
