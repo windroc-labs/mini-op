@@ -31,7 +31,10 @@ function workspace(sb: Sandbox): string {
 
 function runbooks(dir: string, files: Record<string, string>): string {
   fs.mkdirSync(dir, { recursive: true });
-  for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text);
+  for (const [name, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
+    fs.writeFileSync(path.join(dir, name), text);
+  }
   return dir;
 }
 
@@ -391,6 +394,8 @@ test("usage errors exit 2; -h exits 0; a missing workspace exits 1", async (t) =
     ["path", "a", "b"],
     ["list", "--project"],
     ["list", "--workspace"],
+    ["deploy"],
+    ["deploy", "a", "b"],
   ]) {
     const r = await sb.run([SCRIPT, ...args], { cwd: ws });
     assert.equal(r.code, 2, args.join(" "));
@@ -400,6 +405,8 @@ test("usage errors exit 2; -h exits 0; a missing workspace exits 1", async (t) =
   let r = await sb.run([SCRIPT, "-h"]);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /^runbook list /);
+  assert.match(r.stdout, /^runbook deploy <name> /m);
+  assert.match(r.stdout, /~\/mini-op-projects\/<project>\/<name>\//);
   assert.match(r.stdout, /named by its origin repo/);
   assert.match(r.stdout, /real \.mini-op\/runbooks/);
   assert.match(r.stdout, /starting with \.\s+\(staging\)\s+are\s+ignored/);
@@ -409,4 +416,291 @@ test("usage errors exit 2; -h exits 0; a missing workspace exits 1", async (t) =
   r = await sb.run([SCRIPT, "list"], { cwd: ws });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(lines(r.stdout), pluginRows());
+});
+
+// deploy (FR-213, FR-214, FR-217): the mini is the sandbox's HOME, through a local fake ssh.
+const MINI = path.join(REPO, "ctl/mini");
+const SCRIPTS = { "install.md": book("install"), "install/install-test": "#!/bin/zsh\necho hi\n" };
+
+function onMini(sb: Sandbox, ...parts: string[]): string {
+  return path.join(sb.home, "mini-op-projects", ...parts);
+}
+
+// Every file under dir, relative, to its text.
+function files(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const rel of fs.readdirSync(dir, { recursive: true }) as string[]) {
+    const full = path.join(dir, rel);
+    if (fs.lstatSync(full).isFile()) out[rel] = fs.readFileSync(full, "utf8");
+  }
+  return out;
+}
+
+// A sandbox whose mini already has this copy's ~/apm.
+async function synced(t: Parameters<typeof Sandbox.create>[0]): Promise<Sandbox> {
+  const sb = await Sandbox.create(t);
+  sb.fake("ssh", [{ local: true }]);
+  const r = await sb.run(["zsh", MINI, "sync"]);
+  assert.equal(r.code, 0, r.stderr);
+  return sb;
+}
+
+function scripts(ws: string, project: string, extra: Record<string, string> = {}): string {
+  const dir = snapshot(ws, project, { "install.md": book("install") });
+  runbooks(path.join(dir, "install"), { "install-test": "#!/bin/zsh\necho hi\n", ...extra });
+  fs.chmodSync(path.join(dir, "install/install-test"), 0o755);
+  return dir;
+}
+
+const sshCommands = (sb: Sandbox) => sb.calls("ssh").map((call) => call.argv.at(-1) ?? "");
+
+test("deploy puts a snapshot runbook's scripts in ~/mini-op-projects", async (t) => {
+  const sb = await synced(t);
+  const ws = workspace(sb);
+  const dir = scripts(ws, "ensemble", { "conf/strata.conf": "model = x\n" });
+  const r = await run(sb, ws, "deploy", "install");
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /^mini: in sync at \S+\n/);
+  assert.ok(
+    r.stdout.endsWith(
+      `runbook: deployed ${dir}/install to the mini's ~/mini-op-projects/ensemble/install/\n`,
+    ),
+    r.stdout,
+  );
+  assert.deepEqual(files(onMini(sb, "ensemble/install")), {
+    "install-test": "#!/bin/zsh\necho hi\n",
+    "conf/strata.conf": "model = x\n",
+  });
+  assert.ok(fs.statSync(onMini(sb, "ensemble/install/install-test")).mode & 0o100);
+  assert.deepEqual(fs.readdirSync(onMini(sb, "ensemble")), ["install"]);
+  // The packed archive went to ssh as a file, and its temp dir is gone.
+  assert.match(sb.calls("ssh").at(-1)?.stdin ?? "", /install-test/);
+  assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
+});
+
+test("deploy works for a checkout workspace", async (t) => {
+  const sb = await synced(t);
+  const ws = path.join(sb.dir, "proj-checkout");
+  runbooks(path.join(ws, ".mini-op/runbooks"), SCRIPTS);
+  for (const args of [
+    ["init", "-q"],
+    ["remote", "add", "origin", "https://github.com/o/proj.git"],
+  ]) {
+    const r = await sb.run([...GIT, "-C", ws, ...args]);
+    assert.equal(r.code, 0, r.stderr);
+  }
+  const r = await run(sb, ws, "deploy", "install");
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(files(onMini(sb, "proj/install")), { "install-test": "#!/bin/zsh\necho hi\n" });
+});
+
+test("deploy again replaces; no scripts dir removes; two projects stay apart", async (t) => {
+  const sb = await synced(t);
+  const ws = workspace(sb);
+  const dir = scripts(ws, "alpha", { "old.conf": "1\n" });
+  scripts(ws, "beta");
+  assert.equal((await run(sb, ws, "deploy", "install", "--project", "alpha")).code, 0);
+  assert.equal((await run(sb, ws, "deploy", "install", "--project", "beta")).code, 0);
+  fs.rmSync(path.join(dir, "install/old.conf"));
+  fs.writeFileSync(path.join(dir, "install/install-test"), "#!/bin/zsh\necho v2\n");
+  // The mini's copy is read-only, as tar keeps the snapshot's modes: a redeploy swaps it anyway.
+  fs.chmodSync(onMini(sb, "alpha/install/install-test"), 0o555);
+  fs.chmodSync(onMini(sb, "alpha/install"), 0o555);
+  let r = await run(sb, ws, "deploy", "install", "--project", "alpha");
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(files(onMini(sb, "alpha/install")), { "install-test": "#!/bin/zsh\necho v2\n" });
+  assert.deepEqual(files(onMini(sb, "beta/install")), { "install-test": "#!/bin/zsh\necho hi\n" });
+  assert.deepEqual(fs.readdirSync(onMini(sb, "alpha")), ["install"]);
+  fs.rmSync(path.join(dir, "install"), { recursive: true });
+  r = await run(sb, ws, "deploy", "install", "--project", "alpha");
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(r.stdout.endsWith("runbook: install has no scripts; nothing on the mini\n"), r.stdout);
+  assert.ok(!fs.existsSync(onMini(sb, "alpha/install")));
+  assert.ok(fs.existsSync(onMini(sb, "beta/install/install-test")));
+  r = await run(sb, ws, "deploy", "install", "--project", "alpha");
+  assert.equal(r.code, 0, r.stderr);
+});
+
+test("deploy syncs a stale ~/apm first; a failed sync deploys nothing", async (t) => {
+  const sb = await synced(t);
+  const ws = workspace(sb);
+  scripts(ws, "ensemble");
+  const version = fs.readFileSync(path.join(sb.home, "apm/VERSION"), "utf8");
+  fs.writeFileSync(path.join(sb.home, "apm/VERSION"), `${"0".repeat(40)}\n`);
+  const before = sb.calls("ssh").length;
+  let r = await run(sb, ws, "deploy", "install");
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /^mini: synced mini\/ to the mini's ~\/apm at \S+\n/);
+  assert.equal(fs.readFileSync(path.join(sb.home, "apm/VERSION"), "utf8"), version);
+  const [check, unpack, deploy, ...more] = sshCommands(sb).slice(before);
+  assert.equal(check, "cat ~/apm/VERSION");
+  assert.match(unpack ?? "", /tar -xf - -C ~\/apm\.new/);
+  assert.match(deploy ?? "", /mini-op-projects/);
+  assert.deepEqual(more, []);
+  assert.ok(fs.existsSync(onMini(sb, "ensemble/install/install-test")));
+  // A sync that fails: the mini's home takes no writes.
+  fs.rmSync(onMini(sb), { recursive: true });
+  fs.writeFileSync(path.join(sb.home, "apm/VERSION"), `${"0".repeat(40)}\n`);
+  const calls = sb.calls("ssh").length;
+  fs.chmodSync(sb.home, 0o555);
+  try {
+    r = await run(sb, ws, "deploy", "install");
+  } finally {
+    fs.chmodSync(sb.home, 0o755);
+  }
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /runbook: mini sync failed; deployed nothing\n$/);
+  assert.equal(sb.calls("ssh").length, calls + 2);
+  assert.ok(!fs.existsSync(onMini(sb)));
+});
+
+test("deploy refuses symlinks, FIFOs, sockets and hard links before any ssh", async (t) => {
+  const sb = await Sandbox.create(t);
+  sb.fake("ssh", [{ local: true }]);
+  const ws = workspace(sb);
+  const dir = scripts(ws, "ensemble");
+  const key = path.join(sb.home, ".ssh/id_ed25519");
+  fs.mkdirSync(path.dirname(key), { recursive: true });
+  fs.writeFileSync(key, "not a key\n");
+  const src = path.join(dir, "install");
+  fs.symlinkSync(key, path.join(src, "key"));
+  fs.mkdirSync(path.join(src, "sub"));
+  fs.symlinkSync(path.dirname(key), path.join(src, "sub/dotssh"));
+  fs.linkSync(key, path.join(src, "hard"));
+  for (const [module, code, name] of [
+    ["-MPOSIX", "mkfifo($ARGV[0], 0644) or die", "pipe"],
+    ["-MIO::Socket::UNIX", "IO::Socket::UNIX->new(Local => $ARGV[0], Listen => 1) or die", "sock"],
+  ] as const) {
+    const made = await sb.run(["perl", module, "-e", code, path.join(src, name)]);
+    assert.equal(made.code, 0, made.stderr);
+  }
+  let r = await run(sb, ws, "deploy", "install");
+  assert.equal(r.code, 1);
+  assert.equal(r.stdout, "");
+  assert.deepEqual(
+    lines(r.stderr).sort(),
+    [
+      `runbook: refused ${src}/hard: a hard link`,
+      `runbook: refused ${src}/key: a symlink`,
+      `runbook: refused ${src}/pipe: not a regular file`,
+      `runbook: refused ${src}/sock: not a regular file`,
+      `runbook: refused ${src}/sub/dotssh: a symlink`,
+      "runbook: deployed nothing",
+    ].sort(),
+  );
+  assert.deepEqual(sb.calls("ssh"), []);
+  fs.rmSync(src, { recursive: true });
+  fs.symlinkSync(path.dirname(key), src);
+  r = await run(sb, ws, "deploy", "install");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, `runbook: refused ${src}: a symlink\nrunbook: deployed nothing\n`);
+  fs.rmSync(src);
+  fs.writeFileSync(src, "a file\n");
+  r = await run(sb, ws, "deploy", "install");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, `runbook: refused ${src}: not a directory\nrunbook: deployed nothing\n`);
+  assert.deepEqual(sb.calls("ssh"), []);
+});
+
+test("deploy needs a plain name and a project runbook", async (t) => {
+  const sb = await Sandbox.create(t);
+  sb.fake("ssh", [{ local: true }]);
+  const ws = workspace(sb);
+  scripts(ws, "alpha");
+  let r = await run(sb, ws, "deploy", "../x");
+  assert.equal(r.code, 1);
+  assert.equal(r.stderr, "runbook: not a plain name: ../x\n");
+  for (const name of ["return-mini", "nope"]) {
+    r = await run(sb, ws, "deploy", name);
+    assert.equal(r.code, 1, name);
+    assert.equal(r.stderr, `runbook: no project runbook named ${name}\n`);
+  }
+  scripts(ws, "beta");
+  r = await run(sb, ws, "deploy", "install");
+  assert.equal(r.code, 3);
+  assert.match(r.stderr, /^runbook: several projects \(alpha, beta\)/);
+  assert.deepEqual(sb.calls("ssh"), []);
+});
+
+test("a failed deploy keeps the mini's previous scripts", async (t) => {
+  const sb = await synced(t);
+  const ws = workspace(sb);
+  const dir = scripts(ws, "ensemble");
+  assert.equal((await run(sb, ws, "deploy", "install")).code, 0);
+  fs.writeFileSync(path.join(dir, "install/install-test"), "#!/bin/zsh\necho v2\n");
+  fs.chmodSync(onMini(sb, "ensemble"), 0o555);
+  let r: Awaited<ReturnType<typeof run>>;
+  try {
+    r = await run(sb, ws, "deploy", "install");
+  } finally {
+    fs.chmodSync(onMini(sb, "ensemble"), 0o755);
+  }
+  assert.equal(r.code, 1);
+  assert.match(
+    r.stderr,
+    new RegExp(
+      `runbook: deploying to the mini failed; ~/mini-op-projects/ensemble/install/ unchanged or partly updated\n$`,
+    ),
+  );
+  assert.deepEqual(files(onMini(sb, "ensemble/install")), {
+    "install-test": "#!/bin/zsh\necho hi\n",
+  });
+});
+
+// The archive gains a symlink named <name> (zsh $'…' text) on its way: the mini side must refuse
+// it, naming it printably and only up to a newline, and keep what it had.
+for (const [name, shown] of [
+  ["evil", "install/evil"],
+  ["ev\\033[2Jil", "install/ev?[2Jil"],
+  ["a\\nb", "install/a"],
+] as const) {
+  test(`the mini's re-check refuses a special file in what it received: ${shown}`, async (t) => {
+    const sb = await Sandbox.create(t);
+    sb.fake("ssh", [
+      {
+        shell: `cmd=\${@[-1]}
+case $cmd in
+  *mini-op-projects*.new*) d=$(mktemp -d); tar -xf - -C $d; ln -s /etc/passwd $d/$'${name}'; tar -cf - -C $d . | zsh -c $cmd ;;
+  *) exec zsh -c $cmd ;;
+esac`,
+      },
+    ]);
+    const r0 = await sb.run(["zsh", MINI, "sync"]);
+    assert.equal(r0.code, 0, r0.stderr);
+    const ws = workspace(sb);
+    scripts(ws, "ensemble");
+    const r = await run(sb, ws, "deploy", "install");
+    assert.equal(r.code, 1);
+    const refused = lines(r.stderr).filter((line) => line.startsWith("runbook: the mini refused"));
+    assert.deepEqual(refused, [
+      `runbook: the mini refused ${shown}: not a regular file with one link; deployed nothing`,
+    ]);
+    assert.ok(!r.stderr.includes("\x1b"), JSON.stringify(r.stderr));
+    assert.match(r.stderr, /runbook: deploying to the mini failed;/);
+    assert.deepEqual(fs.readdirSync(onMini(sb, "ensemble")), []);
+  });
+}
+
+test("an unreadable script deploys nothing and keeps the mini's previous scripts", async (t) => {
+  const sb = await synced(t);
+  const ws = workspace(sb);
+  const dir = scripts(ws, "ensemble", { "b.conf": "1\n" });
+  assert.equal((await run(sb, ws, "deploy", "install")).code, 0);
+  const before = files(onMini(sb, "ensemble/install"));
+  const calls = sb.calls("ssh").length;
+  fs.writeFileSync(path.join(dir, "install/install-test"), "#!/bin/zsh\necho v2\n");
+  const src = path.join(dir, "install");
+  const unreadable = path.join(src, "b.conf");
+  fs.chmodSync(unreadable, 0);
+  let r: Awaited<ReturnType<typeof run>>;
+  try {
+    r = await run(sb, ws, "deploy", "install");
+  } finally {
+    fs.chmodSync(unreadable, 0o644);
+  }
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, new RegExp(`runbook: cannot pack ${src}; deployed nothing\n$`));
+  assert.equal(sb.calls("ssh").length, calls);
+  assert.deepEqual(files(onMini(sb, "ensemble/install")), before);
+  assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
 });

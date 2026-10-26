@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -u
+usage="update <checkout>   on this Mac: hand a project's runbooks to mini-op. Copies the checkout's
+.mini-op/runbooks/ (git top of <checkout>) over docker exec's stdin into the workspace volume of
+the direct-use container (labels windroc.lock=mini-op and windroc.lock.owner=mini-op, a volume
+mounted at ~/.mini-op/workspace) as projects/<project>/.mini-op/runbooks/, read-only, beside
+projects/<project>/remote; <project> is the origin repo's name, remote its URL without
+credentials. Handing over again replaces the snapshot. Copies only directories and regular files
+with one link: a symlink, FIFO, socket, device or hard link anywhere under it is refused by name
+and nothing is copied; the container checks the copy again before it replaces the old one. Refuses
+a snapshot of the same name from another remote, no direct-use container (a verifier run's is
+never written) or several. Exits 0, 1 (refused or failed) or 2 (usage error)."
+export LC_ALL=C
+die() {
+  printf 'update: %s\n' "$1" >&2
+  exit 1
+}
+# shown <text>: as is when only name and path characters, else $'…' with every byte octal.
+shown() {
+  case $1 in
+    *[!A-Za-z0-9._/+-]* | '') ;;
+    *)
+      printf '%s' "$1"
+      return
+      ;;
+  esac
+  printf "\$'%s'" "$(printf '%s' "$1" | od -An -v -to1 | tr -s ' \n' '  ' |
+    sed 's/^ //; s/ $//; s/^/\\/; s/ /\\/g')"
+}
+case $#:${1-} in
+  1:-h | 1:--help)
+    printf '%s\n' "$usage"
+    exit 0
+    ;;
+  1:-*) ;;
+  1:?*) checkout=$1 ;;
+esac
+if [ -z "${checkout-}" ]; then
+  echo "update: usage: update <checkout>" >&2
+  exit 2
+fi
+
+top=$(git -C "$checkout" rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ] ||
+  die "$(shown "$checkout") is not a git checkout"
+rb=$top/.mini-op/runbooks
+for dir in "$top/.mini-op" "$rb"; do
+  if [ -L "$dir" ]; then
+    printf 'update: refused %s: a symlink\n' "$(shown "$dir")" >&2
+    die "nothing copied"
+  fi
+  [ -d "$dir" ] || die "$(shown "$top") has no .mini-op/runbooks/"
+done
+
+# The project's name and remote id from origin: no credentials, https and scp forms alike.
+url=$(git -C "$top" remote get-url origin 2>/dev/null) || url=
+u=$url
+while [[ $u == */ ]]; do u=${u%/}; done
+u=${u%.git}
+project=${u##*[/:]}
+plain='^[A-Za-z0-9_][A-Za-z0-9._-]*$'
+[[ -n $url && $project =~ $plain ]] ||
+  die "cannot name the project from $(shown "$top")'s origin remote"
+case $u in
+  *://*)
+    rest=${u#*://}
+    authority=${rest%%/*}
+    remote=${authority##*@}${rest#"$authority"}
+    ;;
+  *)
+    host=${u%%:*}
+    if [[ $u == *:* && $host != */* ]]; then remote=${host##*@}/${u#*:}; else remote=$u; fi
+    ;;
+esac
+
+offenders() { # find predicates, reason
+  local list line
+  list=$(find "$rb" "${@:1:$#-1}" -print) || die "cannot read $(shown "$rb")"
+  [ -n "$list" ] || return 0
+  while IFS= read -r line; do
+    printf 'update: refused %s: %s\n' "$(shown "$line")" "${!#}" >&2
+  done <<<"$list"
+  refused=1
+}
+refused=
+offenders -type l "a symlink"
+offenders ! -type f ! -type d ! -type l "not a regular file"
+offenders -type f -links +1 "a hard link"
+[ -z "$refused" ] || die "nothing copied"
+
+ids=$(docker ps -q --no-trunc --filter label=windroc.lock=mini-op \
+  --filter label=windroc.lock.owner=mini-op) || die "cannot list containers; is Docker running?"
+case $ids in
+  '')
+    die "no direct-use mini-op container (labels windroc.lock=mini-op,\
+ windroc.lock.owner=mini-op); start ensemble's direct-use session mini-op (host/README.md, Hand\
+ over a project)"
+    ;;
+  *$'\n'*) die "several direct-use mini-op containers: ${ids//$'\n'/ }; nothing copied" ;;
+esac
+id=$ids
+ws=$HOME/.mini-op/workspace
+mounts=$(docker inspect -f '{{range .Mounts}}{{.Type}} {{.Destination}}{{"\n"}}{{end}}' "$id") ||
+  die "cannot inspect container $id; nothing copied"
+grep -Fxq "volume $ws" <<<"$mounts" ||
+  die "container $id has no workspace volume at $(shown "$ws"); nothing copied"
+
+tmp=$(mktemp -d) || die "cannot make a temp dir"
+trap 'rm -rf -- "${tmp:?}"' EXIT
+flags=(--no-xattrs)
+[[ $(tar --version) == *bsdtar* ]] && flags+=(--no-mac-metadata)
+COPYFILE_DISABLE=1 tar "${flags[@]}" -cf "$tmp/runbooks.tar" -C "$top" .mini-op/runbooks ||
+  die "cannot pack $(shown "$rb"); nothing copied"
+
+# In the container: refuse another remote's snapshot (exit 3, its remote id on stdout) before
+# reading stdin; unpack into .<p>.new, check it again (exit 4, the first offender), then swap.
+docker exec -i "$id" sh -c 'set -eu
+d=$1/projects/$2 n=$1/projects/.$2.new o=$1/projects/.$2.old
+if [ -e "$d" ] || [ -L "$d" ]; then
+  old=$(cat "$d/remote" 2>/dev/null || true)
+  [ "$old" = "$3" ] || { printf "%s" "$old"; exit 3; }
+fi
+mkdir -p "$1/projects"
+for x in "$n" "$o"; do
+  if [ -e "$x" ]; then chmod -R u+w "$x"; rm -rf "${x:?}"; fi
+done
+mkdir "$n"
+tar -xf - -C "$n"
+bad=$(find "$n" ! -type f ! -type d -print)
+[ -n "$bad" ] || bad=$(find "$n" -type f -links +1 -print)
+if [ -n "$bad" ]; then
+  chmod -R u+w "$n"
+  rm -rf "${n:?}"
+  printf "%s" "${bad%%
+*}"
+  exit 4
+fi
+printf "%s\n" "$3" >"$n/remote"
+chmod -R a-w "$n/.mini-op"
+if [ -L "$d" ]; then rm -f "${d:?}"; elif [ -e "$d" ]; then mv "$d" "$o"; fi
+mv "$n" "$d"
+if [ -e "$o" ]; then chmod -R u+w "$o"; rm -rf "${o:?}"; fi' \
+  update "$ws" "$project" "$remote" <"$tmp/runbooks.tar" >"$tmp/out"
+status=$?
+out=$(cat "$tmp/out")
+case $status in
+  0) ;;
+  3)
+    old='an unknown remote'
+    [ -z "$out" ] || old=$(shown "$out")
+    die "$(shown "$ws/projects/$project") holds a snapshot of $old, not $(shown "$remote");\
+ nothing copied"
+    ;;
+  4) die "the container found $(shown "$out") not a regular file; nothing copied" ;;
+  *) die "copying into container $id failed; the snapshot is unchanged or partly updated" ;;
+esac
+echo "update: $project snapshot in mini-op at $(shown "$ws/projects/$project")"
