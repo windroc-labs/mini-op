@@ -159,6 +159,21 @@ test("sync after an interrupted one keeps the state it had moved aside", async (
   }
 });
 
+// FR-213: a project runbook's deployed scripts live beside ~/apm, never inside it.
+test("sync keeps ~/mini-op-projects", async (t) => {
+  const sb = await Sandbox.create(t);
+  sb.fake("ssh", [{ local: true }]);
+  const script = path.join(sb.home, "mini-op-projects/ensemble/install/install-test");
+  fs.mkdirSync(path.dirname(script), { recursive: true });
+  fs.writeFileSync(script, "#!/bin/zsh\necho ok\n", { mode: 0o755 });
+  for (let round = 0; round < 2; round++) {
+    const r = await sb.run(["zsh", MINI, "sync"]);
+    assert.equal(r.code, 0, r.stderr);
+  }
+  assert.equal(fs.readFileSync(script, "utf8"), "#!/bin/zsh\necho ok\n");
+  assert.deepEqual(fs.readdirSync(path.join(sb.home, "mini-op-projects")), ["ensemble"]);
+});
+
 test("sync only unpacks on the mini: no sudo, no installs", async (t) => {
   const sb = await Sandbox.create(t);
   sb.fake("ssh", [{ local: true }]);
