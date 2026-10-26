@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
-import { containerToRepo, PLUGIN_ROOT, REPO } from "../../lib/repo.ts";
+import { REPO, Sandbox } from "../lib/sandbox.ts";
 
-// /mini-op:run is plugin mini-op's skill run; the image bakes plugin/ under ROOT (FR-209).
-const ROOT = `${PLUGIN_ROOT}/`;
+// One standard skill drives the separately installed runtime.
+const ROOT = "<root>/";
 const read = (file: string) => fs.readFileSync(path.join(REPO, file), "utf8");
-const skill = () => read("plugin/skills/run/SKILL.md");
+const skill = () => read("skills/mini-op/SKILL.md");
 const SECTIONS = [
   "Rules",
   "Driving the mini",
@@ -17,15 +17,13 @@ const SECTIONS = [
   "Gotchas",
 ];
 
-// The version is optional: host/Dockerfile stamps mini-op's commit into the image's copy.
-test("plugin.json names the plugin mini-op with a description; a version is optional", () => {
-  const manifest = JSON.parse(read("plugin/.claude-plugin/plugin.json"));
-  assert.equal(manifest.name, "mini-op");
-  if ("version" in manifest) assert.match(manifest.version, /^\S+$/);
-  assert.match(manifest.description, /\S/);
+test("there is one standalone skill and no plugin manifest", () => {
+  assert.deepEqual(fs.readdirSync(path.join(REPO, "skills")), ["mini-op"]);
+  assert.equal(fs.existsSync(path.join(REPO, "plugin/.claude-plugin/plugin.json")), false);
+  assert.doesNotMatch(skill(), /plugins?\/|mini-op:run|\$ARGUMENTS|allowed-tools:/);
 });
 
-test("SKILL.md's frontmatter names the skill run and describes it", () => {
+test("SKILL.md's frontmatter names the skill mini-op and describes it", () => {
   const front = /^---\n([\s\S]*?)\n---\n/.exec(skill())?.[1];
   assert.ok(front, "no frontmatter");
   const fields = Object.fromEntries(
@@ -34,36 +32,23 @@ test("SKILL.md's frontmatter names the skill run and describes it", () => {
       return [line.slice(0, colon), line.slice(colon + 1).trim()];
     }),
   );
-  assert.equal(fields.name, "run");
+  assert.equal(fields.name, "mini-op");
   assert.match(fields.description ?? "", /\S/);
 });
 
-test("the skill names its rules and tools by absolute plugin-root paths to repo files", () => {
+test("the skill discovers and verifies a separate absolute runtime root", () => {
   const text = skill();
-  for (const named of ["CLAUDE.md", "ctl/mini sync --check", "ctl/mini sync`"]) {
-    assert.ok(text.includes(ROOT + named), `the skill does not name ${ROOT}${named}`);
+  assert.match(text, /command -v mini/);
+  assert.match(text, /Resolve symlinks/);
+  assert.match(text, /ask for the checkout's absolute path and run nothing/);
+  assert.match(text, /quote paths as shell arguments/);
+  assert.match(text, /retain the client's current project directory/);
+  assert.match(text, /separately installed mini-op CLI/);
+  assert.match(text, /never by a bare name/);
+  for (const named of ["ctl/mini", "ctl/runbook", "README.md", "mini/", "runbooks/"]) {
+    assert.ok(text.includes(ROOT + named), named);
+    assert.ok(fs.existsSync(path.join(REPO, named)), named);
   }
-  const paths = [...text.matchAll(/\/opt\/windroc\/plugins\/mini-op\/([\w./-]*)/g)];
-  assert.ok(paths.length > 0);
-  for (const [, rest] of paths) {
-    const file = containerToRepo(ROOT + rest);
-    assert.ok(typeof file === "string", `${ROOT}${rest} is not in the image's plugin root`);
-    const repo = file.replace(/\/$/, "");
-    assert.ok(fs.existsSync(path.join(REPO, repo)), `${ROOT}${rest}: no ${repo} in the repo`);
-  }
-  for (const match of text.matchAll(/(?<![\w.-])(?:\.\.?\/)?(?:ctl|mini|runbooks)\/[\w./-]*/g)) {
-    const before = text.slice(0, match.index);
-    assert.ok(before.endsWith(ROOT), `relative path ${match[0]} in the skill`);
-  }
-});
-
-test("the skill relies on no PATH, working directory or /home/agent", () => {
-  const text = skill();
-  const subs = [...read("ctl/mini").matchAll(/^mini ([a-z][a-z-]*)/gm)].map((m) => m[1]);
-  assert.ok(subs.includes("sync"));
-  const bare = new RegExp(`(?<![\\w/.-])(?:mini (?:${subs.join("|")})\\b|mini-autologin)`, "g");
-  assert.deepEqual([...text.matchAll(bare)].map(String), []);
-  assert.doesNotMatch(text, /\/home\/agent|\bPATH\b|\bcwd\b/);
 });
 
 test("the connectivity runbook is read-only: ssh mini echo ok and mini sync --check only", () => {
@@ -76,12 +61,8 @@ test("the connectivity runbook is read-only: ssh mini echo ok and mini sync --ch
   assert.match(read("ctl/CLAUDE.md"), /^\| [^|]+ \| `runbooks\/check-connection\.md` \|$/m);
 });
 
-test("the plugin has one skill", () => {
-  assert.deepEqual(fs.readdirSync(path.join(REPO, "plugin/skills")), ["run"]);
-});
-
 test("the skill reads CLAUDE.md and the README sections before the lookup", () => {
-  const text = skill();
+  const text = skill().slice(skill().indexOf("\n## Run\n"));
   const readme = read("README.md");
   for (const named of ["CLAUDE.md", "README.md"]) assert.ok(text.includes(ROOT + named), named);
   for (const section of SECTIONS) {
@@ -120,7 +101,7 @@ test("every result names the runbook's source and path", () => {
   const text = skill();
   for (const line of [
     "`Runbook: inline (request)`",
-    "`Runbook: plugin <path>`",
+    "`Runbook: builtin <path>`",
     "`Runbook: project:<name> <path>`",
     "`Runbook: one-off (full text below)`",
   ]) {
@@ -131,30 +112,26 @@ test("every result names the runbook's source and path", () => {
   assert.match(text, /full text in a fenced block/);
 });
 
-test("README lists the plugin's marketplace and requirements, and the runbook lookup", () => {
-  const readme = read("README.md");
-  const row = readme.split("\n").find((line) => line.startsWith("| `plugin/` |")) ?? "";
-  for (const fact of [
-    "marketplace `windroc`",
-    "`windroc-labs/agent-plugins-marketplace`",
-    "access to `windroc/mini-op`",
-    "only in the mini-op image",
+test("README cites the official client skill directories and runtime prerequisites", () => {
+  const text = read("README.md");
+  for (const dir of [
+    "~/.claude/skills/mini-op/",
+    ".claude/skills/mini-op/",
+    "~/.agents/skills/mini-op/",
+    ".agents/skills/mini-op/",
+    "~/.config/opencode/skills/mini-op/",
+    ".opencode/skills/mini-op/",
   ]) {
-    assert.ok(row.includes(fact), `README › Layout's plugin/ row does not say ${fact}`);
+    assert.ok(text.includes("`" + dir + "`"), dir);
   }
-  const scripts = readme.split("\n").find((line) => line.startsWith("| `ctl/runbook ")) ?? "";
-  assert.ok(scripts.includes("`ctl/runbook -h`"), "README › Scripts' ctl/runbook row has no -h");
-  assert.ok(
-    !scripts.includes("<workspace>/projects/"),
-    "the snapshot rules live in ctl/runbook -h",
-  );
-  const deploy = readme.split("\n").find((line) => line.startsWith("| `ctl/runbook deploy ")) ?? "";
-  assert.ok(deploy.includes("details: `ctl/runbook -h`"), "README's deploy row points nowhere");
-  assert.ok(!deploy.includes("~/mini-op-projects"), "deploy's behaviour lives in ctl/runbook -h");
-  assert.ok(
-    !readme.includes("convention, not a sandbox"),
-    "the warning's homes are SKILL.md and host/README.md",
-  );
+  for (const url of [
+    "https://code.claude.com/docs/en/skills",
+    "https://learn.chatgpt.com/docs/build-skills",
+    "https://opencode.ai/docs/skills/",
+  ])
+    assert.ok(text.includes(url), url);
+  assert.match(text, /runtime is a separate prerequisite/);
+  assert.doesNotMatch(text, /\/plugin install|plugins = \["mini-op"\]|mini-op:run/);
 });
 
 // FR-213, FR-214: the toolset is synced, then a project runbook's scripts go to the mini, then it runs.
@@ -181,4 +158,21 @@ test("the skill deploys a project runbook after the sync check and before runnin
   assert.match(step, /~\/mini-op-projects\/<project>\/<name>\//);
   assert.match(step, /unreviewed/);
   assert.match(step, /`~\/apm\/bin\/\*` and `~\/apm\/lib\/\*\.zsh`[^\n]*not enforced/);
+});
+
+test("the documented Codex install copies the standalone skill into a temp HOME", async (t) => {
+  const readme = fs.readFileSync(path.join(REPO, "README.md"), "utf8");
+  const install = /<!-- skill-install -->\s*```sh\n([\s\S]*?)\n```/.exec(readme)?.[1];
+  assert.ok(install, "missing documented skill install");
+  const sb = await Sandbox.create(t);
+  const result = await sb.run(["sh", "-c", install], { cwd: REPO });
+  assert.equal(result.code, 0, result.stderr);
+  const installed = path.join(sb.home, ".agents/skills/mini-op");
+  assert.deepEqual(fs.readdirSync(installed), ["SKILL.md"]);
+  assert.equal(
+    fs.readFileSync(path.join(installed, "SKILL.md"), "utf8"),
+    fs.readFileSync(path.join(REPO, "skills/mini-op/SKILL.md"), "utf8"),
+  );
+  assert.deepEqual(sb.calls(), []);
+  assert.deepEqual(sb.leaks({ consumers: [] }), []);
 });

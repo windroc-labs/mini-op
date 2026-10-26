@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 // Dirs whose files ship to the container, the MacBook or the mini; read-only while CI tests run.
-export const SHIPPED_DIRS = ["ctl", "mini", "host", "plugin"];
+export const SHIPPED_DIRS = ["ctl", "mini", "host", "skills"];
 
 // Dirs whose scripts and program entries each need a test (FR-26): the shipped dirs and CI's own.
 export const TESTED_DIRS = [...SHIPPED_DIRS, ".github", ".githooks"];
@@ -20,25 +20,24 @@ export function apmPath(file: string): string | undefined {
   return file.startsWith("mini/") ? `~/apm/${file.slice("mini/".length)}` : undefined;
 }
 
-// The image's plugin root (host/Dockerfile): plugin/, ctl/, mini/, README.md and runbooks/.
-export const PLUGIN_ROOT = "/opt/windroc/plugins/mini-op";
+// The image's runtime root (host/Dockerfile): skills/, ctl/, mini/, README.md and runbooks/.
+export const RUNTIME_ROOT = "/opt/windroc/mini-op";
 
-// The plugin root's top-level entries the image bakes, each with the repo path it comes from.
+// The runtime root's top-level entries the image bakes, each with the repo path it comes from.
 export const BAKED = new Map([
   ["CLAUDE.md", "ctl/CLAUDE.md"],
   ["README.md", "README.md"],
   ["ctl", "ctl"],
   ["mini", "mini"],
   ["runbooks", "runbooks"],
-  ["skills", "plugin/skills"],
-  [".claude-plugin", "plugin/.claude-plugin"],
+  ["skills", "skills"],
 ]);
 
-// The repo path a plugin-root path names: undefined outside the root, "" for the root itself, null
+// The repo path a runtime-root path names: undefined outside the root, "" for the root itself, null
 // for a path the image does not bake (ctl/CLAUDE.md is moved to the root).
 export function containerToRepo(file: string): string | null | undefined {
-  if (file !== PLUGIN_ROOT && !file.startsWith(`${PLUGIN_ROOT}/`)) return undefined;
-  const rest = file.slice(PLUGIN_ROOT.length + 1);
+  if (file !== RUNTIME_ROOT && !file.startsWith(`${RUNTIME_ROOT}/`)) return undefined;
+  const rest = file.slice(RUNTIME_ROOT.length + 1);
   if (!rest) return "";
   const [top = "", ...below] = rest.split("/");
   const from = BAKED.get(top);

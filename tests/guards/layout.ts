@@ -34,12 +34,10 @@ function problem(file: string, script: () => boolean): string | null {
       return /^[^/]+$/.test(rest) && script() ? null : "ctl/ holds scripts, CLAUDE.md and lib/";
     case "host":
       return /^(proxy\/)?[^/]+$/.test(rest) ? null : "host/ holds its files and proxy/";
-    case "plugin":
-      return /^(\.claude-plugin\/plugin\.json|skills\/[^/]+\/SKILL\.md)$/.test(rest)
-        ? null
-        : "plugin/ holds .claude-plugin/plugin.json and skills/<name>/SKILL.md";
+    case "skills":
+      return /^[^/]+\/SKILL\.md$/.test(rest) ? null : "skills/ holds <name>/SKILL.md";
     default:
-      return `${top}/ is not a layout dir (mini/, ctl/, host/, plugin/, runbooks/, tests/)`;
+      return `${top}/ is not a layout dir (mini/, ctl/, host/, skills/, runbooks/, tests/)`;
   }
 }
 

@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
 import { dockerfileProblems } from "../lib/image.ts";
-import { fromRoot, isShipped, PLUGIN_ROOT, SAMPLES_DIR } from "../lib/repo.ts";
+import { fromRoot, isShipped, RUNTIME_ROOT, SAMPLES_DIR } from "../lib/repo.ts";
 import { REPO } from "../lib/sandbox.ts";
 
 const TEXT = fs.readFileSync(path.join(REPO, "host/Dockerfile"), "utf8");
@@ -68,11 +68,11 @@ test("nothing is copied or written under /home/agent: the volume hides it", () =
   assert.doesNotMatch(TEXT, /\/home\/|~\//);
 });
 
-test("the plugin root holds plugin/, ctl/, mini/, README.md and runbooks/, never status.md", () => {
-  const root = `${PLUGIN_ROOT}/`;
+test("the runtime root holds skills/, ctl/, mini/, README.md and runbooks/, never status.md", () => {
+  const root = `${RUNTIME_ROOT}/`;
   assert.deepEqual(lines(image?.text ?? "", "COPY"), [
     "host/claude-code.asc /etc/apt/keyrings/claude-code.asc",
-    `plugin/ ${root}`,
+    `skills/ ${root}skills/`,
     `ctl/ ${root}ctl/`,
     `mini/ ${root}mini/`,
     `runbooks/ ${root}runbooks/`,
@@ -86,15 +86,11 @@ test("the plugin root holds plugin/, ctl/, mini/, README.md and runbooks/, never
   assert.match(run, /chmod -R a\+rX,go-w /);
 });
 
-test("MINI_OP_VERSION is required and stamps mini/VERSION, plugin.json and the label", () => {
+test("MINI_OP_VERSION is required and stamps mini/VERSION and the label", () => {
   assert.match(TEXT, /^ARG MINI_OP_VERSION$/m);
   const run = image?.text ?? "";
   assert.match(run, /test -n "\$\{MINI_OP_VERSION-\}"/);
   assert.match(run, /printf '%s\\n' "\$MINI_OP_VERSION" > mini\/VERSION;/);
-  assert.match(
-    run,
-    /jq --arg v "\$MINI_OP_VERSION" '\.version = \$v' \.claude-plugin\/plugin\.json /,
-  );
   assert.deepEqual(lines(TEXT, "LABEL"), ["mini-op.version=$MINI_OP_VERSION"]);
 });
 
@@ -104,15 +100,19 @@ test("every label key starts mini-op., none windroc. or ensemble. (FR-42)", () =
   for (const [, key] of keys) assert.match(key ?? "", /^mini-op\./);
 });
 
-test("PATH starts with the plugin root's ctl/, mini/ stays off it, and the plugin dir is set", () => {
+test("PATH starts with the runtime root's ctl/ is on PATH and the standalone skill uses the managed skills directory", () => {
   const entries = /\sPATH=(\S+)/.exec(TEXT)?.[1]?.split(":") ?? [];
-  assert.equal(entries[0], `${PLUGIN_ROOT}/ctl`);
+  assert.equal(entries[0], `${RUNTIME_ROOT}/ctl`);
   assert.deepEqual(
-    entries.filter((dir) => dir.startsWith(PLUGIN_ROOT)),
-    [`${PLUGIN_ROOT}/ctl`],
+    entries.filter((dir) => dir.startsWith(RUNTIME_ROOT)),
+    [`${RUNTIME_ROOT}/ctl`],
   );
-  assert.match(TEXT, new RegExp(`\\sCLAUDE_CODE_PLUGIN_DIRS=${PLUGIN_ROOT}\\s`));
-  assert.deepEqual(lines(TEXT, "WORKDIR"), [PLUGIN_ROOT]);
+  assert.doesNotMatch(TEXT, /CLAUDE_CODE_PLUGIN_DIRS|plugin\.json/);
+  assert.match(
+    TEXT,
+    /ln -s \/opt\/windroc\/mini-op\/skills\/mini-op \/etc\/claude-code\/skills\/mini-op/,
+  );
+  assert.deepEqual(lines(TEXT, "WORKDIR"), [RUNTIME_ROOT]);
 });
 
 test("the last stage, env, adds the mini's ssh config and host keys from the generated context; image has none", () => {
@@ -136,8 +136,8 @@ test("Dockerfile.dockerignore lets in only what the image takes", () => {
     "!host/claude-code.asc",
     "!host/ssh_config.*",
     "!mini",
-    "!plugin",
     "!runbooks",
+    "!skills",
   ]);
   for (const excluded of ["mini/VERSION", "**/node_modules", "**/.tools"]) {
     assert.ok(rules.indexOf(excluded) > rules.indexOf("!mini"), excluded);

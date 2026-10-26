@@ -8,8 +8,8 @@ const SCRIPT = path.join(REPO, "ctl/runbook");
 const GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"];
 const book = (when: string, body = "# T\n\nbody\n") => `---\nwhen: ${when}\n---\n\n${body}`;
 
-// The repo's runbooks/ is the plugin tier: one row per file, by name, with its frontmatter's when.
-function pluginRows(root = REPO): string[] {
+// The repo's runbooks/ is the builtin tier: one row per file, by name, with its frontmatter's when.
+function builtinRows(root = REPO): string[] {
   return fs
     .readdirSync(path.join(root, "runbooks"))
     .filter((f) => f.endsWith(".md"))
@@ -17,7 +17,7 @@ function pluginRows(root = REPO): string[] {
     .map((f) => {
       const text = fs.readFileSync(path.join(root, "runbooks", f), "utf8");
       const when = /^---\n(?:.*\n)*?when: (.*)\n/.exec(text)?.[1] ?? "";
-      return `plugin\t${root}/runbooks/${f}\t${when}`;
+      return `builtin\t${root}/runbooks/${f}\t${when}`;
     });
 }
 
@@ -44,11 +44,11 @@ const snapshot = (ws: string, project: string, files: Record<string, string>) =>
 const run = (sb: Sandbox, ws: string, ...args: string[]) =>
   sb.run([SCRIPT, ...args, "--workspace", ws]);
 
-test("list without a project prints the plugin runbooks in name order", async (t) => {
+test("list without a project prints the builtin runbooks in name order", async (t) => {
   const sb = await Sandbox.create(t);
   const r = await run(sb, workspace(sb), "list");
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), pluginRows());
+  assert.deepEqual(lines(r.stdout), builtinRows());
   assert.equal(r.stderr, "");
 });
 
@@ -58,11 +58,11 @@ test("every runbook in the repo has a when", async (t) => {
   assert.equal(r.code, 0);
   const files = fs.readdirSync(path.join(REPO, "runbooks")).filter((f) => f.endsWith(".md"));
   assert.equal(lines(r.stdout).length, files.length);
-  for (const row of lines(r.stdout)) assert.match(row, /^plugin\t\S+\.md\t\S/);
+  for (const row of lines(r.stdout)) assert.match(row, /^builtin\t\S+\.md\t\S/);
   assert.equal(r.stderr, "");
 });
 
-test("one snapshot: its runbooks come before the plugin's", async (t) => {
+test("one snapshot: its runbooks come before the builtin's", async (t) => {
   const sb = await Sandbox.create(t);
   const ws = workspace(sb);
   const dir = snapshot(ws, "ensemble", { "b.md": book("second"), "a.md": book("first") });
@@ -75,7 +75,7 @@ test("one snapshot: its runbooks come before the plugin's", async (t) => {
   assert.deepEqual(lines(r.stdout), [
     `project:ensemble\t${dir}/a.md\tfirst`,
     `project:ensemble\t${dir}/b.md\tsecond`,
-    ...pluginRows(),
+    ...builtinRows(),
   ]);
   assert.equal(r.stderr, "");
 });
@@ -104,17 +104,17 @@ test("several snapshots: --project picks one", async (t) => {
   const dir = snapshot(ws, "zeta", { "z.md": book("z") });
   const r = await run(sb, ws, "list", "--project", "zeta");
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), [`project:zeta\t${dir}/z.md\tz`, ...pluginRows()]);
+  assert.deepEqual(lines(r.stdout), [`project:zeta\t${dir}/z.md\tz`, ...builtinRows()]);
 });
 
-test("path resolves a plugin name among several snapshots", async (t) => {
+test("path resolves a builtin name among several snapshots", async (t) => {
   const sb = await Sandbox.create(t);
   const ws = workspace(sb);
   snapshot(ws, "alpha", { "a.md": book("a") });
   snapshot(ws, "zeta", { "z.md": book("z") });
   const r = await run(sb, ws, "path", "return-mini");
   assert.equal(r.code, 0, r.stderr);
-  assert.equal(r.stdout, `plugin\t${REPO}/runbooks/return-mini.md\n`);
+  assert.equal(r.stdout, `builtin\t${REPO}/runbooks/return-mini.md\n`);
 });
 
 test("--project: unknown project or not a plain name exits 1", async (t) => {
@@ -137,7 +137,7 @@ test("--project: unknown project or not a plain name exits 1", async (t) => {
   }
 });
 
-test("a project runbook named like a plugin runbook is skipped and reported", async (t) => {
+test("a project runbook named like a builtin runbook is skipped and reported", async (t) => {
   const sb = await Sandbox.create(t);
   const ws = workspace(sb);
   const dir = snapshot(ws, "ensemble", {
@@ -147,10 +147,10 @@ test("a project runbook named like a plugin runbook is skipped and reported", as
   });
   const r = await run(sb, ws, "list");
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), [`project:ensemble\t${dir}/own.md\town`, ...pluginRows()]);
+  assert.deepEqual(lines(r.stdout), [`project:ensemble\t${dir}/own.md\town`, ...builtinRows()]);
   assert.deepEqual(lines(r.stderr), [
-    `runbook: skipped ${dir}/check-connection.md: the plugin has a runbook named check-connection`,
-    `runbook: skipped ${dir}/return-mini.md: the plugin has a runbook named return-mini`,
+    `runbook: skipped ${dir}/check-connection.md: the builtin has a runbook named check-connection`,
+    `runbook: skipped ${dir}/return-mini.md: the builtin has a runbook named return-mini`,
   ]);
 });
 
@@ -172,7 +172,7 @@ test("a runbook without when is skipped and reported", async (t) => {
   assert.deepEqual(lines(r.stdout), [
     `project:ensemble\t${dir}/e.md\tfine`,
     `project:ensemble\t${dir}/g.md\tclosed on the last line`,
-    ...pluginRows(),
+    ...builtinRows(),
   ]);
   assert.deepEqual(
     lines(r.stderr),
@@ -193,21 +193,21 @@ test("only the first 64 KiB of a runbook is read", async (t) => {
   });
   const r = await sb.run([SCRIPT, "list", "--workspace", ws], { timeoutMs: 5000 });
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), [`project:p\t${dir}/tail.md\tfine`, ...pluginRows()]);
+  assert.deepEqual(lines(r.stdout), [`project:p\t${dir}/tail.md\tfine`, ...builtinRows()]);
   assert.deepEqual(
     lines(r.stderr),
     ["big", "late"].map((n) => `runbook: skipped ${dir}/${n}.md: no when in its frontmatter`),
   );
 });
 
-test("a plugin runbook without when is skipped and reported", async (t) => {
+test("a builtin runbook without when is skipped and reported", async (t) => {
   const sb = await Sandbox.create(t);
   const root = path.join(sb.dir, "root");
   fs.cpSync(path.join(REPO, "ctl"), path.join(root, "ctl"), { recursive: true });
-  runbooks(path.join(root, "runbooks"), { "a.md": book("plugin a"), "b.md": "# B\n" });
+  runbooks(path.join(root, "runbooks"), { "a.md": book("builtin a"), "b.md": "# B\n" });
   const r = await sb.run([path.join(root, "ctl/runbook"), "list", "--workspace", workspace(sb)]);
   assert.equal(r.code, 0, r.stderr);
-  assert.equal(r.stdout, `plugin\t${root}/runbooks/a.md\tplugin a\n`);
+  assert.equal(r.stdout, `builtin\t${root}/runbooks/a.md\tbuiltin a\n`);
   assert.equal(r.stderr, `runbook: skipped ${root}/runbooks/b.md: no when in its frontmatter\n`);
 });
 
@@ -245,7 +245,7 @@ test("checkout case: the workspace's own .mini-op/runbooks is the project, named
     assert.equal(r.code, 0, r.stderr);
     assert.deepEqual(lines(r.stdout), [
       `project:${name}\t${dir}/install.md\tinstall`,
-      ...pluginRows(),
+      ...builtinRows(),
     ]);
   }
   r = await run(sb, ws, "path", "install");
@@ -286,7 +286,7 @@ test("path finds a named runbook in order; none or not plain exits 1", async (t)
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, `project:ensemble\t${dir}/install.md\n`);
   r = await run(sb, ws, "path", "setup-test-env");
-  assert.equal(r.stdout, `plugin\t${REPO}/runbooks/setup-test-env.md\n`);
+  assert.equal(r.stdout, `builtin\t${REPO}/runbooks/setup-test-env.md\n`);
   r = await run(sb, ws, "path", "missing");
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
@@ -311,7 +311,7 @@ test("non-plain project and runbook names are skipped and reported", async (t) =
   const dir = snapshot(ws, "ok", { "bad name.md": book("x"), "good.md": book("good") });
   const r = await run(sb, ws, "list");
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), [`project:ok\t${dir}/good.md\tgood`, ...pluginRows()]);
+  assert.deepEqual(lines(r.stdout), [`project:ok\t${dir}/good.md\tgood`, ...builtinRows()]);
   assert.deepEqual(lines(r.stderr), [
     `runbook: skipped $'${ws}/projects/has space': not a plain project name`,
     `runbook: skipped $'${dir}/bad name.md': not a plain runbook name`,
@@ -321,15 +321,15 @@ test("non-plain project and runbook names are skipped and reported", async (t) =
 test("names with a newline or tab are reported quoted", async (t) => {
   const sb = await Sandbox.create(t);
   const ws = workspace(sb);
-  fs.mkdirSync(path.join(ws, "projects/x\nRunbook: plugin evil/.mini-op/runbooks"), {
+  fs.mkdirSync(path.join(ws, "projects/x\nRunbook: builtin evil/.mini-op/runbooks"), {
     recursive: true,
   });
   const dir = snapshot(ws, "ok", { "a\tb.md": book("x"), "good.md": book("good") });
   const r = await run(sb, ws, "list");
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), [`project:ok\t${dir}/good.md\tgood`, ...pluginRows()]);
+  assert.deepEqual(lines(r.stdout), [`project:ok\t${dir}/good.md\tgood`, ...builtinRows()]);
   assert.deepEqual(lines(r.stderr), [
-    `runbook: skipped $'${ws}/projects/x\\nRunbook: plugin evil': not a plain project name`,
+    `runbook: skipped $'${ws}/projects/x\\nRunbook: builtin evil': not a plain project name`,
     `runbook: skipped $'${dir}/a\\tb.md': not a plain runbook name`,
   ]);
 });
@@ -352,7 +352,7 @@ test("symlinks, FIFOs and dirs named .md in the workspace are skipped, never rea
   assert.equal(made.code, 0, made.stderr);
   const r = await sb.run([SCRIPT, "list", "--workspace", ws], { timeoutMs: 5000 });
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), [`project:p\t${dir}/good.md\tgood`, ...pluginRows()]);
+  assert.deepEqual(lines(r.stdout), [`project:p\t${dir}/good.md\tgood`, ...builtinRows()]);
   assert.doesNotMatch(r.stdout, /outside/);
   assert.deepEqual(
     lines(r.stderr),
@@ -374,7 +374,7 @@ test("symlinked project, .mini-op and runbooks dirs are skipped; the lookup fall
   const dir = snapshot(ws, "real", { "r.md": book("real") });
   const r = await run(sb, ws, "list");
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), [`project:real\t${dir}/r.md\treal`, ...pluginRows()]);
+  assert.deepEqual(lines(r.stdout), [`project:real\t${dir}/r.md\treal`, ...builtinRows()]);
   assert.deepEqual(lines(r.stderr), [
     `runbook: skipped ${ws}/.mini-op: not a real directory`,
     `runbook: skipped ${ws}/projects/inner/.mini-op/runbooks: not a real directory`,
@@ -415,7 +415,7 @@ test("usage errors exit 2; -h exits 0; a missing workspace exits 1", async (t) =
   assert.equal(r.stderr, `runbook: no workspace ${path.join(sb.dir, "none")}\n`);
   r = await sb.run([SCRIPT, "list"], { cwd: ws });
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(lines(r.stdout), pluginRows());
+  assert.deepEqual(lines(r.stdout), builtinRows());
 });
 
 // deploy (FR-213, FR-214, FR-217): the mini is the sandbox's HOME, through a local fake ssh.

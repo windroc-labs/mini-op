@@ -5,7 +5,7 @@
 !runbooks
 !ctl
 !mini
-!plugin
+!skills
 !host/claude-code.asc
 !host/ssh_config.*
 mini/VERSION
