@@ -212,7 +212,6 @@ test("a checkout's commit is the stamp; untracked files the image does not take 
       `MINI_OP_VERSION=${stamp}`,
     ]);
     assert.equal(build.at(-1), copy);
-
   }
 });
 

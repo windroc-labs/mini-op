@@ -387,9 +387,18 @@ export class Sandbox {
     if (!value || !inside(this.dir, value)) throw bad;
     // Every entry of the dir scripts will read must stay inside too: no links out to real secrets.
     if (fs.existsSync(value) && fs.statSync(value).isDirectory()) {
-      for (const entry of fs.readdirSync(value)) {
-        if (!inside(this.dir, path.join(value, entry))) throw bad;
-      }
+      const visited = new Set<string>();
+      const visit = (dir: string): void => {
+        const resolved = fs.realpathSync(dir);
+        if (visited.has(resolved)) return;
+        visited.add(resolved);
+        for (const entry of fs.readdirSync(dir)) {
+          const file = path.join(dir, entry);
+          if (!inside(this.dir, file)) throw bad;
+          if (fs.statSync(file).isDirectory()) visit(file);
+        }
+      };
+      visit(value);
     }
   }
 

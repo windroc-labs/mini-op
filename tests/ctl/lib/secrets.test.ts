@@ -62,7 +62,10 @@ test("an empty environment file fails naming it, with no fallback", async (t) =>
   const r = await pick(sb);
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
-  assert.equal(r.stderr, `mini: pw: ${file} is missing, empty or unreadable; ${IMPORT}; typed nothing\n`);
+  assert.equal(
+    r.stderr,
+    `mini: pw: ${file} is missing, empty or unreadable; ${IMPORT}; typed nothing\n`,
+  );
 });
 
 test("no ctl/ script builds a password path from the account name", () => {

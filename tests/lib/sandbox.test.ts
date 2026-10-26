@@ -56,6 +56,24 @@ test("env holds only the sandbox variables", async (t) => {
   assert.deepEqual(keys.sort(), expected.sort());
 });
 
+test("nested secret links cannot escape into another sandbox", async (t) => {
+  const sb = await Sandbox.create(t);
+  const other = await Sandbox.create(t);
+  fs.rmSync(sb.passwordFile);
+  fs.symlinkSync(other.passwordFile, sb.passwordFile);
+  await assert.rejects(
+    sb.run(["sh", "-c", 'cat "$MINI_OP_SECRETS_DIR/env/mini-password"']),
+    /must point inside/,
+  );
+});
+
+test("a nested directory link inside the sandbox can be checked without looping", async (t) => {
+  const sb = await Sandbox.create(t);
+  fs.symlinkSync(sb.secrets, path.join(sb.secrets, "env/back"));
+  const r = await sb.run(["true"]);
+  assert.equal(r.code, 0);
+});
+
 test("the override variable must be set and point inside the sandbox", async (t) => {
   const sb = await Sandbox.create(t);
   const outside = path.dirname(sb.dir);
