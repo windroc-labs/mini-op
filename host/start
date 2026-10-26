@@ -1,21 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage="start   run host/config (exits 1 before anything else when it fails), stamp this checkout
-(its commit, -dirty when anything is uncommitted; not a git checkout, or untracked or ignored
-files the build takes under ctl/, mini/, runbooks/ or skills/: exits 1 before any build), take the
-mini's pinned host key from ~/.mini-op/known_hosts (none: exits 1 before any build), build image
-mini-op:env from the repo root (host/Dockerfile: skills/, ctl/, mini/, README.md and runbooks/ in
-the runtime root /opt/windroc/mini-op, versioned with the stamp; the generated
-~/.mini-op/ssh_config as its ssh config and that host key as the only one its ssh trusts) and the
-proxy image mini-op-proxy:v0.1.0 (proxy/, with the generated ~/.mini-op/proxy/ files as its config,
-labelled with their policy hash), make the internal network mini-op-net if missing, check both
-images (claude runs; the proxy loads its config and keeps running), then (re)create container
-mini-op-proxy (default bridge + mini-op-net) and container mini-op (mini-op-net only, so the proxy
-is its only way out), make agent's ssh key if the home volume has none (prints its public key), and
-set promptSuggestionEnabled false in agent's ~/.claude/settings.json, keeping its other keys. No
-host path is mounted; agent's home is the named volume mini-op-home; /run/secrets is an empty
-tmpfs. Exits 0, 1 (a step failed; a failed build or check leaves the existing containers as they
-were) or 2 (usage error)."
+usage="start   refuse legacy resources (host/README.md, 从旧版升级), run host/config, stamp this
+checkout and build mini-op:env with the host key from ~/.mini-op/known_hosts. Refuses untracked
+or ignored runtime files and missing confirmed keys before any build. Open session mini-op via
+ensemble-delegate, environment mini-op, client claude, cwd ~/.mini-op/workspace (created if absent).
+Exits 0, 1 (preflight/build failure), 2 (usage/configuration) or 75 (broker lock busy); delegate
+status and stderr pass through unchanged. No containers or networks are created here."
 if [ $# -eq 1 ] && [ "$1" = -h ]; then
   printf '%s\n' "$usage"
   exit 0
@@ -27,9 +17,23 @@ fi
 trap 'echo "start: failed (exit $?): $BASH_COMMAND" >&2; exit 1' ERR
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(dirname "$here")
-if ! "$here/config" >/dev/null || ! policy=$("$here/config" policy-hash); then
-  echo "start: host/config failed; nothing built or changed" >&2
+fail() {
+  echo "start: $*" >&2
   exit 1
+}
+# Read-only migration guard, before even generating configuration. The suffixes describe the
+# retired resources; no old lifecycle code remains.
+name=mini-op
+docker info >/dev/null || fail "cannot contact Docker; nothing built"
+containers=$(docker ps -a --format '{{.Names}}') || fail "cannot list containers; nothing built"
+networks=$(docker network ls --format '{{.Name}}') || fail "cannot list networks; nothing built"
+volumes=$(docker volume ls --format '{{.Name}}') || fail "cannot list volumes; nothing built"
+if grep -Fxq "$name" <<<"$containers" || grep -Fxq "$name-proxy" <<<"$containers" ||
+  grep -Fxq "$name-net" <<<"$networks" || grep -Fxq "$name-home" <<<"$volumes"; then
+  fail "legacy resources exist; see host/README.md, 从旧版升级; nothing built"
+fi
+if ! "$here/config" >/dev/null; then
+  fail "host/config failed; nothing built or changed"
 fi
 # shellcheck source=/dev/null
 . "$repo/ctl/lib/version.sh"
@@ -64,77 +68,14 @@ trap 'rm -rf -- "${context:?}"' EXIT
 cp "$HOME/.mini-op/ssh_config" "$context/ssh_config"
 printf '%s\n' "$keys" >"$context/known_hosts"
 
-uid=$(sed -n 's/^ARG AGENT_UID=//p' "$here/Dockerfile")
 image=mini-op:env
-net=mini-op-net
-proxy=mini-op-proxy
-proxy_image=mini-op-proxy:v0.1.0
-proxy_url=http://$proxy:4750
-no_proxy=localhost,127.0.0.1,::1
-
-# An existing network of that name must be internal (no gateway out), or mini-op would not be
-# isolated.
-if internal=$(docker network inspect -f '{{.Internal}}' "$net" 2>/dev/null); then
-  if [[ $internal != true ]]; then
-    echo "start: network $net exists but is not internal;" \
-      "remove it (docker network rm $net) and rerun" >&2
-    exit 1
-  fi
-else
-  docker network create --internal "$net" >/dev/null
-fi
-
-fail() {
-  echo "start: $*; existing containers left as they were" >&2
-  exit 1
-}
 docker build -q -t "$image" -f "$here/Dockerfile" --build-arg "MINI_OP_VERSION=$stamp" \
   --build-context "mini=$context" "$repo" >/dev/null || fail "building $image failed"
-docker build -q -t "$proxy_image" --label "mini-op.proxy-policy=$policy" \
-  --build-context "generated=$HOME/.mini-op/proxy" "$here/proxy" >/dev/null ||
-  fail "building $proxy_image failed"
-docker run --rm --network none "$image" claude --version >/dev/null ||
-  fail "claude does not run in $image"
-
-# smokescreen has no config-check flag; it exits at once when it can't load its config or ACL. Run
-# the image offline and require it still running after 2s.
-check=$proxy-check
-docker rm -f "$check" >/dev/null 2>&1 || true
-docker run -d --name "$check" --network none \
-  --cap-drop ALL --security-opt no-new-privileges --read-only \
-  "$proxy_image" >/dev/null || fail "could not run $check"
-sleep 2
-if [[ $(docker inspect -f '{{.State.Running}}' "$check" 2>/dev/null) != true ]]; then
-  echo "start: $proxy_image exited in $check; existing containers left as they were; its log:" >&2
-  docker logs "$check" >&2 || true
-  docker rm -f "$check" >/dev/null 2>&1 || true
-  exit 1
-fi
-docker rm -f "$check" >/dev/null 2>&1 || true
-
-docker rm -f mini-op >/dev/null 2>&1 || true
-docker rm -f "$proxy" >/dev/null 2>&1 || true
-docker run -d --name "$proxy" --hostname "$proxy" --restart unless-stopped \
-  --cap-drop ALL --security-opt no-new-privileges --read-only \
-  --network bridge \
-  "$proxy_image" >/dev/null
-docker network connect "$net" "$proxy"
-docker run -d --name mini-op --hostname mini-op --init --restart unless-stopped \
-  --cap-drop ALL --security-opt no-new-privileges \
-  --network "$net" \
-  -e HTTPS_PROXY="$proxy_url" -e HTTP_PROXY="$proxy_url" \
-  -e https_proxy="$proxy_url" -e http_proxy="$proxy_url" \
-  -e NO_PROXY="$no_proxy" -e no_proxy="$no_proxy" -e NODE_USE_ENV_PROXY=1 \
-  --mount type=volume,src=mini-op-home,dst=/home/agent \
-  --tmpfs "/run/secrets:size=64k,mode=0700,uid=$uid,gid=$uid" \
-  "$image" >/dev/null
-
-docker exec mini-op sh -c 'mkdir -p ~/.claude && f=~/.claude/settings.json &&
-  { test -s "$f" || echo "{}" > "$f"; } &&
-  jq ".promptSuggestionEnabled = false" "$f" > "$f.tmp" && mv "$f.tmp" "$f"'
-docker exec mini-op sh -c 'mkdir -p -m 700 ~/.ssh &&
-  { test -f ~/.ssh/id_ed25519 ||
-    ssh-keygen -q -t ed25519 -N "" -C "mini-op container" -f ~/.ssh/id_ed25519; }'
-echo "mini-op running from $image ($stamp) on $net, out only via $proxy ($proxy_image);" \
-  "agent's public key:"
-docker exec mini-op cat /home/agent/.ssh/id_ed25519.pub
+mkdir -p "$HOME/.mini-op/workspace"
+# WDRC-229: broker variant builds currently need world-readable build files. Only this call
+# uses 022; the mini context above stays private. Capture status so ERR never rewrites it.
+umask 022
+rc=0
+ensemble-delegate open mini-op --environment mini-op --client claude \
+  --cwd "$HOME/.mini-op/workspace" || rc=$?
+exit "$rc"
