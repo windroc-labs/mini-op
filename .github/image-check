@@ -104,7 +104,7 @@ smoke() {
     printf '%-40s | %s\n' "$1" "$2"
     [[ $2 == PASS ]] || failed=1
   }
-  in_image() { docker container run --rm --network none "$tag" "$@" 2>/dev/null; }
+  in_image() { docker run --rm --network none "$tag" "$@" 2>/dev/null; }
   in_image claude --version >/dev/null && r=PASS || r=FAIL
   row "claude --version" "$r"
   in_image sh -c '! command -v python3' >/dev/null && r=PASS || r=FAIL
@@ -131,7 +131,7 @@ smoke() {
   row "no windroc./ensemble. label" "$r"
   out=$(in_image find /home/agent -mindepth 1) && [[ -z $out ]] && r=PASS || r=FAIL
   row "/home/agent is empty" "$r"
-  docker container run --rm --network none -e "PATH=$ensemble_path" -w /tmp "$tag" \
+  docker run --rm --network none -e "PATH=$ensemble_path" -w /tmp "$tag" \
     "$root/ctl/mini" -h \
     >/dev/null 2>&1 && r=PASS || r=FAIL
   row "ctl/mini -h, ensemble PATH, cwd /tmp" "$r"

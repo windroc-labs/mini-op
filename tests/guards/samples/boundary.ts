@@ -23,7 +23,7 @@ export const clean = {
     "AS",
     "",
   ].join("\n"),
-  "host/start": "#!/usr/bin/env bash\ndocker container run --security-opt no-new-privileges x\n",
+  "host/start": "#!/usr/bin/env bash\ndocker run --security-opt no-new-privileges x\n",
   "README.md":
     "`scp -r mini/* mini:apm/`, `scp -F host/ssh_config -r mini/* mini:apm/`, `scp mini:/tmp/s.png .`\n",
   "ctl/CLAUDE.md": "`scp -r /opt/windroc/mini-op/mini/* mini:apm/`\n",

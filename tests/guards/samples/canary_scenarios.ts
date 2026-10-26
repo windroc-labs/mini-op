@@ -16,7 +16,7 @@ const scripts = {
     `Store: \`ssh mini '~/apm/bin/e s a' < ${dir}/alice\`.`,
     "",
   ].join("\n"),
-  "host/start": `#!/usr/bin/env bash\ndocker container run --tmpfs "${dir}:size=64k" x\n`,
+  "host/start": `#!/usr/bin/env bash\ndocker run --tmpfs "${dir}:size=64k" x\n`,
   "ctl/lib/secrets.zsh": `secrets_dir() { print -r -- "\${MINI_OP_SECRETS_DIR:-${dir}}"; }\n`,
   "mini/bin/f": "#!/bin/zsh\n# reads nothing\nprint ok | ssh mini x\n",
   "mini/lib/keychain.zsh": 'keychain_read() { security find-generic-password -s "$1" -w; }\n',

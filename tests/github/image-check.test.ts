@@ -10,7 +10,7 @@ import { steps, type Job } from "../lib/workflows.ts";
 const CHECK = path.join(REPO, ".github/image-check");
 const TAG = "mini-op-image-check";
 const HISTORY = ["history", "--no-trunc", "--format", "{{.CreatedBy}}", TAG];
-const IN = ["container", "run", "--rm", "--network", "none", TAG];
+const IN = ["run", "--rm", "--network", "none", TAG];
 const LABELS = [
   "image",
   "inspect",
@@ -24,7 +24,6 @@ const ENSEMBLE_PATH = [
   ...["usr/local/bin", "usr/bin", "bin"].map((dir) => "/" + dir),
 ].join(":");
 const MINI_H = [
-  "container",
   "run",
   "--rm",
   "--network",
@@ -350,7 +349,7 @@ test("smoke: an image meeting every check passes, each row from a container with
   for (const call of calls) {
     assert.ok(
       call.argv[0] === "image" ||
-        call.argv.slice(0, 5).join(" ") === "container run --rm --network none",
+        call.argv.slice(0, 4).join(" ") === "run --rm --network none",
     );
   }
 });
