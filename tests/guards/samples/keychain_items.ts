@@ -16,7 +16,7 @@ const status = [
 
 export const violation = {
   "status.md": status,
-  "mini/runbooks/setup/lq": [
+  "mini/bin/lq": [
     "#!/usr/bin/env zsh",
     "keychain_read ensemble-test-linear-key other | curl -H @- u",
     "keychain_has ensemble-old x || exit 1",
@@ -27,14 +27,14 @@ export const violation = {
     "# Setup",
     "",
     "Then `keychain_read strata-api-key strata | ~/apm/bin/ans 120`.",
-    "Store it: `~/apm/runbooks/setup-test-env/storekey ensemble-test-x a@b.c`.",
+    "Check it: `keychain_has ensemble-test-x a@b.c`.",
     "",
   ].join("\n"),
 };
 
 export const clean = {
   "status.md": status,
-  "mini/runbooks/setup/lq": [
+  "mini/bin/lq": [
     "#!/usr/bin/env zsh",
     "keychain_read ensemble-test-linear-key ensemble-test | curl -H @- u",
     'keychain_read "$s" "$a" | sed x',
@@ -46,7 +46,7 @@ export const clean = {
     "# Setup",
     "",
     "Then `keychain_read ensemble-test-github | ~/apm/bin/secfield s '#pw'`.",
-    "Store it: `~/apm/runbooks/setup-test-env/storekey <service> <account>`.",
+    "Check it: `keychain_has <service> <account>`.",
     "",
   ].join("\n"),
   "tests/x.test.ts": 'const s = "keychain_read nowhere-listed";\n',
@@ -57,9 +57,9 @@ const at = (where: string, name: string) =>
 
 // Every violation the sample must produce, as "<file>:<line>: <message>".
 export const expected = [
-  at("mini/runbooks/setup/lq:2", "ensemble-test-linear-key / other"),
-  at("mini/runbooks/setup/lq:3", "ensemble-old / x"),
-  at("mini/runbooks/setup/lq:4", "ensemble-new / alice"),
+  at("mini/bin/lq:2", "ensemble-test-linear-key / other"),
+  at("mini/bin/lq:3", "ensemble-old / x"),
+  at("mini/bin/lq:4", "ensemble-new / alice"),
   at("runbooks/setup.md:3", "strata-api-key / strata"),
   at("runbooks/setup.md:4", "ensemble-test-x / a@b.c"),
 ];

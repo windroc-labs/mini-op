@@ -27,7 +27,7 @@ export const clean = {
   "ctl/lib/ssh.zsh": "f() {}\n",
   "mini/js/type.js": "function run() {}\n",
   "mini/ts/keys.ts": "export {};\n",
-  "runbooks/test-board.toml": "x = 1\n",
+  "runbooks/setup.md": "# setup\n",
 };
 
 // Every violation the sample must produce, as "<file>:<line>: <message>".

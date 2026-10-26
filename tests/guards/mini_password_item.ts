@@ -5,7 +5,7 @@ import { commands } from "../lib/shell.ts";
 
 // FR-55, Q14: the mini's password reaches the keychain only as an ensemble-env/ item, imported with
 // `ensemble-broker login env`. Checked where a name enters the keychain: a word of a security,
-// keychain_read, keychain_has or storekey command naming a mini password item (any name holding
+// keychain_read or keychain_has command naming a mini password item (any name holding
 // both mini and password, so mac-mini-*-password too), or a config line's `item = "<name>"` (TOML)
 // or `item: <name>` (YAML). Paths, such as a secret's file, and $ expansions are not item names.
 const PREFIX = "ensemble-env/";
@@ -13,7 +13,7 @@ const PREFIX = "ensemble-env/";
 const CONFIG =
   /(?:^[ \t]*(?:-[ \t]+)?|[{,][ \t]*)item[ \t]*[=:][ \t]*(?:"""(.*?)"""|'''(.*?)'''|"([^"]*)"|'([^']*)'|([^,}]*[^\s,}]))/g;
 const PATH = /^(?:\/|~\/|\.\.?\/)/;
-const READERS = new Set(["security", "keychain_read", "keychain_has", "storekey"]);
+const READERS = new Set(["security", "keychain_read", "keychain_has"]);
 
 const unquote = (word: string) => word.replace(/^(['"])(.*)\1$/, "$2");
 

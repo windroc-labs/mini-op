@@ -2,7 +2,7 @@ import type { Guard, Violation } from "../lib/guard.ts";
 import { scanned } from "../lib/repo.ts";
 
 // A script nothing names is dead or undocumented. The mini's scripts are named by their path under
-// ~/apm (bin/<name>, runbooks/<runbook>/<name>), ctl/ scripts by name (they are on the container's
+// ~/apm (bin/<name>), ctl/ scripts by name (they are on the container's
 // PATH), host/ scripts by a path ending /<name> (host/start, "$here/config"). Tests don't count.
 const DIRS = ["mini/", "ctl/", "host/"];
 

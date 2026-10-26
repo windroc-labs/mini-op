@@ -2,7 +2,7 @@ const item = "mac-mini-" + "alice-password";
 const other = "mac-mini-" + "x.y_z-password";
 
 export const violation = {
-  "README.md": `# x\n\nRead it: \`keychain_read ${item} alice\`.\nStore it: \`~/apm/runbooks/s/storekey ${other} a\`.\n`,
+  "README.md": `# x\n\nRead it: \`keychain_read ${item} alice\`.\nCheck it: \`keychain_has ${other} a\`.\n`,
   "ctl/mini": `#!/bin/zsh\nsecurity add-generic-password -s ${other} -w x\n`,
   "mini/bin/pw": "#!/bin/zsh\nkeychain_read 'mini-op-password' | ssh mini x\n",
   "host/key":
@@ -22,7 +22,7 @@ export const clean = {
   "README.md": [
     `The mini's password: \`ensemble-env/mini-op-password\`, never ${item}.`,
     "Read it: `keychain_read ensemble-env/mini-op-password`.",
-    "Store it: `~/apm/runbooks/s/storekey ensemble-env/mini-op-password a`.",
+    "Check it: `keychain_has ensemble-env/mini-op-password a`.",
     "",
   ].join("\n"),
   "ctl/mini":

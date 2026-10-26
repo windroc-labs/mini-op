@@ -1,7 +1,7 @@
 # The one reader of the mini's keychains (FR-55), sourced by the mini's zsh scripts and by runbook
 # steps over ssh, so it keeps to POSIX sh. Its login keychain items are listed in status.md (FR-61);
-# <keychain>, a keychain file, is read only to import from it (importkey). An ssh session's keychain
-# is locked: unlock it first (README.md › Gotchas).
+# <keychain>, a keychain file, is read only to import from it (a project's import script). An ssh
+# session's keychain is locked: unlock it first (README.md › Gotchas).
 
 # keychain_read <service> [<account> [<keychain>]]: the item's password on stdout, only ever into a
 # pipe; 1 with security's message when it is missing or the keychain is locked.

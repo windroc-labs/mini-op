@@ -7,12 +7,8 @@
 | Before any task | `README.md` › Start here |
 | Working from this container | `host/README.md` |
 | The environment definition for ensemble | `host/README.md` › Environment definition |
-| Install tests, reruns, upgrades in place | `runbooks/install-ensemble.md` |
-| OpenCode install flags and prompt answers | `runbooks/install-ensemble.md` › OpenCode-only install |
-| OpenCode board roles on tmux | `runbooks/manager-on-mini.md` › OpenCode board runs on the tmux Host |
-| Cleanup and the post-test check | `runbooks/clean-ensemble.md` |
-| Machine access, browser, Outlook, GitHub (`dotpm2026`), Linear, API keys | `runbooks/setup-test-env.md` |
-| The manager on the mini | `runbooks/manager-on-mini.md` |
+| A project's own tests on the mini, in its `.mini-op/runbooks/` (for ensemble: install, cleanup, its manager, test accounts) | `plugin/skills/run/SKILL.md` |
+| Machine access, browser | `runbooks/setup-test-env.md` |
 | Erasing the mini | `runbooks/return-mini.md` |
 | Checking mini-op reaches the mini | `runbooks/check-connection.md` |
 | Reconnecting mini-op after the mini was reset | `runbooks/setup-test-env.md` › Reconnect mini-op after a reset |

@@ -4,8 +4,8 @@ import { docShellSources, shellSources } from "../lib/scripts.ts";
 import { commands, type Command } from "../lib/shell.ts";
 
 // FR-61: every keychain item that code or a doc names, by service or service and account, is in
-// a row of status.md's Current environment table, both as `code` words: a call of keychain_read,
-// keychain_has or storekey, or security's <find|add|delete>-generic-password -s/-a. Only literal
+// a row of status.md's Current environment table, both as `code` words: a call of keychain_read or
+// keychain_has, or security's <find|add|delete>-generic-password -s/-a. Only literal
 // names count: a command holding a <placeholder>, or a $variable, names the caller's item.
 const STATUS = "status.md";
 const SECTION = "## Current environment";
@@ -22,7 +22,7 @@ function item(command: Command, raw: string): Item | undefined {
   let service: string | undefined;
   let account: string | undefined;
   const base = command.name.split("/").at(-1);
-  if (base === "keychain_read" || base === "keychain_has" || base === "storekey") {
+  if (base === "keychain_read" || base === "keychain_has") {
     [service, account] = words.filter((w) => !w.startsWith("-"));
   } else if (
     command.name === "security" &&
