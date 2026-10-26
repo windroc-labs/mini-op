@@ -168,6 +168,18 @@ file = "mini-ssh-key"
 # file = "strata-key"
 ```
 
+## Hand over a project
+
+In direct use, `/mini-op:run` finds a project's runbooks in a snapshot that `update` copies into the container; the container never mounts the checkout. It needs ensemble's direct-use container (labels `windroc.lock=mini-op`, `windroc.lock.owner=mini-op`, a workspace volume at `~/.mini-op/workspace`): the session `mini-op` of Environment definition, not the container of Steps.
+
+```sh
+~/playground/mini-op/host/update ~/src/ensemble
+```
+
+It copies the checkout's `.mini-op/runbooks/` to the workspace's `projects/<project>/` (`<project>`: the origin repo's name; `remote` beside it, the origin URL without credentials), read-only. Run it again after the runbooks change: it replaces the snapshot. The snapshot lives in the workspace volume, so it survives `ensemble-session close mini-op` and a new start or resume, and goes with the volume. It refuses, copying nothing: a symlink, FIFO, socket, device or hard link anywhere under `.mini-op/runbooks/` (each named), a snapshot of the same name from another remote, no direct-use container (a `verifier` run's is never written) or several.
+
+Handing over a checkout runs its runbooks' scripts on the mini, unreviewed, with the mini account's rights. That project scripts call only the Mini-side tools is a convention, not a sandbox, and processes in the container can change the snapshot until the next `update`.
+
 ## Change or remove
 
 - Files take effect only through a rebuild: after editing or pulling this repo, run on the user's Mac, from any directory (adjust the checkout path):
