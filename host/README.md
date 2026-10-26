@@ -1,25 +1,26 @@
 # mini-op
 
-A Docker container on this Mac running Claude Code as user `agent`, made to operate the Mac mini test machine (ssh host `mini`; its address and account only in `~/.mini-op/config.local.yaml`, Steps; see `../README.md`) and nothing on this Mac, so it can run with `--dangerously-skip-permissions`.
+Direct use and `verifier` share `mini-op:env`. `host/start` builds it, then calls `ensemble-delegate open mini-op --environment mini-op --client claude --cwd ~/.mini-op/workspace`. The broker takes the `mini-op` lock, locates the healthy gateway by label, attaches its caller network and injects credentials. mini-op owns no container lifecycle, network, lock or stored credentials.
 
-| What | How |
+| What | Contract |
 | --- | --- |
-| Image | `mini-op:env`, whatever the Claude Code version: Debian `trixie-20261005-slim` (digest-pinned), Claude Code from its signed apt repo (version: `ARG CLAUDE_CODE_VERSION` in `Dockerfile`), git, openssh-client, netcat-openbsd (ssh's proxy hop), tmux, curl, jq, zsh, Debian's Node.js and npm (the registry tarball, pinned by SHA-256 in `Dockerfile`). User `agent` (uid and gid 1000), no sudo. The runtime root `/opt/windroc/mini-op/`, the working directory, root-owned and read-only to `agent`: the skill (`../skills/mini-op/`, linked at `/etc/claude-code/.claude/skills/mini-op/`), `../ctl/` (on `PATH`) with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/windroc/mini-op/CLAUDE.md`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`), `../README.md` and `../runbooks/`. The mini's ssh settings (`~/.mini-op/ssh_config`) and its pinned host key (`~/.mini-op/known_hosts`, confirmed with `host/pin-host-key`) are built in: the image's ssh (`ssh_config.keys`) trusts only that key, never asks about or adds one, and uses `/run/ensemble/secrets/env/mini-ssh-key` when an environment gives it, else the volume's key. No python3 (FR-68): Claude Code's apt package runs without it, which CI's Image job checks on every image change and weekly (`claude --version` passes, `command -v python3` finds nothing). No secrets. |
-| Host files | none mounted: `start` bakes the Image's files in at build, stamped with this checkout's commit (plus `-dirty` when anything is uncommitted) as the image label and mini/'s `VERSION`; it refuses to build outside a git checkout or with untracked or ignored files under `../ctl/`, `../mini/`, `../runbooks/` or `../skills/` (other than what `Dockerfile.dockerignore` leaves out). `../status.md` stays on this Mac. `ctl/`'s `mini pw`, `mini sudo` and `mini-autologin` read `/run/secrets/mini-password` |
-| Persistent state | named volume `mini-op-home` (`/home/agent`): Claude login (`~/.claude/.credentials.json`), Claude settings (`~/.claude/settings.json`; `start` sets `promptSuggestionEnabled` false, keeping other keys), ssh key `~/.ssh/id_ed25519` (comment `mini-op container`) |
-| Secrets | `/run/secrets`, a 64k tmpfs only `agent` can read; empty after every container start |
-| Hardening | `--cap-drop ALL`, `no-new-privileges`, non-root user |
-| Network | only `mini-op-net`, a Docker `--internal` network: no direct way out. Its one exit is the container `mini-op-proxy` ([smokescreen](https://github.com/stripe/smokescreen) v0.1.0, the official release tarball pinned by SHA-256 in `proxy/Dockerfile`; on `mini-op-net` and the default bridge, read-only, no published port). It allows `config.yaml`'s `proxy_allowed_domains` (Claude Code's API and claude.ai login) and, of the mini, only its `mini_port` (22; ssh goes through it via `ssh_config.container`'s `ProxyCommand`); `config` generates its smokescreen config and ACL into `~/.mini-op/proxy/` and `start` builds them in. Everything else is denied: this Mac (`host.docker.internal`, the gateway), the LAN and other private ranges, every other internet host. The container's `HTTPS_PROXY`/`HTTP_PROXY` point at it, with `NODE_USE_ENV_PROXY=1`. |
+| Image | `mini-op:env`, built locally and never pushed; Debian, Claude Code, git, tmux, ssh, nc, jq, zsh, Node.js and npm; user `agent`, uid/gid 1000, no sudo or python3 |
+| Runtime | `/opt/windroc/mini-op/`: `ctl/`, `mini/`, README, runbooks and plain skill; `/home/agent` is empty in the image |
+| Skill | `mini-op`, installed at `/etc/claude-code/.claude/skills/mini-op/`; rules at `/opt/windroc/mini-op/CLAUDE.md` |
+| Session | `mini-op`, host cwd `~/.mini-op/workspace`, workspace volume `ensemble-ws-mini-op`; `host/start` creates the cwd if absent |
+| Gateway and lock | `mini-op`; the egress local `mini-op` caller policy allows Anthropic domains and the mini's ssh endpoint only |
+| SSH | Address/account/port from `~/.mini-op/config.local.yaml`; confirmed host key from `~/.mini-op/known_hosts`, baked in by `host/start`. Only `/run/ensemble/secrets/env/mini-ssh-key`; strict host key checking, no interactive trust. CONNECT endpoint comes from runtime `HTTPS_PROXY` |
+| Credentials | Injected in memory by the broker; none in the image or a mini-op home volume. Missing password files fail before anything is sent |
 
-Anyone who can run `docker` on this Mac can read the volume, including the passphrase-less ssh key and the Claude login.
-
-Inside mini-op the other docs, written for an operator on this Mac, read with "this Mac" meaning the container: `agent` reaches the mini as `ssh mini` with the volume's key, and nothing on this Mac. This Mac's keychain items other than the mini's password (e.g. `strata-api-key`) are not in the container: ask the user to run a step that needs one.
+`host/start` stamps the checkout's commit (`-dirty` with uncommitted changes). It refuses untracked or ignored runtime files under `ctl/`, `mini/`, `runbooks/`, `skills/`, except the exclusions in `Dockerfile.dockerignore`. It runs no image smoke container: CI's Image job owns those checks. Its private build context uses umask 077; the delegate call uses 022 until WDRC-229 is fixed. Claude is fixed by `--client claude`: the network and injected token support Claude.
 
 ## Steps
 
-Run this Mac's commands from the checkout root.
+On a new Mac, install ensemble with the direct-use `open` command and configure the shared egress gateway first. `egress-proxy` must be healthy; its local `mini-op` caller policy must allow Anthropic domains and the mini's `host:22` exception (or the configured ssh port). See egress's setup and policy-reload instructions.
 
-First, on a new Mac, and whenever the mini's address or account changes: put them in `~/.mini-op/config.local.yaml`, outside this repo. It sets only the keys it changes; `config.yaml` lists every key with its default (the address and account empty) and comments. `config` merges the two, checks them (it exits 1 naming what to fill in or fix, and never makes values up) and generates `~/.mini-op/ssh_config` (Host mini, for this Mac's `ssh -F` and the container) and `~/.mini-op/proxy/` (the proxy's config and ACL); `start` runs it itself. Any change to them takes effect with `stop`, then `start`: both images are built with them.
+Run host commands from this checkout. Existing users follow [从旧版升级](#从旧版升级) first: `host/start` refuses any old `mini-op` or `mini-op-proxy` container, `mini-op-net` network or `mini-op-home` volume, without building or changing them.
+
+Set the mini's LAN IPv4, account and optional port on this Mac:
 
 ```sh
 mkdir -p -m 700 ~/.mini-op
@@ -27,135 +28,84 @@ printf 'mini_host: %s\nmini_user: %s\n' '<the mini LAN IPv4>' '<the mini account
 host/config
 ```
 
-Then, once per mini, after its address or port changes, and after its host key changes (`../runbooks/setup-test-env.md`, section Reconnect mini-op after a reset): at the mini, run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` and note its SHA256 fingerprint. On this Mac run:
+`host/config` validates these three keys against `config.yaml`, writes only `~/.mini-op/ssh_config`, and rejects unknown keys. Remove any former proxy settings from the local file; policy belongs to egress now.
+
+At the mini, run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` and note the fingerprint. On this Mac:
 
 ```sh
 host/pin-host-key
 ```
 
-Compare the displayed fingerprint with the one from the mini, and type `yes` only when they match. This explicitly replaces mini-op's pin in `~/.mini-op/known_hosts`; a scan alone is untrusted, and cancellation or failure keeps the old pin. `start` bakes only that endpoint's pinned key into the image and exits 1 without one. A changed host key keeps failing until you confirm it with `host/pin-host-key` and rebuild. This Mac's personal `~/.ssh/known_hosts` is never used or changed by these commands.
+Confirm `yes` only when the displayed fingerprint matches the mini. Cancellation keeps the previous pin; personal `~/.ssh/known_hosts` is untouched. `host/start` never scans or accepts an unknown key and refuses to build without the configured endpoint's confirmed entry.
 
-1. Build and check the images (claude runs; the proxy loads its config), then (re)create `mini-op-net` (if missing), `mini-op-proxy` and `mini-op`; a failed build or check exits nonzero and leaves the running containers as they were. It prints `agent`'s public key; it makes one only when the volume has none. This restarts the container and clears its tmpfs secrets and tmux sessions.
-
-   ```sh
-   host/start
-   ```
-
-2. Only with a new volume (new key): let the key into the mini, replacing any older `mini-op container` line.
-
-   ```sh
-   docker exec mini-op cat /home/agent/.ssh/id_ed25519.pub | ssh -F ~/.mini-op/ssh_config -o UserKnownHostsFile=~/.mini-op/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes mini 'k=$(cat); f=~/.ssh/authorized_keys; sed -i "" "/ mini-op container\$/d" "$f"; printf "%s\n" "$k" >> "$f"'
-   ```
-
-3. Log Claude Code in (once per volume). Open the printed URL in a browser on this Mac and paste the code it shows back at `Paste code here if prompted`.
-
-   ```sh
-   docker exec -it mini-op claude auth login
-   ```
-
-4. Give it the mini's password (the account's: `mini_user`), after every container start (`start`, a Docker or Mac restart). Type it at the `password:` prompt, which does not echo it; it goes over stdin into the mode-0400 file `/run/secrets/mini-password`, through no keychain:
-
-   ```sh
-   docker exec -it mini-op zsh -fc 'stty -echo; printf "password: "; rm -f /run/secrets/mini-password; umask 277; head -n 1 > /run/secrets/mini-password; stty echo; echo'
-   ```
-
-5. After every `start` (needs steps 2–3 done), check the network from inside the container. It prints a PASS/FAIL table (Claude answers, `ssh … echo ok` works; this Mac, the LAN, `example.com` and direct `1.1.1.1:443` are blocked) and exits 1 on any FAIL. `--egress-only` skips the Claude and `ssh` checks.
-
-   ```sh
-   host/verify-egress
-   ```
-
-6. Work with it. The first start asks to trust the runtime root `/opt/windroc/mini-op/`. Detach with Ctrl-b d; the same command reattaches.
-
-   ```sh
-   docker exec -it mini-op tmux new -A -s op claude --dangerously-skip-permissions
-   ```
-
-7. When not testing, stop it with its proxy; `resume` brings both back, proxy first, and starts `mini-op` only once `mini-op-proxy` runs, recreating nothing (redo step 4). After a stop always use `resume`: never start only `mini-op` (e.g. its start button in Docker Desktop). Never leave `mini-op-proxy` stopped while `mini-op` runs: it is mini-op's only way out.
-
-   ```sh
-   host/stop
-   host/resume
-   ```
-
-## Deploy to the mini
-
-The mini runs `mini/` as `~/apm/`. After `start` (it stamps mini/'s `VERSION` in the image), copy it there from mini-op; from this Mac, `ctl/mini sync` does the same, stamped from the checkout on the spot:
+Import the credentials in [Environment definition](#environment-definition), then:
 
 ```sh
-docker exec mini-op mini sync
+host/start
 ```
 
-It unpacks over ssh's stdin into `~/apm.new`, moves `~/apm/state/` (markers, marks, screenshots) in, and swaps it for `~/apm`: files no longer in `mini/` are gone, `~/apm/state/` stays. It writes only `~/apm` and its swap dirs `~/apm.new` and `~/apm.old`: no sudo, no installs. `mini sync --check` exits 1 unless the mini's `~/apm/VERSION` matches this copy's.
+This builds only `mini-op:env` and opens the session TUI. Claude needs no container login, and passwords are never typed into container files. Build failure prevents the delegate call. Delegate exit status and stderr pass through: 75 names the lock owner, 2 is a configuration error, 1 a failure.
 
-After every `mini sync`, the operator smoke-tests the real mini from mini-op, outside CI and read-only. Both commands must exit 0; the second prints `ok` or `FAIL` per script, passing a script only when its `-h` exits 0:
+After start, on this Mac:
 
 ```sh
-mini sync --check
-printf '%s\n' 'cd ~/apm && rc=0; for f in bin/*; do [ -x "$f" ] || continue; if "./$f" -h </dev/null >/dev/null 2>&1; then echo "ok $f"; else echo "FAIL $f"; rc=1; fi; done; exit $rc' | mini exec
+host/verify-egress
 ```
+
+Only `claude -p` and read-only `ssh mini echo ok` are checked, in the running container with both `windroc.lock=mini-op` and `windroc.lock.owner=mini-op`. Both rows must PASS. It never enters a `verifier` owner's container; no direct-use session means an error pointing to `host/start`. Network blocking checks belong to egress.
+
+| Action | Command on this Mac |
+| --- | --- |
+| Start or rebuild | `host/start` |
+| Stop | `ensemble-session close mini-op` |
+| After Docker or Mac restart | `ensemble-session resume mini-op` |
+| After changing or pulling mini-op files | `ensemble-session close mini-op`, then `host/start` |
+
+When the mini's address or ssh port changes, update both `~/.mini-op/config.local.yaml` and the egress local `mini-op` policy's host:port exception. Recreate the gateway with the command in egress's local setup documentation; this disconnects all callers. Confirm the new endpoint with `host/pin-host-key`, then close and `host/start`. Changing only one configuration makes the SSH verification fail. Account changes affect mini-op's local config and credentials too.
 
 ## Environment definition
 
-What ensemble needs to run mini-op as an environment: for `verifier` runs, and for direct use once ensemble's direct-use command (WDRC-109 FR-301) replaces the container of Steps, which stays until then. The names are fixed: no mini-op upgrade, Claude Code's version included, changes them.
+ensemble already packages `[environments.mini-op]`: image `mini-op:env`, gateway and lock `mini-op`, and the password/key mappings below, with no plugins. No local environment fragment is needed.
 
-| What | Name |
+| Keychain item | File under `/run/ensemble/secrets/env/` |
 | --- | --- |
-| Image | `mini-op:env`, built on this Mac by `start`, never pushed |
-| Caller network | `mini-op`: the egress gateway's network for mini-op, defined by the `mini-op` section of egress's local config |
-| Lock | `mini-op` |
-| Direct-use session | `mini-op`, its local cwd `~/.mini-op/workspace` |
-| Skill | `mini-op`, installed at `/etc/claude-code/.claude/skills/mini-op/` |
-| Mini-side tools | `~/apm/bin/*` and `~/apm/lib/*.zsh` (`mini/`): the only ones a project's scripts call |
-| Project scripts | a project runbook's scripts, on the mini in `~/mini-op-projects/<project>/<name>/` |
-| Secrets | the keychain items below; in the container each is `/run/ensemble/secrets/env/<file>` |
+| `ensemble-env/mini-op-password` | `mini-password` |
+| `ensemble-env/mini-op-ssh-key` | `mini-ssh-key` |
+| `ensemble-env/mini-op-strata-key` (optional) | `strata-key` |
 
-Direct use and `verifier` share these items:
+Direct use and `verifier` share these entries. `mini pw`, `mini sudo` and `mini-autologin` read only the injected `mini-password`. Anyone able to run `docker exec` or broker start can read injected credentials. The broker is the keychain reader; mini-op stores no credentials itself.
 
-| Keychain item | `file` | Holds |
-| --- | --- | --- |
-| `ensemble-env/mini-op-password` | `mini-password` | the mini account's (`mini_user`) password |
-| `ensemble-env/mini-op-ssh-key` | `mini-ssh-key` | the private half of the one ssh key the environment logs into the mini with |
-| `ensemble-env/mini-op-strata-key` | `strata-key` | optional: the Strata API key, only for a project runbook that uses Strata |
+For a fresh installation, create a new environment key, authorize its public half on the mini using the confirmed pin, import the private half over stdin, then delete the key files. During an upgrade use the old container route specified below instead of this fresh-install authorization command.
 
-Create them once, on this Mac with ensemble installed. `ensemble-broker login env <name>` reads the value from stdin and stores it as `ensemble-env/<name>`, readable only by the broker; the Claude token comes from `ensemble-broker login claude` (skip it when done before).
+```sh
+umask 077
+d=$(mktemp -d)
+ssh-keygen -q -t ed25519 -N '' -C 'mini-op environment' -f "$d/key"
+ssh -F ~/.mini-op/ssh_config -o UserKnownHostsFile=~/.mini-op/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes mini 'umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys' < "$d/key.pub"
+ensemble-broker login env mini-op-ssh-key < "$d/key"
+rm -rf "$d"
+```
 
-1. The ssh key: make it in a private temp dir, let its public half into the mini's `authorized_keys`, import the private half, and leave no key file behind:
+Import the mini account's password from stdin without echoing it, and obtain the Claude token (skip `login claude` if already done):
 
-   ```sh
-   d=$(mktemp -d)
-   ssh-keygen -q -t ed25519 -N '' -C 'mini-op environment' -f "$d/key"
-   ssh -F ~/.mini-op/ssh_config -o UserKnownHostsFile=~/.mini-op/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes mini 'cat >> ~/.ssh/authorized_keys' < "$d/key.pub"
-   ensemble-broker login env mini-op-ssh-key < "$d/key"
-   rm -rf "$d"
-   ```
+```sh
+stty -echo
+printf 'password: '
+head -n 1 | ensemble-broker login env mini-op-password
+stty echo
+echo
+ensemble-broker login claude
+```
 
-2. The mini's password, typed at the `password:` prompt, which does not echo it:
+Only when a runbook uses Strata: import its key from this Mac's keychain via stdin, then put the following complete secret list in `~/.ensemble/config.local.toml`. Lists replace the whole packaged list: keep all three entries. A referenced but unimported entry causes the broker to refuse start.
 
-   ```sh
-   stty -echo; printf 'password: '; head -n 1 | ensemble-broker login env mini-op-password; stty echo; echo
-   ```
-
-3. Only for a runbook that uses Strata: the key from this Mac's login keychain (its item's service and account):
-
-   ```sh
-   . mini/lib/keychain.zsh
-   keychain_read <service> <account> | ensemble-broker login env mini-op-strata-key
-   ```
-
-4. The Claude token:
-
-   ```sh
-   ensemble-broker login claude
-   ```
-
-Then add the environment to `~/.ensemble/config.local.toml`; it prefetches nothing:
+```sh
+. mini/lib/keychain.zsh
+keychain_read <service> <account> | ensemble-broker login env mini-op-strata-key
+```
 
 ```toml
-[delegate.environments.mini-op]   # no prefetch
-image = "mini-op:env"
-gateway = "mini-op"
-lock = "mini-op"
+[delegate.environments.mini-op]
 
 [[delegate.environments.mini-op.secrets]]
 item = "ensemble-env/mini-op-password"
@@ -165,45 +115,103 @@ file = "mini-password"
 item = "ensemble-env/mini-op-ssh-key"
 file = "mini-ssh-key"
 
-# Optional: only once the Strata entry is imported
-# [[delegate.environments.mini-op.secrets]]
-# item = "ensemble-env/mini-op-strata-key"
-# file = "strata-key"
+[[delegate.environments.mini-op.secrets]]
+item = "ensemble-env/mini-op-strata-key"
+file = "strata-key"
+```
+
+## 从旧版升级
+
+Merge 后由 manager 和用户在本机 Mac 执行；工程 run 不执行。严格按以下顺序，全程至少保留一条到 mini 的路。
+
+```mermaid
+flowchart TD
+    A[升级 ensemble] --> B[确认网关]
+    B --> C[新 key 授权并导入凭据]
+    C --> D[备份导出 登出旧 Claude]
+    D --> E[删除旧路径资源]
+    E --> F[拉新 mini-op 并 start]
+    F --> G[两项 PASS 再删旧公钥]
+```
+
+下列编号对应图中的执行顺序；任何一步失败，先保留仍可用的访问路径。
+
+1. ensemble 升至包含 `bb5311c`（WDRC-109 PR #64）的版本，插件与 broker 一起升，按 ensemble `docs/upgrading.md`。本机原安装版没有 `open`；先确认 `ensemble-delegate open --help` 可用。
+2. 确认 egress 本机配置有 `mini-op` 段，allowlist 包括 Anthropic 域名和 mini 的 `host:22` 例外，`egress-proxy` healthy。本机已有该配置。
+3. 生成新 SSH key，经仍在运行的旧 `mini-op` 容器追加公钥，保留旧公钥：
+
+   ```sh
+   umask 077
+   d=$(mktemp -d)
+   ssh-keygen -q -t ed25519 -N '' -C 'mini-op environment' -f "$d/key"
+   docker exec -i mini-op ssh mini 'umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys' < "$d/key.pub"
+   ensemble-broker login env mini-op-ssh-key < "$d/key"
+   rm -rf "$d"
+   ```
+
+   私钥成功从 stdin 导入后删除私钥文件；用上节 `ensemble-broker login env mini-op-password` 导入密码，`login claude` 做过可略，Strata 可选。本机若已有旧的环境覆盖片段，删除它以使用打包环境；用 Strata 才保留上节完整三项 secrets。
+4. 将旧 volume 的 keychain 导出拷到本机 `~/.mini-op/keychain-backup/`，只允许用户读取，再在旧容器里登出 Claude：
+
+   ```sh
+   mkdir -p -m 700 ~/.mini-op/keychain-backup
+   docker cp mini-op:/home/agent/keychain-backup/. ~/.mini-op/keychain-backup/
+   chmod -R u=rwX,go= ~/.mini-op/keychain-backup
+   docker exec -it mini-op claude auth logout
+   ```
+
+   确认导出已完整拷出，或用户明确选择不再保留。备份不进 repo、镜像或新 volume；用户不再需要时删除。
+5. 删除旧资源和旧代理镜像（此后不再保留两套路径）：
+
+   ```sh
+   docker rm -f mini-op mini-op-proxy
+   docker network rm mini-op-net
+   docker volume rm mini-op-home
+   docker image rm mini-op-proxy:v0.1.0
+   ```
+
+   从 `~/.mini-op/config.local.yaml` 删除旧 proxy 配置键。
+6. 拉新的 mini-op 代码，确认本机 config 和 pin，运行 `host/start`：TUI 打开，Claude 无需登录即可回答。
+7. `host/verify-egress` 的两项都 PASS 后，在新会话里执行以下命令，删除 mini 的旧 `mini-op container` 公钥行：
+
+   ```sh
+   ssh mini 'sed -i "" "/ mini-op container\$/d" ~/.ssh/authorized_keys'
+   ```
+
+   本机 `docker inspect` 应显示新容器只连 `egress-mini-op`，带 `windroc.lock=mini-op`；Docker 中不再有旧容器、`mini-op-proxy`、`mini-op-net`、`mini-op-home`。
+
+## Deploy to the mini
+
+Inside the new session, `mini sync` deploys the image's `mini/` to `~/apm/`, preserving `~/apm/state/`; `mini sync --check` checks its version. The supported mini-side tools are `~/apm/bin/*` and `~/apm/lib/*.zsh`. A project's runbook scripts live separately at `~/mini-op-projects/<project>/<name>/`; `mini sync` does not delete them.
+
+After sync, smoke-test the real mini only when the user is performing deployment, outside CI:
+
+```sh
+mini sync --check
+printf '%s\n' 'cd ~/apm && rc=0; for f in bin/*; do [ -x "$f" ] || continue; if "./$f" -h </dev/null >/dev/null 2>&1; then echo "ok $f"; else echo "FAIL $f"; rc=1; fi; done; exit $rc' | mini exec
 ```
 
 ## Hand over a project
 
-In direct use, `/mini-op` finds a project's runbooks in a snapshot that `update` copies into the container; the container never mounts the checkout. It needs ensemble's direct-use container (labels `windroc.lock=mini-op`, `windroc.lock.owner=mini-op`, a workspace volume at `~/.mini-op/workspace`): the session `mini-op` of Environment definition, not the container of Steps.
+On this Mac:
 
 ```sh
 host/update ~/src/ensemble
 ```
 
-`host/update` copies runbooks over `docker exec`; it neither uses SSH nor reads or changes host keys. The container keeps using the pin baked by `host/start`.
+`host/update` copies only the checkout's `.mini-op/runbooks/` over stdin to the direct-use session's workspace, under `projects/<project>/`, beside its credential-free `remote` identifier. It never mounts the checkout or changes the baked tools, SSH settings or host key. Repeating it refreshes the snapshot; a different remote with the same project name is refused.
 
-It copies the checkout's `.mini-op/runbooks/` to the workspace's `projects/<project>/` (`<project>`: the origin repo's name; `remote` beside it, the origin URL without credentials), read-only. Run it again after the runbooks change: it replaces the snapshot. The snapshot lives in the workspace volume, so it survives `ensemble-session close mini-op` and a new start or resume, and goes with the volume. It refuses, copying nothing: a symlink, FIFO, socket, device or hard link anywhere under `.mini-op/runbooks/` (each named), a snapshot of the same name from another remote, no direct-use container (a `verifier` run's is never written) or several.
-
-Handing over a checkout runs its runbooks' scripts on the mini, unreviewed, with the mini account's rights. That project scripts call only the Mini-side tools is a convention, not a sandbox, and processes in the container can change the snapshot until the next `update`.
+Symlinks, special files and hard links are rejected before copying. Only the container with `windroc.lock=mini-op`, `windroc.lock.owner=mini-op` and the workspace volume is written; no direct session, or several, is an error. Snapshots survive close/start and resume while the cwd and workspace volume remain. A project's scripts run on the mini with the account's rights; this convention is not a sandbox. Container processes can change snapshots until the next update.
 
 ## Change or remove
 
-- Files take effect only through a rebuild: after editing or pulling this repo, run on the user's Mac, from the checkout root:
+After any mini-op file or Claude Code version change, `ensemble-session close mini-op`, then `host/start`. This rebuilds the common image and the broker rebuilds its variant. `host/update` is only for project snapshots. A changed mini host key requires explicit `host/pin-host-key` confirmation before rebuild; see `../runbooks/setup-test-env.md`, Reconnect.
 
-  ```sh
-  host/stop
-  host/start
-  ```
+Remove everything on this Mac after choosing what workspace state to retain:
 
-  This rebuilds `mini-op:env` with the new `ctl/`, `mini/`, docs, ssh config (`~/.mini-op/ssh_config`) and host key and recreates both containers: redo step 4 and reattach (step 6). Nothing is copied into a running container. The mini's `~/apm/` changes only with `mini sync` (Deploy to the mini).
-- The mini's host key changed (ssh in the container fails): `../runbooks/setup-test-env.md`, section Reconnect mini-op after a reset, steps 5–6: run `host/pin-host-key`, confirm the new fingerprint, then `host/stop` and `host/start`.
-- Allow another host: set `proxy_allowed_domains` in `~/.mini-op/config.local.yaml` to the whole list, `config.yaml`'s hosts plus the new one (another mini port: `mini_port`), rerun `start`, then `verify-egress`. Claude Code's host list: https://code.claude.com/docs/en/network-config; telemetry, update and plugin hosts stay blocked on purpose.
-- Newer Claude Code: set `ARG CLAUDE_CODE_VERSION` to a version the stable repo lists (`curl -fsSL https://downloads.claude.ai/claude-code/apt/stable/dists/stable/main/binary-arm64/Packages | grep ^Version`), then `stop` and `start`: `mini-op:env` then names the new image.
-- Remove everything:
+```sh
+ensemble-session close mini-op
+docker image rm mini-op:env
+docker volume rm ensemble-ws-mini-op
+```
 
-  ```sh
-  docker rm -f mini-op mini-op-proxy
-  docker network rm mini-op-net
-  docker volume rm mini-op-home
-  docker image rm $(docker images -q mini-op) $(docker images -q mini-op-proxy)
-  ssh -F ~/.mini-op/ssh_config -o UserKnownHostsFile=~/.mini-op/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes mini 'sed -i "" "/ mini-op container\$/d" ~/.ssh/authorized_keys'
-  ```
+Also remove the keychain entries `ensemble-env/mini-op-password`, `ensemble-env/mini-op-ssh-key` and, if imported, `ensemble-env/mini-op-strata-key`; remove the `mini-op environment` public-key line from the mini's `authorized_keys`. Do the remote key removal while a working route is still available. Delete any optional Strata override from `~/.ensemble/config.local.toml`. The local backup remains the user's to retain or delete.
