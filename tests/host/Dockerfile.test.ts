@@ -59,13 +59,15 @@ test("an ADD of a URL without a sha256 checksum fails", () => {
 
 test("the image runs as agent, uid and gid 1000, not root (FR-208)", () => {
   assert.match(TEXT, /^ARG AGENT_UID=1000$/m);
-  assert.match(image?.text ?? "", /useradd -m -u "\$AGENT_UID" -U -s \/bin\/bash agent;?\s/);
+  assert.match(image?.text ?? "", /useradd -M -u "\$AGENT_UID" -U -s \/bin\/bash agent;?\s/);
   assert.deepEqual(lines(TEXT, "USER"), ["agent"]);
   assert.doesNotMatch(TEXT, /\bsudo\b/);
 });
 
-test("nothing is copied or written under /home/agent: the volume hides it", () => {
-  assert.doesNotMatch(TEXT, /\/home\/|~\//);
+test("agent home is created empty without the account skeleton", () => {
+  assert.match(image?.text ?? "", /useradd -M /);
+  assert.match(image?.text ?? "", /install -d -o agent -g agent \/home\/agent/);
+  assert.doesNotMatch(TEXT, /^(COPY|ADD).*\/home\/agent/m);
 });
 
 test("the runtime root holds skills/, ctl/, mini/, README.md and runbooks/, never status.md", () => {

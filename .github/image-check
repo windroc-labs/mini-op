@@ -114,9 +114,11 @@ smoke() {
   [[ $out =~ ^uid=([0-9]+)\(agent\) ]] && uid=${BASH_REMATCH[1]}
   [[ -n $uid && $uid != 0 ]] && r=PASS || r=FAIL
   row "user agent, non-root (uid ${uid:-?})" "$r"
-  for tool in npm node; do
-    in_image "$tool" --version >/dev/null && r=PASS || r=FAIL
-    row "$tool --version" "$r"
+  for tool in npm node git apt-get dpkg tmux; do
+    flag=--version
+    [[ $tool == tmux ]] && flag=-V
+    in_image "$tool" "$flag" >/dev/null && r=PASS || r=FAIL
+    row "$tool $flag" "$r"
   done
   stamp=$(checkout_stamp 2>/dev/null) || stamp=
   out=$(in_image cat "$root/mini/VERSION") || out=
@@ -127,9 +129,8 @@ smoke() {
   out=$(docker image inspect -f '{{range $k, $v := .Config.Labels}}{{println $k}}{{end}}' \
     "$tag" 2>/dev/null) && ! grep -Eq '^(windroc|ensemble)\.' <<<"$out" && r=PASS || r=FAIL
   row "no windroc./ensemble. label" "$r"
-  out=$(in_image find /home/agent -name mini -o -name ctl -o -name .claude-plugin \
-    -o -name plugin.json) && [[ -z $out ]] && r=PASS || r=FAIL
-  row "/home/agent has no plugin files" "$r"
+  out=$(in_image find /home/agent -mindepth 1) && [[ -z $out ]] && r=PASS || r=FAIL
+  row "/home/agent is empty" "$r"
   docker run --rm --network none -e "PATH=$ensemble_path" -w /tmp "$tag" "$root/ctl/mini" -h \
     >/dev/null 2>&1 && r=PASS || r=FAIL
   row "ctl/mini -h, ensemble PATH, cwd /tmp" "$r"

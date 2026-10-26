@@ -26,7 +26,8 @@ RUN set -eux; \
     chmod a+rx /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/lib/node_modules/npm/bin/npx-cli.js; \
     ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm; \
     ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx; \
-    useradd -m -u "$AGENT_UID" -U -s /bin/bash agent
+    useradd -M -u "$AGENT_UID" -U -s /bin/bash agent; \
+    install -d -o agent -g agent /home/agent
 
 # The runtime root: the skill, ctl/ (its CLAUDE.md at the root), mini/ and their docs, read-only
 # to agent. MINI_OP_VERSION, the checkout's stamp (ctl/lib/version.sh), is required.
