@@ -15,7 +15,7 @@ on run argv
 	tell application "Terminal" to activate
 	delay 0.6
 	tell application "System Events"
-		if name of first process whose frontmost is true is not "Terminal" then error "chord: Terminal not frontmost; sent nothing"
+		if (name of (first process whose frontmost is true)) is not "Terminal" then error "chord: Terminal not frontmost; sent nothing"
 	end tell
 	repeat with m in mods
 		press(m as text, true)
