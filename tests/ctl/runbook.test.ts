@@ -473,6 +473,9 @@ test("deploy puts a snapshot runbook's scripts in ~/mini-op-projects", async (t)
   });
   assert.ok(fs.statSync(onMini(sb, "ensemble/install/install-test")).mode & 0o100);
   assert.deepEqual(fs.readdirSync(onMini(sb, "ensemble")), ["install"]);
+  // The packed archive went to ssh as a file, and its temp dir is gone.
+  assert.match(sb.calls("ssh").at(-1)?.stdin ?? "", /install-test/);
+  assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
 });
 
 test("deploy works for a checkout workspace", async (t) => {
@@ -668,4 +671,28 @@ esac`,
   );
   assert.match(r.stderr, /runbook: deploying to the mini failed;/);
   assert.deepEqual(fs.readdirSync(onMini(sb, "ensemble")), []);
+});
+
+test("an unreadable script deploys nothing and keeps the mini's previous scripts", async (t) => {
+  const sb = await synced(t);
+  const ws = workspace(sb);
+  const dir = scripts(ws, "ensemble", { "b.conf": "1\n" });
+  assert.equal((await run(sb, ws, "deploy", "install")).code, 0);
+  const before = files(onMini(sb, "ensemble/install"));
+  const calls = sb.calls("ssh").length;
+  fs.writeFileSync(path.join(dir, "install/install-test"), "#!/bin/zsh\necho v2\n");
+  const src = path.join(dir, "install");
+  const unreadable = path.join(src, "b.conf");
+  fs.chmodSync(unreadable, 0);
+  let r: Awaited<ReturnType<typeof run>>;
+  try {
+    r = await run(sb, ws, "deploy", "install");
+  } finally {
+    fs.chmodSync(unreadable, 0o644);
+  }
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, new RegExp(`runbook: cannot pack ${src}; deployed nothing\n$`));
+  assert.equal(sb.calls("ssh").length, calls);
+  assert.deepEqual(files(onMini(sb, "ensemble/install")), before);
+  assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
 });

@@ -218,6 +218,13 @@ elif [[ -d $src ]]; then
   for f in $src/**/*(DN.l+1); do refuse $f "a hard link"; done
 fi
 [[ -z $refused ]] || die "deployed nothing"
+# Packed in full before the mini is touched: tar skips a file it can't read and fails only after
+# a pipe's reader has the rest, which the mini would swap in.
+if [[ -d $src ]]; then
+  tmp=$(mktemp -d) || die "cannot make a temp dir"
+  trap 'rm -rf -- "${tmp:?}"' EXIT
+  pack_tar -cf $tmp/scripts.tar -C $src . || die "cannot pack $(shown $src); deployed nothing"
+fi
 $root/ctl/mini sync --check || $root/ctl/mini sync || die "mini sync failed; deployed nothing"
 
 dest="~/mini-op-projects/$pname/$name"
@@ -236,7 +243,6 @@ if [[ ! -d $src ]]; then
   print -r -- "runbook: $name has no scripts; nothing on the mini"
   exit 0
 fi
-pack_tar -cf - -C $src . |
-  mini_ssh -o BatchMode=yes mini "set -- $pname $name; $drop; $place" ||
+mini_ssh -o BatchMode=yes mini "set -- $pname $name; $drop; $place" <$tmp/scripts.tar ||
   die "deploying to the mini failed; $dest/ unchanged or partly updated"
 print -r -- "runbook: deployed $(shown $src) to the mini's $dest/"
