@@ -4,7 +4,7 @@ when: setting up the mini's machine access and browser, or reconnecting mini-op 
 
 # Set up the test environment
 
-How the manager makes a blank macOS machine into the Mac mini mini-op drives: machine access and the browser. The mini's scripts are in `mini/` of this folder (`~/playground/mini-op/`), installed there as `~/apm/` by `ctl/mini sync` (`host/README.md`, Deploy to the mini). A project's own accounts and keys are in that project's runbooks (for ensemble: `.mini-op/runbooks/` in `windroc-labs/ensemble`).
+How the manager makes a blank macOS machine into the Mac mini mini-op drives: machine access and the browser. The mini's scripts are in `mini/` of this checkout, installed there as `~/apm/` by `ctl/mini sync` (`host/README.md`, Deploy to the mini). A project's own accounts and keys are in that project's runbooks (for ensemble: `.mini-op/runbooks/` in `windroc-labs/ensemble`).
 
 Rules, driving the mini and gotchas: `../README.md`. What exists now: `../status.md`.
 
@@ -31,21 +31,20 @@ At the mini (the user):
 
 1. Erase All Content and Settings (`return-mini.md`). In Setup Assistant create the admin account `<mini_user>` (or another name, then set `mini_user` to it in step 4) with the same password as the account before, signed into no Apple Account.
 2. System Settings › General › Sharing: Remote Login on, Screen Sharing on (Remote Management off). Privacy & Security › FileVault off: auto-login needs it off.
-3. In Terminal, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`: note the new host key's fingerprint for steps 5 and 6.
+3. In Terminal, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`: note the new host key's SHA256 fingerprint for step 5.
 
 On this Mac (the user, in this checkout):
 
-4. If the account or address changed, set `mini_user` or `mini_host` in `~/.mini-op/config.local.yaml` and run `~/playground/mini-op/host/config`.
-5. Drop the mini's old host key on this Mac only (the container trusts just the key `host/start` bakes in), under the entry `host/start` looks up: the address, or `[<address>]:<port>` when `mini_port` is not 22:
+4. If the account or address changed, set `mini_user` or `mini_host` in `~/.mini-op/config.local.yaml` and run `host/config`.
+5. Pin the mini's new host key in mini-op's own state:
 
    ```sh
-   host=$(~/playground/mini-op/host/config get mini_host)
-   port=$(~/playground/mini-op/host/config get mini_port)
-   entry=$host; [ "$port" = 22 ] || entry="[$host]:$port"
-   ssh-keygen -R "$entry" -f ~/.ssh/known_hosts
+   host/pin-host-key
    ```
 
-6. Add mini-op's key to the account's `~/.ssh/authorized_keys` with the command of `host/README.md` step 2: ssh asks to accept the new host key (only when its fingerprint equals step 3's) and for the account's password. Then `~/playground/mini-op/host/stop` and `~/playground/mini-op/host/start`: the rebuilt image carries the new host key, `ctl/` and ssh config (redo `host/README.md` steps 4–5).
+   It scans only the configured address and port and shows the Ed25519 SHA256 fingerprint. Type `yes` only when it matches step 3. This replaces `~/.mini-op/known_hosts`; cancellation or failure keeps the old pin. Leave this Mac's `~/.ssh/known_hosts` alone. `host/start` never scans or re-trusts a changed key.
+
+6. Add mini-op's public key to the account's `~/.ssh/authorized_keys` with `host/README.md` step 2 (the existing container still has that public key). That command verifies the mini against the pin from step 5 and may ask for the account's password. For ensemble's environment key instead, repeat Environment definition's public-key authorization with the existing environment key. Then `host/stop` and `host/start`: the rebuilt image carries the new pin, `ctl/` and ssh config (redo `host/README.md` steps 4–5). SSH keeps refusing a changed key until this explicit confirmation and rebuild.
 
 In mini-op:
 

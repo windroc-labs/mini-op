@@ -4,7 +4,7 @@ A Docker container on this Mac running Claude Code as user `agent`, made to oper
 
 | What | How |
 | --- | --- |
-| Image | `mini-op:env`, whatever the Claude Code version: Debian `trixie-20261005-slim` (digest-pinned), Claude Code from its signed apt repo (version: `ARG CLAUDE_CODE_VERSION` in `Dockerfile`), git, openssh-client, netcat-openbsd (ssh's proxy hop), tmux, curl, jq, zsh, Debian's Node.js and npm (the registry tarball, pinned by SHA-256 in `Dockerfile`). User `agent` (uid and gid 1000), no sudo. The runtime root `/opt/windroc/mini-op/`, the working directory, root-owned and read-only to `agent`: the skill (`../skills/mini-op/`, linked at `/etc/claude-code/.claude/skills/mini-op/`), `../ctl/` (on `PATH`) with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/windroc/mini-op/CLAUDE.md`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`), `../README.md` and `../runbooks/`. The mini's ssh settings (`~/.mini-op/ssh_config`) and its host key (this Mac's `~/.ssh/known_hosts` entry) are built in: the image's ssh (`ssh_config.keys`) trusts only that key, never asks about or adds one, and uses `/run/ensemble/secrets/env/mini-ssh-key` when an environment gives it, else the volume's key. No python3 (FR-68): Claude Code's apt package runs without it, which CI's Image job checks on every image change and weekly (`claude --version` passes, `command -v python3` finds nothing). No secrets. |
+| Image | `mini-op:env`, whatever the Claude Code version: Debian `trixie-20261005-slim` (digest-pinned), Claude Code from its signed apt repo (version: `ARG CLAUDE_CODE_VERSION` in `Dockerfile`), git, openssh-client, netcat-openbsd (ssh's proxy hop), tmux, curl, jq, zsh, Debian's Node.js and npm (the registry tarball, pinned by SHA-256 in `Dockerfile`). User `agent` (uid and gid 1000), no sudo. The runtime root `/opt/windroc/mini-op/`, the working directory, root-owned and read-only to `agent`: the skill (`../skills/mini-op/`, linked at `/etc/claude-code/.claude/skills/mini-op/`), `../ctl/` (on `PATH`) with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/windroc/mini-op/CLAUDE.md`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`), `../README.md` and `../runbooks/`. The mini's ssh settings (`~/.mini-op/ssh_config`) and its pinned host key (`~/.mini-op/known_hosts`, confirmed with `host/pin-host-key`) are built in: the image's ssh (`ssh_config.keys`) trusts only that key, never asks about or adds one, and uses `/run/ensemble/secrets/env/mini-ssh-key` when an environment gives it, else the volume's key. No python3 (FR-68): Claude Code's apt package runs without it, which CI's Image job checks on every image change and weekly (`claude --version` passes, `command -v python3` finds nothing). No secrets. |
 | Host files | none mounted: `start` bakes the Image's files in at build, stamped with this checkout's commit (plus `-dirty` when anything is uncommitted) as the image label and mini/'s `VERSION`; it refuses to build outside a git checkout or with untracked or ignored files under `../ctl/`, `../mini/`, `../runbooks/` or `../skills/` (other than what `Dockerfile.dockerignore` leaves out). `../status.md` stays on this Mac. `ctl/`'s `mini pw`, `mini sudo` and `mini-autologin` read `/run/secrets/mini-password` |
 | Persistent state | named volume `mini-op-home` (`/home/agent`): Claude login (`~/.claude/.credentials.json`), Claude settings (`~/.claude/settings.json`; `start` sets `promptSuggestionEnabled` false, keeping other keys), ssh key `~/.ssh/id_ed25519` (comment `mini-op container`) |
 | Secrets | `/run/secrets`, a 64k tmpfs only `agent` can read; empty after every container start |
@@ -17,30 +17,34 @@ Inside mini-op the other docs, written for an operator on this Mac, read with "t
 
 ## Steps
 
+Run this Mac's commands from the checkout root.
+
 First, on a new Mac, and whenever the mini's address or account changes: put them in `~/.mini-op/config.local.yaml`, outside this repo. It sets only the keys it changes; `config.yaml` lists every key with its default (the address and account empty) and comments. `config` merges the two, checks them (it exits 1 naming what to fill in or fix, and never makes values up) and generates `~/.mini-op/ssh_config` (Host mini, for this Mac's `ssh -F` and the container) and `~/.mini-op/proxy/` (the proxy's config and ACL); `start` runs it itself. Any change to them takes effect with `stop`, then `start`: both images are built with them.
 
 ```sh
 mkdir -p -m 700 ~/.mini-op
 printf 'mini_host: %s\nmini_user: %s\n' '<the mini LAN IPv4>' '<the mini account>' > ~/.mini-op/config.local.yaml
-~/playground/mini-op/host/config
+host/config
 ```
 
-Then, once per mini and after its host key changes (`../runbooks/setup-test-env.md`, section Reconnect mini-op after a reset): note the mini's host-key fingerprint (on the mini, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`) and confirm it on this Mac, answering yes only when ssh shows the same fingerprint. `start` bakes this Mac's `~/.ssh/known_hosts` entry for the mini into the image and exits 1 without one.
+Then, once per mini, after its address or port changes, and after its host key changes (`../runbooks/setup-test-env.md`, section Reconnect mini-op after a reset): at the mini, run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` and note its SHA256 fingerprint. On this Mac run:
 
 ```sh
-ssh -F ~/.mini-op/ssh_config mini true
+host/pin-host-key
 ```
+
+Compare the displayed fingerprint with the one from the mini, and type `yes` only when they match. This explicitly replaces mini-op's pin in `~/.mini-op/known_hosts`; a scan alone is untrusted, and cancellation or failure keeps the old pin. `start` bakes only that endpoint's pinned key into the image and exits 1 without one. A changed host key keeps failing until you confirm it with `host/pin-host-key` and rebuild. This Mac's personal `~/.ssh/known_hosts` is never used or changed by these commands.
 
 1. Build and check the images (claude runs; the proxy loads its config), then (re)create `mini-op-net` (if missing), `mini-op-proxy` and `mini-op`; a failed build or check exits nonzero and leaves the running containers as they were. It prints `agent`'s public key; it makes one only when the volume has none. This restarts the container and clears its tmpfs secrets and tmux sessions.
 
    ```sh
-   ~/playground/mini-op/host/start
+   host/start
    ```
 
 2. Only with a new volume (new key): let the key into the mini, replacing any older `mini-op container` line.
 
    ```sh
-   docker exec mini-op cat /home/agent/.ssh/id_ed25519.pub | ssh -F ~/.mini-op/ssh_config mini 'k=$(cat); f=~/.ssh/authorized_keys; sed -i "" "/ mini-op container\$/d" "$f"; printf "%s\n" "$k" >> "$f"'
+   docker exec mini-op cat /home/agent/.ssh/id_ed25519.pub | ssh -F ~/.mini-op/ssh_config -o UserKnownHostsFile=~/.mini-op/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes mini 'k=$(cat); f=~/.ssh/authorized_keys; sed -i "" "/ mini-op container\$/d" "$f"; printf "%s\n" "$k" >> "$f"'
    ```
 
 3. Log Claude Code in (once per volume). Open the printed URL in a browser on this Mac and paste the code it shows back at `Paste code here if prompted`.
@@ -58,7 +62,7 @@ ssh -F ~/.mini-op/ssh_config mini true
 5. After every `start` (needs steps 2–3 done), check the network from inside the container. It prints a PASS/FAIL table (Claude answers, `ssh … echo ok` works; this Mac, the LAN, `example.com` and direct `1.1.1.1:443` are blocked) and exits 1 on any FAIL. `--egress-only` skips the Claude and `ssh` checks.
 
    ```sh
-   ~/playground/mini-op/host/verify-egress
+   host/verify-egress
    ```
 
 6. Work with it. The first start asks to trust the runtime root `/opt/windroc/mini-op/`. Detach with Ctrl-b d; the same command reattaches.
@@ -70,13 +74,13 @@ ssh -F ~/.mini-op/ssh_config mini true
 7. When not testing, stop it with its proxy; `resume` brings both back, proxy first, and starts `mini-op` only once `mini-op-proxy` runs, recreating nothing (redo step 4). After a stop always use `resume`: never start only `mini-op` (e.g. its start button in Docker Desktop). Never leave `mini-op-proxy` stopped while `mini-op` runs: it is mini-op's only way out.
 
    ```sh
-   ~/playground/mini-op/host/stop
-   ~/playground/mini-op/host/resume
+   host/stop
+   host/resume
    ```
 
 ## Deploy to the mini
 
-The mini runs `mini/` as `~/apm/`. After `start` (it stamps mini/'s `VERSION` in the image), copy it there from mini-op; from this Mac, `~/playground/mini-op/ctl/mini sync` does the same, stamped from the checkout on the spot:
+The mini runs `mini/` as `~/apm/`. After `start` (it stamps mini/'s `VERSION` in the image), copy it there from mini-op; from this Mac, `ctl/mini sync` does the same, stamped from the checkout on the spot:
 
 ```sh
 docker exec mini-op mini sync
@@ -121,7 +125,7 @@ Create them once, on this Mac with ensemble installed. `ensemble-broker login en
    ```sh
    d=$(mktemp -d)
    ssh-keygen -q -t ed25519 -N '' -C 'mini-op environment' -f "$d/key"
-   ssh -F ~/.mini-op/ssh_config mini 'cat >> ~/.ssh/authorized_keys' < "$d/key.pub"
+   ssh -F ~/.mini-op/ssh_config -o UserKnownHostsFile=~/.mini-op/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes mini 'cat >> ~/.ssh/authorized_keys' < "$d/key.pub"
    ensemble-broker login env mini-op-ssh-key < "$d/key"
    rm -rf "$d"
    ```
@@ -135,7 +139,7 @@ Create them once, on this Mac with ensemble installed. `ensemble-broker login en
 3. Only for a runbook that uses Strata: the key from this Mac's login keychain (its item's service and account):
 
    ```sh
-   . ~/playground/mini-op/mini/lib/keychain.zsh
+   . mini/lib/keychain.zsh
    keychain_read <service> <account> | ensemble-broker login env mini-op-strata-key
    ```
 
@@ -172,8 +176,10 @@ file = "mini-ssh-key"
 In direct use, `/mini-op` finds a project's runbooks in a snapshot that `update` copies into the container; the container never mounts the checkout. It needs ensemble's direct-use container (labels `windroc.lock=mini-op`, `windroc.lock.owner=mini-op`, a workspace volume at `~/.mini-op/workspace`): the session `mini-op` of Environment definition, not the container of Steps.
 
 ```sh
-~/playground/mini-op/host/update ~/src/ensemble
+host/update ~/src/ensemble
 ```
+
+`host/update` copies runbooks over `docker exec`; it neither uses SSH nor reads or changes host keys. The container keeps using the pin baked by `host/start`.
 
 It copies the checkout's `.mini-op/runbooks/` to the workspace's `projects/<project>/` (`<project>`: the origin repo's name; `remote` beside it, the origin URL without credentials), read-only. Run it again after the runbooks change: it replaces the snapshot. The snapshot lives in the workspace volume, so it survives `ensemble-session close mini-op` and a new start or resume, and goes with the volume. It refuses, copying nothing: a symlink, FIFO, socket, device or hard link anywhere under `.mini-op/runbooks/` (each named), a snapshot of the same name from another remote, no direct-use container (a `verifier` run's is never written) or several.
 
@@ -181,15 +187,15 @@ Handing over a checkout runs its runbooks' scripts on the mini, unreviewed, with
 
 ## Change or remove
 
-- Files take effect only through a rebuild: after editing or pulling this repo, run on the user's Mac, from any directory (adjust the checkout path):
+- Files take effect only through a rebuild: after editing or pulling this repo, run on the user's Mac, from the checkout root:
 
   ```sh
-  ~/playground/mini-op/host/stop
-  ~/playground/mini-op/host/start
+  host/stop
+  host/start
   ```
 
   This rebuilds `mini-op:env` with the new `ctl/`, `mini/`, docs, ssh config (`~/.mini-op/ssh_config`) and host key and recreates both containers: redo step 4 and reattach (step 6). Nothing is copied into a running container. The mini's `~/apm/` changes only with `mini sync` (Deploy to the mini).
-- The mini's host key changed (ssh in the container fails): `../runbooks/setup-test-env.md`, section Reconnect mini-op after a reset, steps 5–6: drop it on this Mac only, confirm the new one, then `stop` and `start`.
+- The mini's host key changed (ssh in the container fails): `../runbooks/setup-test-env.md`, section Reconnect mini-op after a reset, steps 5–6: run `host/pin-host-key`, confirm the new fingerprint, then `host/stop` and `host/start`.
 - Allow another host: set `proxy_allowed_domains` in `~/.mini-op/config.local.yaml` to the whole list, `config.yaml`'s hosts plus the new one (another mini port: `mini_port`), rerun `start`, then `verify-egress`. Claude Code's host list: https://code.claude.com/docs/en/network-config; telemetry, update and plugin hosts stay blocked on purpose.
 - Newer Claude Code: set `ARG CLAUDE_CODE_VERSION` to a version the stable repo lists (`curl -fsSL https://downloads.claude.ai/claude-code/apt/stable/dists/stable/main/binary-arm64/Packages | grep ^Version`), then `stop` and `start`: `mini-op:env` then names the new image.
 - Remove everything:
@@ -199,5 +205,5 @@ Handing over a checkout runs its runbooks' scripts on the mini, unreviewed, with
   docker network rm mini-op-net
   docker volume rm mini-op-home
   docker image rm $(docker images -q mini-op) $(docker images -q mini-op-proxy)
-  ssh -F ~/.mini-op/ssh_config mini 'sed -i "" "/ mini-op container\$/d" ~/.ssh/authorized_keys'
+  ssh -F ~/.mini-op/ssh_config -o UserKnownHostsFile=~/.mini-op/known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes mini 'sed -i "" "/ mini-op container\$/d" ~/.ssh/authorized_keys'
   ```
