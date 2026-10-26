@@ -401,3 +401,21 @@ test("host/update and ctl/runbook name a project alike", async (t) => {
     assert.ok(list.stdout.startsWith(`project:${name}\t`), `${url}: ${list.stdout}`);
   }
 });
+
+test("a handed-over project runbook runs with its scripts under ~/mini-op-projects", async (t) => {
+  const sb = await sandbox(t);
+  sb.fake("ssh", [{ local: true }]);
+  const co = await checkout(sb, FILES);
+  assert.equal((await update(sb, co)).code, 0);
+  const ws = workspace(sb);
+  const runbook = path.join(snapshotDir(sb), ".mini-op/runbooks/install.md");
+  const list = await sb.run(["zsh", RUNBOOK, "list"], { cwd: ws });
+  assert.equal(list.code, 0, list.stderr);
+  assert.ok(list.stdout.startsWith(`project:ensemble\t${runbook}\tinstall it\n`), list.stdout);
+  const deploy = await sb.run(["zsh", RUNBOOK, "deploy", "install"], { cwd: ws });
+  assert.equal(deploy.code, 0, deploy.stderr);
+  const script = path.join(sb.home, "mini-op-projects/ensemble/install/install-test");
+  const ran = await sb.run(["zsh", script]);
+  assert.equal(ran.code, 0, ran.stderr);
+  assert.equal(ran.stdout, "installed\n");
+});
