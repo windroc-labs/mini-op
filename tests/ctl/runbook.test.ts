@@ -647,31 +647,39 @@ test("a failed deploy keeps the mini's previous scripts", async (t) => {
   });
 });
 
-test("the mini's re-check refuses a special file in what it received", async (t) => {
-  const sb = await Sandbox.create(t);
-  // The archive gains a symlink on its way: the mini side must refuse it and keep what it had.
-  sb.fake("ssh", [
-    {
-      shell: `cmd=\${@[-1]}
+// The archive gains a symlink named <name> (zsh $'…' text) on its way: the mini side must refuse
+// it, naming it printably and only up to a newline, and keep what it had.
+for (const [name, shown] of [
+  ["evil", "install/evil"],
+  ["ev\\033[2Jil", "install/ev?[2Jil"],
+  ["a\\nb", "install/a"],
+] as const) {
+  test(`the mini's re-check refuses a special file in what it received: ${shown}`, async (t) => {
+    const sb = await Sandbox.create(t);
+    sb.fake("ssh", [
+      {
+        shell: `cmd=\${@[-1]}
 case $cmd in
-  *mini-op-projects*.new*) d=$(mktemp -d); tar -xf - -C $d; ln -s /etc/passwd $d/evil; tar -cf - -C $d . | zsh -c $cmd ;;
+  *mini-op-projects*.new*) d=$(mktemp -d); tar -xf - -C $d; ln -s /etc/passwd $d/$'${name}'; tar -cf - -C $d . | zsh -c $cmd ;;
   *) exec zsh -c $cmd ;;
 esac`,
-    },
-  ]);
-  const r0 = await sb.run(["zsh", MINI, "sync"]);
-  assert.equal(r0.code, 0, r0.stderr);
-  const ws = workspace(sb);
-  scripts(ws, "ensemble");
-  const r = await run(sb, ws, "deploy", "install");
-  assert.equal(r.code, 1);
-  assert.match(
-    r.stderr,
-    /runbook: the mini refused install\/evil: not a regular file with one link; deployed nothing\n/,
-  );
-  assert.match(r.stderr, /runbook: deploying to the mini failed;/);
-  assert.deepEqual(fs.readdirSync(onMini(sb, "ensemble")), []);
-});
+      },
+    ]);
+    const r0 = await sb.run(["zsh", MINI, "sync"]);
+    assert.equal(r0.code, 0, r0.stderr);
+    const ws = workspace(sb);
+    scripts(ws, "ensemble");
+    const r = await run(sb, ws, "deploy", "install");
+    assert.equal(r.code, 1);
+    const refused = lines(r.stderr).filter((line) => line.startsWith("runbook: the mini refused"));
+    assert.deepEqual(refused, [
+      `runbook: the mini refused ${shown}: not a regular file with one link; deployed nothing`,
+    ]);
+    assert.ok(!r.stderr.includes("\x1b"), JSON.stringify(r.stderr));
+    assert.match(r.stderr, /runbook: deploying to the mini failed;/);
+    assert.deepEqual(fs.readdirSync(onMini(sb, "ensemble")), []);
+  });
+}
 
 test("an unreadable script deploys nothing and keeps the mini's previous scripts", async (t) => {
   const sb = await synced(t);
