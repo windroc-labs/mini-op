@@ -52,7 +52,7 @@ Pre-rename names: the test resources made before the ensemble rename keep their 
 
 ## 4. Linear workspace
 
-1. `linear.app/signup` › Continue with email › the address; `~/apm/runbooks/setup-test-env/maillink mark|follow <email>` around the request opens the emailed link.
+1. `linear.app/signup` › Continue with email › the address; `~/apm/bin/maillink mark|follow <email>` around the request opens the emailed link.
 2. Create the workspace (name and URL by keystrokes), skip the onboarding steps, turn off onboarding emails.
 3. Create the manager's key as in "API keys" below; use service `agentpm-test-linear-key`, preserving its existing account from the export.
 4. Through `~/apm/runbooks/setup-test-env/lq` (body files built on this Mac, scp'd to `/tmp`): states In Review and Handoff (type `started`); label groups `Agent` (Claude, Codex, OpenCode) and `Tasks` (Build, Light Build, Light Research, Deep Research); trash the onboarding issues. Record every id in the config snippet.
@@ -62,7 +62,7 @@ Board extras, with `lq` (manager key): project `agentpm-test` (`projectCreate`, 
 ## 5. Role accounts
 
 1. Invite `dotpm2026+<role>@outlook.com` for harness, researcher, pm, engineer: `organizationInviteCreate(role: admin, teamIds: [team])`. The free plan invites admins only.
-2. Per role, one at a time: `ssh mini '~/apm/runbooks/setup-test-env/linearlogin --code <email>'` (transport/controller exception: the script drives role visibly but reads authentication mail privately; do not run the whole controller inside Terminal). It logs out, requests the mail, enters its masked code and prints a safe landing. Then foreground OpenCLI: Join, onboarding (profile name `Agent <role>`, Skip, Finish), then the key.
+2. Per role, one at a time: `ssh mini '~/apm/bin/linearlogin --code <email>'` (transport/controller exception: the script drives role visibly but reads authentication mail privately; do not run the whole controller inside Terminal). It logs out, requests the mail, enters its masked code and prints a safe landing. Then foreground OpenCLI: Join, onboarding (profile name `Agent <role>`, Skip, Finish), then the key.
 
 ## API keys
 

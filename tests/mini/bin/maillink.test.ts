@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
-import { Page, type PageEvent } from "../../../lib/page.ts";
-import { REPO, Sandbox, type FakeRule } from "../../../lib/sandbox.ts";
+import { Page, type PageEvent } from "../../lib/page.ts";
+import { REPO, Sandbox, type FakeRule } from "../../lib/sandbox.ts";
 
-const MAILLINK = path.join(REPO, "mini/runbooks/setup-test-env/maillink");
+const MAILLINK = path.join(REPO, "mini/bin/maillink");
 const EMAIL = "role+1@x.com";
 const MARK = "home/apm/state/maillink.role_1_x_com";
 const INBOX = "https://outlook.live.com/mail/0/";

@@ -76,7 +76,7 @@ const ctl = ({ script, title, args, env }: CtlRow): Scenario => ({
 
 export const SECRET_SCRIPTS: Scenario[] = [
   {
-    script: "mini/runbooks/setup-test-env/maillink",
+    script: "mini/bin/maillink",
     title: "consumes a mail login link through JXA stdin without token argv",
     args: () => ["follow", "role@example.com"],
     setup(sb) {

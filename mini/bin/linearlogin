@@ -10,8 +10,8 @@ or maillink timed out).'
 code=; [[ $# -eq 2 && $1 == --code ]] && { code=1; shift; }
 [[ $# -eq 1 && $1 =~ '^[A-Za-z0-9._%+][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+$' ]] ||
   { print -u2 -r -- 'linearlogin: usage: linearlogin [--code] <email>'; exit 2; }
-source ${0:A:h}/../../lib/timeout.zsh || exit 1
-source ${0:A:h}/../../lib/opencli.zsh || exit 1
+source ${0:A:h}/../lib/timeout.zsh || exit 1
+source ${0:A:h}/../lib/opencli.zsh || exit 1
 E=$1; T='input[name=authToken]'
 o(){ ~/apm/bin/o "$@" --session role; }
 page(){ o eval "$(page_js where)" | opencli_data; }
@@ -31,7 +31,7 @@ case "$(page)" in *"Log in to Linear"*) ;; *)
   expect "Log in to Linear";;
 esac
 expect "Log in to Linear"
-~/apm/runbooks/setup-test-env/maillink mark "$E" >/dev/null || exit 1
+~/apm/bin/maillink mark "$E" >/dev/null || exit 1
 ~/apm/bin/front linear.app >/dev/null; sleep 1
 o click --text "Continue with email" >/dev/null; expect "email address"
 o type --name "email address" "$E" >/dev/null
@@ -40,11 +40,11 @@ if [[ -n $code ]]; then
   o click --text "Enter code manually" >/dev/null
   poll 16 1 codefield ||
     { print -u2 -r -- "linearlogin: timed out after 15 s: no code field: $(page)"; exit 124; }
-  ~/apm/runbooks/setup-test-env/maillink code "$E"; rc=$?
+  ~/apm/bin/maillink code "$E"; rc=$?
   (( rc == 0 )) || exit $(( rc == 124 ? 124 : 1 ))
   poll 4 1 left || printf '' | osascript -l JavaScript ~/apm/js/keys.js --front Chrome --enter >/dev/null
 else
-  ~/apm/runbooks/setup-test-env/maillink follow "$E"; rc=$?
+  ~/apm/bin/maillink follow "$E"; rc=$?
   (( rc == 0 )) || exit $(( rc == 124 ? 124 : 1 ))
 fi
 poll 21 1 left ||
