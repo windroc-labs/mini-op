@@ -23,16 +23,18 @@ function blocks(text: string): { match: string; settings: string[] }[] {
 }
 
 test("ssh uses only the injected key and the baked host key", () => {
-  assert.deepEqual(blocks(KEYS), [{
-    match: "Match originalhost mini",
-    settings: [
-      `IdentityFile ${ENV_KEY}`,
-      "IdentitiesOnly yes",
-      "StrictHostKeyChecking yes",
-      "UserKnownHostsFile /dev/null",
-      "GlobalKnownHostsFile /etc/ssh/mini_known_hosts",
-    ],
-  }]);
+  assert.deepEqual(blocks(KEYS), [
+    {
+      match: "Match originalhost mini",
+      settings: [
+        `IdentityFile ${ENV_KEY}`,
+        "IdentitiesOnly yes",
+        "StrictHostKeyChecking yes",
+        "UserKnownHostsFile /dev/null",
+        "GlobalKnownHostsFile /etc/ssh/mini_known_hosts",
+      ],
+    },
+  ]);
 });
 
 test("the image reads it before mini.conf, and the env stage bakes the host keys it names", () => {

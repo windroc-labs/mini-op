@@ -6,15 +6,34 @@ import { REPO, Sandbox, type FakeRule } from "../lib/sandbox.ts";
 const SCRIPT = path.join(REPO, "host/verify-egress");
 const ID = "direct-use-id";
 const PS = [
-  "ps", "-q", "--no-trunc", "--filter", "label=windroc.lock=mini-op",
-  "--filter", "label=windroc.lock.owner=mini-op",
+  "ps",
+  "-q",
+  "--no-trunc",
+  "--filter",
+  "label=windroc.lock=mini-op",
+  "--filter",
+  "label=windroc.lock.owner=mini-op",
 ];
 const CLAUDE = ["exec", ID, "timeout", "120", "claude", "-p", "Reply with exactly: ok"];
 const SSH = [
-  "exec", ID, "timeout", "30", "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
-  "mini", "echo", "ok",
+  "exec",
+  ID,
+  "timeout",
+  "30",
+  "ssh",
+  "-o",
+  "BatchMode=yes",
+  "-o",
+  "ConnectTimeout=10",
+  "mini",
+  "echo",
+  "ok",
 ];
-async function verify(t: Parameters<typeof Sandbox.create>[0], extra: FakeRule[] = [], args: string[] = []) {
+async function verify(
+  t: Parameters<typeof Sandbox.create>[0],
+  extra: FakeRule[] = [],
+  args: string[] = [],
+) {
   const sb = await Sandbox.create(t);
   sb.fake("docker", [
     ...extra,
@@ -34,8 +53,8 @@ test("only the direct owner is selected and only two end-to-end rows run", async
   assert.equal(rows.length, 2);
   assert.match(rows[0]!, /^claude -p answers\s+\| PASS$/);
   assert.match(rows[1]!, /^ssh mini echo ok\s+\| PASS$/);
-  assert.deepEqual(sb.calls("docker").map(c => c.argv), [PS, CLAUDE, SSH]);
-  assert.ok(sb.calls("docker").every(c => c.stdin === ""));
+  assert.deepEqual(sb.calls("docker").map((c) => c.argv), [PS, CLAUDE, SSH]);
+  assert.ok(sb.calls("docker").every((c) => c.stdin === ""));
 });
 
 test("no direct container, including a verifier-only host, never execs", async (t) => {
@@ -43,7 +62,7 @@ test("no direct container, including a verifier-only host, never execs", async (
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
   assert.match(r.stderr, /host\/start/);
-  assert.deepEqual(sb.calls("docker").map(c => c.argv), [PS]);
+  assert.deepEqual(sb.calls("docker").map((c) => c.argv), [PS]);
   assert.ok(PS.includes("label=windroc.lock.owner=mini-op"));
 });
 
@@ -53,7 +72,7 @@ test("multiple matching containers or a failed query never exec", async (t) => {
     assert.equal(r.code, 1);
     assert.equal(r.stdout, "");
     assert.match(r.stderr, /host\/start/);
-    assert.deepEqual(sb.calls("docker").map(c => c.argv), [PS]);
+    assert.deepEqual(sb.calls("docker").map((c) => c.argv), [PS]);
   }
 });
 
@@ -75,10 +94,18 @@ test("an uppercase Claude OK. reply passes", async (t) => {
   assert.equal(r.code, 0, r.stdout);
 });
 
-test("help and invalid arguments run nothing", async (t) => {
-  for (const args of [["-h"], ["--help"], ["--egress-only"], ["x"], ["x", "y"]]) {
+test("help runs nothing", async (t) => {
+  for (const args of [["-h"], ["--help"]]) {
     const { sb, r } = await verify(t, [], args);
-    assert.equal(r.code, args[0] === "-h" || args[0] === "--help" ? 0 : 2);
+    assert.equal(r.code, 0);
+    assert.deepEqual(sb.calls("docker"), []);
+  }
+});
+
+test("invalid arguments exit 2 without running anything", async (t) => {
+  for (const args of [["--egress-only"], ["x"], ["x", "y"]]) {
+    const { sb, r } = await verify(t, [], args);
+    assert.equal(r.code, 2);
     assert.deepEqual(sb.calls("docker"), []);
   }
 });

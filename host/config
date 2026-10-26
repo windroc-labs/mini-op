@@ -32,9 +32,8 @@ if [[ ! -f $local_file ]]; then
   exit 1
 fi
 
-# The base's keys in order, with their kind (scalar | list), default and merged value (a list's
-# items joined by one space).
-keys=() kinds=() defaults=() values=() errors=()
+# The base's scalar keys and merged values in declaration order.
+keys=() values=() errors=()
 problem() { errors[${#errors[@]}]=$*; }
 index_of() {
   local i
@@ -51,13 +50,10 @@ tail_re='([[:space:]]+#.*)?[[:space:]]*$'
 re_empty="^\"\"$tail_re"
 re_quoted="^\"([^\"\\\\]*)\"$tail_re"
 re_bare="^([^][#\",[:space:]]+)$tail_re"
-re_list="^\\[([^]#\"]*)\\]$tail_re"
-re_item='^[[:space:]]*([^][#",[:space:]]+)[[:space:]]*$'
 
 # parse <file> <base|local>: reads key: value lines into the arrays; a problem names file:line.
 parse() {
-  local file=$1 role=$2 n=0 line key raw kind value item i seen=" "
-  local -a items
+  local file=$1 role=$2 n=0 line key raw value i seen=" "
   while IFS= read -r line || [[ -n $line ]]; do
     n=$((n + 1))
     [[ $line =~ $re_skip ]] && continue
@@ -67,23 +63,11 @@ parse() {
     fi
     key=${BASH_REMATCH[1]} raw=${BASH_REMATCH[2]}
     if [[ $raw =~ $re_empty ]]; then
-      kind=scalar value=''
+      value=''
     elif [[ $raw =~ $re_quoted || $raw =~ $re_bare ]]; then
-      kind=scalar value=${BASH_REMATCH[1]}
-    elif [[ $raw =~ $re_list ]]; then
-      kind=list value='' raw=${BASH_REMATCH[1]}
-      if [[ $raw =~ [^[:space:]] ]]; then
-        IFS=, read -r -a items <<<"$raw,"
-        for item in "${items[@]}"; do
-          if [[ ! $item =~ $re_item ]]; then
-            problem "$file:$n: $key: list items are plain words separated by commas"
-            continue 2
-          fi
-          value="$value${value:+ }${BASH_REMATCH[1]}"
-        done
-      fi
+      value=${BASH_REMATCH[1]}
     else
-      problem "$file:$n: $key: the value must be \"\", \"text\", text or [a, b] on this line"
+      problem "$file:$n: $key: the value must be \"\", \"text\", text on this line"
       continue
     fi
     if [[ $seen == *" $key "* ]]; then
@@ -93,15 +77,9 @@ parse() {
     seen="$seen$key "
     if [[ $role == base ]]; then
       i=${#keys[@]}
-      keys[i]=$key kinds[i]=$kind defaults[i]=$value values[i]=$value
+      keys[i]=$key values[i]=$value
     elif ! i=$(index_of "$key"); then
       problem "$file:$n: unknown key $key; host/config.yaml lists the keys"
-    elif [[ ${kinds[i]} != "$kind" ]]; then
-      if [[ ${kinds[i]} == list ]]; then
-        problem "$file:$n: $key takes a list: [a, b]"
-      else
-        problem "$file:$n: $key takes one value, not a list"
-      fi
     else
       values[i]=$value
     fi
@@ -135,7 +113,6 @@ validate() {
   if [[ ! $port =~ ^[1-9][0-9]{0,4}$ ]] || ((port > 65535)); then
     problem "mini_port $port is not a port (1-65535)"
   fi
-
 }
 
 parse "$base" base

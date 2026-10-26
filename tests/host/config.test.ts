@@ -36,7 +36,10 @@ const listed = (dir: string) => fs.readdirSync(dir, { recursive: true }).map(Str
 
 test("the base lists every key, address and account empty", () => {
   const text = fs.readFileSync(BASE, "utf8");
-  assert.deepEqual(text.split("\n").filter(l=>l && !l.startsWith("#")), ['mini_host: ""', 'mini_user: ""', "mini_port: 22"]);
+  assert.deepEqual(
+    text.split("\n").filter((l) => l && !l.startsWith("#")),
+    ['mini_host: ""', 'mini_user: ""', "mini_port: 22"],
+  );
 
   const lines = text.split("\n");
   for (const [i, line] of lines.entries()) {
@@ -67,14 +70,12 @@ test("writes only ssh_config from the merged config", async (t) => {
     read(dir, "ssh_config"),
     `${HEADER}\nHost mini\n    HostName ${MINI_HOST}\n    User ${MINI_USER}\n    Port 22\n`,
   );
-
 });
 
 test("another mini port reaches ssh_config", async (t) => {
   const { r, dir } = await config(t, `${FAKE_LOCAL}mini_port: 2222\n`);
   assert.equal(r.code, 0, r.stderr);
   assert.match(read(dir, "ssh_config"), /\n {4}Port 2222\n$/);
-
 });
 
 test("get prints merged scalars without writing", async (t) => {
@@ -211,7 +212,7 @@ test("-h prints the usage; other arguments are usage errors", async (t) => {
   const help = await s.sb.run(["bash", CONFIG, "-h"]);
   assert.equal(help.code, 0);
   assert.match(help.stdout, /^config \[get <key>\]/);
-  for (const args of [["get"], ["get", "a", "b"], ["x"], ["policy-hash", "x"], ["-h", "x"]]) {
+  for (const args of [["get"], ["get", "a", "b"], ["x"], ["-h", "x"]]) {
     const r = await s.sb.run(["bash", CONFIG, ...args]);
     assert.equal(r.code, 2, args.join(" "));
     assert.equal(r.stderr, "config: usage: config [get <key>]\n");

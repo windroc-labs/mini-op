@@ -10,7 +10,7 @@ import { steps, type Job } from "../lib/workflows.ts";
 const CHECK = path.join(REPO, ".github/image-check");
 const TAG = "mini-op-image-check";
 const HISTORY = ["history", "--no-trunc", "--format", "{{.CreatedBy}}", TAG];
-const IN = ["run", "--rm", "--network", "none", TAG];
+const IN = ["container", "run", "--rm", "--network", "none", TAG];
 const LABELS = [
   "image",
   "inspect",
@@ -23,7 +23,7 @@ const ENSEMBLE_PATH = [
   "/home/agent/.npm-global/bin",
   ...["usr/local/bin", "usr/bin", "bin"].map((dir) => "/" + dir),
 ].join(":");
-const MINI_H = ["run", "--rm", "--network", "none", "-e", `PATH=${ENSEMBLE_PATH}`, "-w", "/tmp"];
+const MINI_H = ["container", "run", "--rm", "--network", "none", "-e", `PATH=${ENSEMBLE_PATH}`, "-w", "/tmp"];
 const GIT_ENV = {
   GIT_AUTHOR_NAME: "t",
   GIT_AUTHOR_EMAIL: "t@example.com",
@@ -276,7 +276,7 @@ function smokeRules(stamp: string): FakeRule[] {
     { argv: [...IN, "sh", "-c", "! command -v python3"] },
     { argv: [...IN, "id"], stdout: "uid=1000(agent) gid=1000(agent) groups=1000(agent)\n" },
     { argv: [...IN, "npm", "--version"], stdout: "10.9.9\n" },
-    ...["git", "apt-get", "dpkg"].map(tool => ({ argv: [...IN, tool, "--version"] })),
+    ...["git", "apt-get", "dpkg"].map((tool) => ({ argv: [...IN, tool, "--version"] })),
     { argv: [...IN, "tmux", "-V"] },
     { argv: [...IN, "node", "--version"], stdout: "v20.19.2\n" },
     {

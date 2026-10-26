@@ -136,7 +136,7 @@ flowchart TD
 
 下列编号对应图中的执行顺序；任何一步失败，先保留仍可用的访问路径。
 
-1. ensemble 升至包含 `bb5311c`（WDRC-109 PR #64）的版本，插件与 broker 一起升，按 ensemble `docs/upgrading.md`。本机原安装版没有 `open`；先确认 `ensemble-delegate open --help` 可用。
+1. ensemble 升至包含 `bb5311c`（WDRC-109 PR #64）的版本，插件与 broker 一起升，按 [ensemble 升级说明](https://github.com/windroc-labs/ensemble/blob/main/docs/upgrading.md)。本机原安装版没有 `open`；先确认 `ensemble-delegate open --help` 可用。
 2. 确认 egress 本机配置有 `mini-op` 段，allowlist 包括 Anthropic 域名和 mini 的 `host:22` 例外，`egress-proxy` healthy。本机已有该配置。
 3. 生成新 SSH key，经仍在运行的旧 `mini-op` 容器追加公钥，保留旧公钥：
 

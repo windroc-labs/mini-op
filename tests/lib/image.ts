@@ -84,4 +84,3 @@ export function fingerprint(armored: string): string {
   hash.update(packet);
   return hash.digest("hex").toUpperCase();
 }
-

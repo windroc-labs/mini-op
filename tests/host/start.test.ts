@@ -8,95 +8,167 @@ import { FAKE_LOCAL, MINI_HOST } from "../lib/ssh_config.ts";
 const START = path.join(REPO, "host/start");
 const IMAGE = "mini-op:env";
 const GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"];
-const KEEP_CONTEXT = 'for a; do [[ $a == mini=* ]] && cp -R "${a#mini=}" "$FAKE_DIR/context"; done; true';
+const KEEP_CONTEXT =
+  'for a; do [[ $a == mini=* ]] && cp -R "${a#mini=}" "$FAKE_DIR/context"; done; true';
 const HOST_KEYS = ["|1|c2FsdA==|aGFzaA== ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostKey"];
-const KEYGEN: FakeRule = { argv: ["-F"], stdout: `# Host ${MINI_HOST} found: line 3\n${HOST_KEYS.join("\n")}\n` };
+const KEYGEN: FakeRule = {
+  argv: ["-F"],
+  stdout: `# Host ${MINI_HOST} found: line 3\n${HOST_KEYS.join("\n")}\n`,
+};
 function docker(extra: FakeRule[] = []): FakeRule[] {
-  return [...extra, { argv: ["info"] }, { argv: ["ps"] }, { argv: ["network", "ls"] },
-    { argv: ["volume", "ls"] }, { argv: ["build"], shell: KEEP_CONTEXT }];
+  return [
+    ...extra,
+    { argv: ["info"] },
+    { argv: ["ps"] },
+    { argv: ["network", "ls"] },
+    { argv: ["volume", "ls"] },
+    { argv: ["build"], shell: KEEP_CONTEXT },
+  ];
 }
-async function start(t: Parameters<typeof Sandbox.create>[0], extra: FakeRule[] = [], args: string[] = [],
-  script = START, sandbox?: Sandbox, keygen: FakeRule[] = [KEYGEN], delegate: FakeRule = {}) {
-  const sb = sandbox ?? await Sandbox.create(t);
+async function start(
+  t: Parameters<typeof Sandbox.create>[0],
+  extra: FakeRule[] = [],
+  args: string[] = [],
+  script = START,
+  sandbox?: Sandbox,
+  keygen: FakeRule[] = [KEYGEN],
+  delegate: FakeRule = {},
+) {
+  const sb = sandbox ?? (await Sandbox.create(t));
   sb.fake("docker", docker(extra));
   sb.fake("ssh-keygen", keygen);
   sb.fake("ensemble-delegate", [{ ...delegate, shell: 'umask > "$FAKE_DIR/delegate-umask"' }]);
   const r = await sb.run(["bash", script, ...args]);
   return { sb, r };
 }
-const values = (argv: string[], ...flags: string[]) => argv.filter((_, i) => i > 0 && flags.includes(argv[i - 1]!));
+const values = (argv: string[], ...flags: string[]) =>
+  argv.filter((_, i) => i > 0 && flags.includes(argv[i - 1]!));
 
-test("builds only env, then delegates with fixed Claude, cwd and umask 022", async t => {
-  const {sb,r}=await start(t);
-  assert.equal(r.code,0,r.stderr);
+test("builds only env, then delegates with fixed Claude, cwd and umask 022", async (t) => {
+  const { sb, r } = await start(t);
+  assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stderr, "");
   assert.equal(r.stdout, "");
-  assert.deepEqual(sb.calls("ensemble-delegate").map(c=>c.argv), [["open","mini-op","--environment","mini-op","--client","claude","--cwd",path.join(sb.home,".mini-op/workspace")]]);
-  assert.ok(fs.statSync(path.join(sb.home,".mini-op/workspace")).isDirectory());
-  assert.match(fs.readFileSync(path.join(sb.dir,"delegate-umask"),"utf8"), /^0*22\n$/);
-  const calls=sb.calls("docker").map(c=>c.argv);
-  assert.deepEqual(calls.map(a=>a[0]),["info","ps","network","volume","build"]);
-  const build=calls.at(-1)!;
-  assert.deepEqual(values(build,"-t"),[IMAGE]);
-  assert.deepEqual(values(build,"--build-arg"),[`MINI_OP_VERSION=${await headStamp(sb)}`]);
-  const kept=path.join(sb.dir,"context");
-  assert.equal(fs.readFileSync(path.join(kept,"known_hosts"),"utf8"),HOST_KEYS.join("\n")+"\n");
-  assert.equal(fs.readFileSync(path.join(kept,"ssh_config"),"utf8"),fs.readFileSync(path.join(sb.home,".mini-op/ssh_config"),"utf8"));
-  for(const f of ["ssh_config","known_hosts"]) assert.equal(fs.statSync(path.join(kept,f)).mode & 0o077,0);
-  assert.deepEqual(fs.readdirSync(path.join(sb.dir,"tmp")),[]);
+  assert.deepEqual(sb.calls("ensemble-delegate").map((c) => c.argv), [
+    [
+      "open",
+      "mini-op",
+      "--environment",
+      "mini-op",
+      "--client",
+      "claude",
+      "--cwd",
+      path.join(sb.home, ".mini-op/workspace"),
+    ],
+  ]);
+  assert.ok(fs.statSync(path.join(sb.home, ".mini-op/workspace")).isDirectory());
+  assert.match(fs.readFileSync(path.join(sb.dir, "delegate-umask"), "utf8"), /^0*22\n$/);
+  const calls = sb.calls("docker").map((c) => c.argv);
+  assert.deepEqual(calls.map((a) => a[0]), ["info", "ps", "network", "volume", "build"]);
+  const build = calls.at(-1)!;
+  assert.deepEqual(values(build, "-t"), [IMAGE]);
+  assert.deepEqual(values(build, "--build-arg"), [`MINI_OP_VERSION=${await headStamp(sb)}`]);
+  const kept = path.join(sb.dir, "context");
+  assert.equal(
+    fs.readFileSync(path.join(kept, "known_hosts"), "utf8"),
+    HOST_KEYS.join("\n") + "\n",
+  );
+  assert.equal(
+    fs.readFileSync(path.join(kept, "ssh_config"), "utf8"),
+    fs.readFileSync(path.join(sb.home, ".mini-op/ssh_config"), "utf8"),
+  );
+  for (const f of ["ssh_config", "known_hosts"]) {
+    assert.equal(fs.statSync(path.join(kept, f)).mode & 0o077, 0);
+  }
+  assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
 });
 
-test("delegate status and stderr pass through unchanged",async t=>{
-  for(const code of [0,1,2,75]){
-    const sb=await Sandbox.create(t);
-    sb.fake("docker",docker()); sb.fake("ssh-keygen",[KEYGEN]);
-    sb.fake("ensemble-delegate",[{exit:code,stderr:"broker: occupied by verifier-42\n",stdout:"TUI\n"}]);
-    const r=await sb.run(["bash",START]);
-    assert.equal(r.code,code); assert.equal(r.stderr,"broker: occupied by verifier-42\n"); assert.equal(r.stdout,"TUI\n");
-    assert.deepEqual(fs.readdirSync(path.join(sb.dir,"tmp")),[]);
+test("delegate status and stderr pass through unchanged", async (t) => {
+  for (const code of [0, 1, 2, 75]) {
+    const sb = await Sandbox.create(t);
+    sb.fake("docker", docker());
+    sb.fake("ssh-keygen", [KEYGEN]);
+    sb.fake("ensemble-delegate", [
+      { exit: code, stderr: "broker: occupied by verifier-42\n", stdout: "TUI\n" },
+    ]);
+    const r = await sb.run(["bash", START]);
+    assert.equal(r.code, code);
+    assert.equal(r.stderr, "broker: occupied by verifier-42\n");
+    assert.equal(r.stdout, "TUI\n");
+    assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
   }
 });
-test("failed build never delegates",async t=>{
-  const {sb,r}=await start(t,[{argv:["build"],exit:1,stderr:"build error\n"}]);
-  assert.equal(r.code,1); assert.match(r.stderr,/building mini-op:env failed/);
-  assert.deepEqual(sb.calls("ensemble-delegate"),[]);
+
+test("failed build never delegates", async (t) => {
+  const { sb, r } = await start(t, [{ argv: ["build"], exit: 1, stderr: "build error\n" }]);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /building mini-op:env failed/);
+  assert.deepEqual(sb.calls("ensemble-delegate"), []);
 });
-test("each old resource blocks before any build or delegate",async t=>{
-  const name="mini-op";
-  for(const [argv,resource] of [ [["ps"],name], [["ps"],`${name}-proxy`], [["network","ls"],`${name}-net`], [["volume","ls"],`${name}-home`] ] as [string[],string][]){
-    const {sb,r}=await start(t,[{argv,stdout:`other\n${resource}\n`}]);
-    assert.equal(r.code,1,resource); assert.match(r.stderr,/host\/README\.md.*从旧版升级/);
-    assert.ok(sb.calls("docker").every(c=>["info","ps","network","volume"].includes(c.argv[0]!)));
-    assert.deepEqual(sb.calls("ensemble-delegate"),[]);
+
+test("each old resource blocks before any build or delegate", async (t) => {
+  const name = "mini-op";
+  const cases: [string[], string][] = [
+    [["ps"], name],
+    [["ps"], `${name}-proxy`],
+    [["network", "ls"], `${name}-net`],
+    [["volume", "ls"], `${name}-home`],
+  ];
+  for (const [argv, resource] of cases) {
+    const { sb, r } = await start(t, [{ argv, stdout: `other\n${resource}\n` }]);
+    assert.equal(r.code, 1, resource);
+    assert.match(r.stderr, /host\/README\.md.*从旧版升级/);
+    assert.ok(
+      sb.calls("docker").every((c) => ["info", "ps", "network", "volume"].includes(c.argv[0]!)),
+    );
+    assert.deepEqual(sb.calls("ensemble-delegate"), []);
   }
 });
-test("query failures are not treated as absence",async t=>{
-  for(const argv of [["info"],["ps"],["network","ls"],["volume","ls"]]){
-    const {sb,r}=await start(t,[{argv,exit:1,stderr:"daemon unavailable\n"}]);
-    assert.equal(r.code,1); assert.ok(sb.calls("docker").every(c=>c.argv[0]!=="build"));
-    assert.deepEqual(sb.calls("ensemble-delegate"),[]);
+
+test("query failures are not treated as absence", async (t) => {
+  for (const argv of [["info"], ["ps"], ["network", "ls"], ["volume", "ls"]]) {
+    const { sb, r } = await start(t, [{ argv, exit: 1, stderr: "daemon unavailable\n" }]);
+    assert.equal(r.code, 1);
+    assert.ok(sb.calls("docker").every((c) => c.argv[0] !== "build"));
+    assert.deepEqual(sb.calls("ensemble-delegate"), []);
   }
 });
-test("unrelated resources and an existing workspace are preserved",async t=>{
-  const sb=await Sandbox.create(t);
-  const ws=path.join(sb.home,".mini-op/workspace"); fs.mkdirSync(ws); fs.writeFileSync(path.join(ws,"keep"),"data");
-  const {r}=await start(t,[{argv:["ps"],stdout:"mini-op-other\n"}],[],START,sb);
-  assert.equal(r.code,0,r.stderr); assert.equal(fs.readFileSync(path.join(ws,"keep"),"utf8"),"data");
+
+test("unrelated resources and an existing workspace are preserved", async (t) => {
+  const sb = await Sandbox.create(t);
+  const ws = path.join(sb.home, ".mini-op/workspace");
+  fs.mkdirSync(ws);
+  fs.writeFileSync(path.join(ws, "keep"), "data");
+  const { r } = await start(t, [{ argv: ["ps"], stdout: "mini-op-other\n" }], [], START, sb);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(ws, "keep"), "utf8"), "data");
 });
-test("the configured endpoint's confirmed host key is required",async t=>{
-  for(const port of ["22","2222"]){
-    const sb=await Sandbox.create(t); fs.writeFileSync(path.join(sb.home,".mini-op/config.local.yaml"),`${FAKE_LOCAL}mini_port: ${port}\n`);
-    const {r}=await start(t,[],[],START,sb);
-    assert.equal(r.code,0,r.stderr);
-    assert.deepEqual(sb.calls("ssh-keygen")[0]?.argv,["-F",port==="22"?MINI_HOST:`[${MINI_HOST}]:${port}`,"-f",path.join(sb.home,".mini-op/known_hosts")]);
+
+test("the configured endpoint's confirmed host key is required", async (t) => {
+  for (const port of ["22", "2222"]) {
+    const sb = await Sandbox.create(t);
+    fs.writeFileSync(
+      path.join(sb.home, ".mini-op/config.local.yaml"),
+      `${FAKE_LOCAL}mini_port: ${port}\n`,
+    );
+    const { r } = await start(t, [], [], START, sb);
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(sb.calls("ssh-keygen")[0]?.argv, [
+      "-F",
+      port === "22" ? MINI_HOST : `[${MINI_HOST}]:${port}`,
+      "-f",
+      path.join(sb.home, ".mini-op/known_hosts"),
+    ]);
   }
-  for(const keygen of [[{exit:1}],[{stdout:"# no confirmed key\n"}]]){
-    const {sb,r}=await start(t,[],[],START,undefined,keygen);
-    assert.equal(r.code,1); assert.match(r.stderr,/known_hosts has no host key/);
-    assert.ok(sb.calls("docker").every(c=>c.argv[0]!=="build"));
-    assert.deepEqual(sb.calls("ensemble-delegate"),[]);
+  for (const keygen of [[{ exit: 1 }], [{ stdout: "# no confirmed key\n" }]]) {
+    const { sb, r } = await start(t, [], [], START, undefined, keygen);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /known_hosts has no host key/);
+    assert.ok(sb.calls("docker").every((c) => c.argv[0] !== "build"));
+    assert.deepEqual(sb.calls("ensemble-delegate"), []);
   }
 });
+
 // This checkout's stamp as ctl/lib/version.sh makes it: HEAD, -dirty with uncommitted changes.
 async function headStamp(sb: Sandbox, dir = REPO): Promise<string> {
   const head = (await sb.run(["git", "-C", dir, "rev-parse", "HEAD"])).stdout.trim();
