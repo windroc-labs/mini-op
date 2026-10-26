@@ -234,7 +234,11 @@ drop='drop() { if [ -L "$x" ]; then rm -f "${x:?}"; elif [ -e "$x" ]; then chmod
 place='set -e; p=~/mini-op-projects/$1; d=$p/$2 n=$p/.$2.new o=$p/.$2.old
 mkdir -p "$p"; for x in "$n" "$o"; do drop; done; mkdir "$n"; tar -xf - -C "$n"
 bad=$(find "$n" ! -type f ! -type d -print); [ -n "$bad" ] || bad=$(find "$n" -type f -links +1 -print)
-if [ -n "$bad" ]; then x=$n; drop; echo "runbook: the mini found a file that is not a regular file; deployed nothing" >&2; exit 1; fi
+if [ -n "$bad" ]; then
+  r=${bad%%
+*}; r=$2/${r#"$n"/}; x=$n; drop
+  printf "runbook: the mini refused %s: not a regular file with one link; deployed nothing\n" "$(printf %s "$r" | LC_ALL=C tr -c " -~" "?")" >&2; exit 1
+fi
 if [ -L "$d" ]; then rm -f "${d:?}"; elif [ -e "$d" ]; then mv "$d" "$o"; fi
 mv "$n" "$d"; x=$o; drop'
 if [[ ! -d $src ]]; then

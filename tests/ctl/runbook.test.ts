@@ -667,7 +667,7 @@ esac`,
   assert.equal(r.code, 1);
   assert.match(
     r.stderr,
-    /runbook: the mini found a file that is not a regular file; deployed nothing\n/,
+    /runbook: the mini refused install\/evil: not a regular file with one link; deployed nothing\n/,
   );
   assert.match(r.stderr, /runbook: deploying to the mini failed;/);
   assert.deepEqual(fs.readdirSync(onMini(sb, "ensemble")), []);
