@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+usage="pin-host-key   scan the configured mini's Ed25519 host key and show its SHA256 fingerprint.
+Compare it with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub run at the mini, then type yes
+only if it matches. Atomically replaces ~/.mini-op/known_hosts (the single configured endpoint),
+never this Mac's ~/.ssh/known_hosts. Declining, EOF or failure keeps the old pin. Rebuild with
+host/start to use the pin in mini-op. Exits 0, 1 (not confirmed or failed) or 2 (usage error)."
+case $#:${1-} in
+  1:-h | 1:--help)
+    printf '%s\n' "$usage"
+    exit 0
+    ;;
+  0:) ;;
+  *)
+    echo "pin-host-key: usage: pin-host-key" >&2
+    exit 2
+    ;;
+esac
+die() {
+  echo "pin-host-key: $*; pinned key unchanged" >&2
+  exit 1
+}
+here=$(cd "$(dirname "$0")" && pwd)
+host=$("$here/config" get mini_host) || die "host/config failed"
+port=$("$here/config" get mini_port) || die "host/config failed"
+entry=$host
+[[ $port == 22 ]] || entry="[$host]:$port"
+umask 077
+tmp=$(mktemp -d "$HOME/.mini-op/.host-key.XXXXXX") || die "cannot make temporary directory"
+trap 'rm -rf -- "${tmp:?}"' EXIT
+ssh-keyscan -T 5 -p "$port" -t ed25519 "$host" >"$tmp/scan" || die "scan failed for $entry"
+# Accept one key for precisely this endpoint. A scan is untrusted until the operator confirms it.
+count=0
+while IFS= read -r line || [[ -n $line ]]; do
+  [[ -z $line || $line == \#* ]] && continue
+  read -r address kind key extra <<<"$line"
+  [[ $address == "$entry" && $kind == ssh-ed25519 && -n $key && -z $extra ]] ||
+    die "unexpected host key from scan for $entry"
+  count=$((count + 1))
+  printf '%s %s %s\n' "$entry" "$kind" "$key" >"$tmp/key"
+done <"$tmp/scan"
+[[ $count == 1 ]] || die "expected one Ed25519 host key for $entry"
+fingerprint=$(ssh-keygen -lf "$tmp/key" -E sha256) || die "invalid Ed25519 host key"
+printf 'mini host key for %s:\n%s\n' "$entry" "$fingerprint"
+printf '%s\n' "At the mini, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub" \
+  "Compare its SHA256 fingerprint with the one above."
+printf 'Type yes only if they match: '
+reply=
+read -r reply || reply=
+[[ $reply == yes ]] || die "not confirmed"
+mv -f -- "$tmp/key" "$HOME/.mini-op/known_hosts" || die "cannot install host key"
+echo "pin-host-key: pinned $entry in ~/.mini-op/known_hosts; rebuild with host/start"
