@@ -222,7 +222,7 @@ test("the build's named context mini holds the generated ssh config and the mini
   assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
 });
 
-test("the host keys come from this Mac's known_hosts entry for the mini's address and port", async (t) => {
+test("the host keys come from mini-op's own known_hosts entry for the mini's address and port", async (t) => {
   for (const [port, entry] of [
     ["22", MINI_HOST],
     ["2222", `[${MINI_HOST}]:2222`],
@@ -236,9 +236,26 @@ test("the host keys come from this Mac's known_hosts entry for the mini's addres
     assert.equal(r.code, 0, r.stderr);
     assert.deepEqual(
       sb.calls("ssh-keygen").map(({ argv }) => argv),
-      [["-F", entry, "-f", path.join(sb.home, ".ssh/known_hosts")]],
+      [["-F", entry, "-f", path.join(sb.home, ".mini-op/known_hosts")]],
     );
   }
+});
+
+test("rebuilding uses the existing pin despite a stale personal key and never scans or replaces it", async (t) => {
+  const sb = await Sandbox.create(t);
+  const pin = `${MINI_HOST} ssh-ed25519 pinned-key\n`;
+  const personal = `${MINI_HOST} ssh-ed25519 stale-personal-key\n`;
+  const file = path.join(sb.home, ".mini-op/known_hosts");
+  fs.writeFileSync(file, pin);
+  fs.mkdirSync(path.join(sb.home, ".ssh"));
+  fs.writeFileSync(path.join(sb.home, ".ssh/known_hosts"), personal);
+  const { r } = await start(t, [], [], START, sb, [{ argv: ["-F"], shell: 'cat "$4"' }]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(sb.dir, "context/known_hosts"), "utf8"), pin);
+  assert.equal(fs.readFileSync(file, "utf8"), pin);
+  assert.equal(fs.readFileSync(path.join(sb.home, ".ssh/known_hosts"), "utf8"), personal);
+  assert.deepEqual(sb.calls("ssh-keyscan"), []);
+  assert.deepEqual(sb.calls("ssh"), []);
 });
 
 test("no confirmed host key for the mini exits 1, naming the entry, before any docker call", async (t) => {
@@ -254,8 +271,8 @@ test("no confirmed host key for the mini exits 1, naming the entry, before any d
     assert.equal(r.stdout, "");
     assert.equal(
       r.stderr,
-      `start: ~/.ssh/known_hosts has no host key for ${MINI_HOST}; check the mini's fingerprint,` +
-        " confirm it once with ssh -F ~/.mini-op/ssh_config mini true, then rerun\n",
+      `start: ~/.mini-op/known_hosts has no host key for ${MINI_HOST}; run host/pin-host-key,` +
+        " then rerun host/start\n",
     );
     assert.deepEqual(sb.calls("docker"), []);
   }
@@ -521,7 +538,7 @@ test("-h prints the usage to stdout and runs nothing", async (t) => {
   const { sb, r } = await start(t, [], ["-h"]);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /^start /);
-  assert.match(r.stdout, /host key[^.]*~\/\.ssh\/known_hosts/);
+  assert.match(r.stdout, /host key[^.]*~\/\.mini-op\/known_hosts/);
   assert.equal(r.stderr, "");
   assert.deepEqual(sb.calls(), []);
 });

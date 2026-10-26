@@ -3,7 +3,7 @@ set -euo pipefail
 usage="start   run host/config (exits 1 before anything else when it fails), stamp this checkout
 (its commit, -dirty when anything is uncommitted; not a git checkout, or untracked or ignored
 files the build takes under ctl/, mini/, runbooks/ or skills/: exits 1 before any build), take the
-mini's host key from this Mac's ~/.ssh/known_hosts (none: exits 1 before any build), build image
+mini's pinned host key from ~/.mini-op/known_hosts (none: exits 1 before any build), build image
 mini-op:env from the repo root (host/Dockerfile: skills/, ctl/, mini/, README.md and runbooks/ in
 the runtime root /opt/windroc/mini-op, versioned with the stamp; the generated
 ~/.mini-op/ssh_config as its ssh config and that host key as the only one its ssh trusts) and the
@@ -46,15 +46,15 @@ if [[ -n $listed ]]; then
     "remove them" >&2
   exit 1
 fi
-# The mini's host key, as ssh -F ~/.mini-op/ssh_config mini confirmed it on this Mac.
+# Only mini-op's pin, enrolled explicitly with host/pin-host-key; never scan or re-trust here.
 host=$("$here/config" get mini_host)
 port=$("$here/config" get mini_port)
 entry=$host
 [[ $port == 22 ]] || entry="[$host]:$port"
-keys=$(ssh-keygen -F "$entry" -f "$HOME/.ssh/known_hosts" 2>/dev/null | grep -v '^#') || keys=
+keys=$(ssh-keygen -F "$entry" -f "$HOME/.mini-op/known_hosts" 2>/dev/null | grep -v '^#') || keys=
 if [[ -z $keys ]]; then
-  echo "start: ~/.ssh/known_hosts has no host key for $entry; check the mini's fingerprint," \
-    "confirm it once with ssh -F ~/.mini-op/ssh_config mini true, then rerun" >&2
+  echo "start: ~/.mini-op/known_hosts has no host key for $entry; run host/pin-host-key," \
+    "then rerun host/start" >&2
   exit 1
 fi
 # The build's named context mini: what the image's last stage adds about the mini.

@@ -85,34 +85,36 @@ test("no doc or shipped file accepts a host key inside the container (AC12b)", (
   assert.deepEqual(named, []);
 });
 
-// Reconnect step 5's sh block in runbooks/setup-test-env.md.
+// Run the documented enrollment command with only fake network tools and a sandbox HOME.
 function reconnectStep5(): string {
   const runbook = fs.readFileSync(path.join(REPO, "runbooks/setup-test-env.md"), "utf8");
-  const step = runbook.slice(runbook.search(/^5\. Drop the mini's old host key/m));
+  const step = runbook.slice(runbook.search(/^5\. Pin the mini.s new host key/m));
   const block = /^ *```sh\n([\s\S]*?)^ *```$/m.exec(step)?.[1] ?? "";
+  assert.ok(block.trim(), "Reconnect step 5 must have a command");
   return block.replace(/^ +/gm, "");
 }
 
-test("Reconnect step 5 drops the old host key under host/start's entry for the mini's port", async (t) => {
+test("Reconnect step 5 pins mini-op state for the configured endpoint without touching personal trust", async (t) => {
   const block = reconnectStep5();
-  assert.ok(!block.includes('ssh-keygen -R "$address"'), block);
-  for (const [port, entry] of [
-    ["22", MINI_HOST],
-    ["2222", `[${MINI_HOST}]:2222`],
-  ] as const) {
-    const sb = await Sandbox.create(t);
-    fs.mkdirSync(path.join(sb.home, "playground"));
-    fs.symlinkSync(REPO, path.join(sb.home, "playground/mini-op"));
-    fs.writeFileSync(
-      path.join(sb.home, ".mini-op/config.local.yaml"),
-      `${FAKE_LOCAL}mini_port: ${port}\n`,
-    );
-    sb.fake("ssh-keygen", [{ argv: ["-R"] }]);
-    const r = await sb.run(["bash", "-euc", block]);
-    assert.equal(r.code, 0, r.stderr);
-    assert.deepEqual(
-      sb.calls("ssh-keygen").map(({ argv }) => argv),
-      [["-R", entry, "-f", path.join(sb.home, ".ssh/known_hosts")]],
-    );
-  }
+  // The enrollment tests cover both ports; exercise the documented command with a custom one.
+  const port = "2222";
+  const entry = `[${MINI_HOST}]:${port}`;
+  const sb = await Sandbox.create(t);
+  fs.writeFileSync(
+    path.join(sb.home, ".mini-op/config.local.yaml"),
+    `${FAKE_LOCAL}mini_port: ${port}\n`,
+  );
+  sb.fake("ssh-keyscan", [{ stdout: `${entry} ssh-ed25519 fake-key\n`, ignoresStdin: true }]);
+  sb.fake("ssh-keygen", [
+    { argv: ["-lf"], stdout: "256 SHA256:fake mini (ED25519)\n", ignoresStdin: true },
+  ]);
+  const r = await sb.run(["bash", "-euc", block], { cwd: REPO, input: "yes\n" });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(
+    fs.readFileSync(path.join(sb.home, ".mini-op/known_hosts"), "utf8"),
+    `${entry} ssh-ed25519 fake-key\n`,
+  );
+  assert.ok(!fs.existsSync(path.join(sb.home, ".ssh")));
+  assert.equal(sb.calls("ssh-keygen").length, 1);
+  assert.equal(sb.calls("ssh-keygen")[0]?.argv[0], "-lf");
 });
