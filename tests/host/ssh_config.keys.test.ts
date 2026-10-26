@@ -96,27 +96,25 @@ function reconnectStep5(): string {
 
 test("Reconnect step 5 pins mini-op state for the configured endpoint without touching personal trust", async (t) => {
   const block = reconnectStep5();
-  for (const [port, entry] of [
-    ["22", MINI_HOST],
-    ["2222", `[${MINI_HOST}]:2222`],
-  ] as const) {
-    const sb = await Sandbox.create(t);
-    fs.writeFileSync(
-      path.join(sb.home, ".mini-op/config.local.yaml"),
-      `${FAKE_LOCAL}mini_port: ${port}\n`,
-    );
-    sb.fake("ssh-keyscan", [{ stdout: `${entry} ssh-ed25519 fake-key\n`, ignoresStdin: true }]);
-    sb.fake("ssh-keygen", [
-      { argv: ["-lf"], stdout: "256 SHA256:fake mini (ED25519)\n", ignoresStdin: true },
-    ]);
-    const r = await sb.run(["bash", "-euc", block], { cwd: REPO, input: "yes\n" });
-    assert.equal(r.code, 0, r.stderr);
-    assert.equal(
-      fs.readFileSync(path.join(sb.home, ".mini-op/known_hosts"), "utf8"),
-      `${entry} ssh-ed25519 fake-key\n`,
-    );
-    assert.ok(!fs.existsSync(path.join(sb.home, ".ssh")));
-    assert.equal(sb.calls("ssh-keygen").length, 1);
-    assert.equal(sb.calls("ssh-keygen")[0]?.argv[0], "-lf");
-  }
+  // The enrollment tests cover both ports; exercise the documented command with a custom one.
+  const port = "2222";
+  const entry = `[${MINI_HOST}]:${port}`;
+  const sb = await Sandbox.create(t);
+  fs.writeFileSync(
+    path.join(sb.home, ".mini-op/config.local.yaml"),
+    `${FAKE_LOCAL}mini_port: ${port}\n`,
+  );
+  sb.fake("ssh-keyscan", [{ stdout: `${entry} ssh-ed25519 fake-key\n`, ignoresStdin: true }]);
+  sb.fake("ssh-keygen", [
+    { argv: ["-lf"], stdout: "256 SHA256:fake mini (ED25519)\n", ignoresStdin: true },
+  ]);
+  const r = await sb.run(["bash", "-euc", block], { cwd: REPO, input: "yes\n" });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(
+    fs.readFileSync(path.join(sb.home, ".mini-op/known_hosts"), "utf8"),
+    `${entry} ssh-ed25519 fake-key\n`,
+  );
+  assert.ok(!fs.existsSync(path.join(sb.home, ".ssh")));
+  assert.equal(sb.calls("ssh-keygen").length, 1);
+  assert.equal(sb.calls("ssh-keygen")[0]?.argv[0], "-lf");
 });

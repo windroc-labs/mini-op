@@ -115,9 +115,13 @@ test("an invalid key or failed config keeps the old pin", async (t) => {
 
 test("help and usage errors run no tools", async (t) => {
   const sb = await setup(t);
-  for (const args of [["-h"], ["--help"], ["--yes"], ["extra"]]) {
+  for (const args of [["-h"], ["--help"]]) {
     const r = await sb.run(["bash", PIN, ...args]);
-    assert.equal(r.code, args[0] === "-h" || args[0] === "--help" ? 0 : 2);
+    assert.equal(r.code, 0);
+  }
+  for (const args of [["--yes"], ["extra"]]) {
+    const r = await sb.run(["bash", PIN, ...args]);
+    assert.equal(r.code, 2);
   }
   assert.deepEqual(sb.calls(), []);
   unchanged(sb);

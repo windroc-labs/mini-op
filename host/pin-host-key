@@ -33,11 +33,11 @@ ssh-keyscan -T 5 -p "$port" -t ed25519 "$host" >"$tmp/scan" || die "scan failed 
 count=0
 while IFS= read -r line || [[ -n $line ]]; do
   [[ -z $line || $line == \#* ]] && continue
-  read -r address kind key extra <<<"$line"
-  [[ $address == "$entry" && $kind == ssh-ed25519 && -n $key && -z $extra ]] ||
+  read -r address kind blob extra <<<"$line"
+  [[ $address == "$entry" && $kind == ssh-ed25519 && -n $blob && -z $extra ]] ||
     die "unexpected host key from scan for $entry"
   count=$((count + 1))
-  printf '%s %s %s\n' "$entry" "$kind" "$key" >"$tmp/key"
+  printf '%s %s %s\n' "$entry" "$kind" "$blob" >"$tmp/key"
 done <"$tmp/scan"
 [[ $count == 1 ]] || die "expected one Ed25519 host key for $entry"
 fingerprint=$(ssh-keygen -lf "$tmp/key" -E sha256) || die "invalid Ed25519 host key"
