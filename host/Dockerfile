@@ -28,33 +28,32 @@ RUN set -eux; \
     ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx; \
     useradd -m -u "$AGENT_UID" -U -s /bin/bash agent
 
-# The plugin root: the plugin, ctl/ (its CLAUDE.md at the root), mini/ and their docs, read-only
+# The runtime root: the skill, ctl/ (its CLAUDE.md at the root), mini/ and their docs, read-only
 # to agent. MINI_OP_VERSION, the checkout's stamp (ctl/lib/version.sh), is required.
 ARG MINI_OP_VERSION
-COPY plugin/ /opt/windroc/plugins/mini-op/
-COPY ctl/ /opt/windroc/plugins/mini-op/ctl/
-COPY mini/ /opt/windroc/plugins/mini-op/mini/
-COPY runbooks/ /opt/windroc/plugins/mini-op/runbooks/
-COPY README.md /opt/windroc/plugins/mini-op/
+COPY skills/ /opt/windroc/mini-op/skills/
+COPY ctl/ /opt/windroc/mini-op/ctl/
+COPY mini/ /opt/windroc/mini-op/mini/
+COPY runbooks/ /opt/windroc/mini-op/runbooks/
+COPY README.md /opt/windroc/mini-op/
 RUN set -eux; \
     test -n "${MINI_OP_VERSION-}"; \
-    cd /opt/windroc/plugins/mini-op; \
+    cd /opt/windroc/mini-op; \
     mv ctl/CLAUDE.md CLAUDE.md; \
     printf '%s\n' "$MINI_OP_VERSION" > mini/VERSION; \
-    jq --arg v "$MINI_OP_VERSION" '.version = $v' .claude-plugin/plugin.json > plugin.json.new; \
-    mv plugin.json.new .claude-plugin/plugin.json; \
     chown -R root:root .; \
-    chmod -R a+rX,go-w .
+    chmod -R a+rX,go-w .; \
+    mkdir -p /etc/claude-code/.claude/skills; \
+    ln -s /opt/windroc/mini-op/skills/mini-op /etc/claude-code/.claude/skills/mini-op
 # ssh settings without the mini's address or account: only the env stage below adds those.
 COPY host/ssh_config.container /etc/ssh/ssh_config.d/mini-proxy.conf
 COPY host/ssh_config.keys /etc/ssh/ssh_config.d/mini-keys.conf
 
 LABEL mini-op.version=$MINI_OP_VERSION
 ENV LANG=C.UTF-8 \
-    PATH=/opt/windroc/plugins/mini-op/ctl:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    CLAUDE_CODE_PLUGIN_DIRS=/opt/windroc/plugins/mini-op
+    PATH=/opt/windroc/mini-op/ctl:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 USER agent
-WORKDIR /opt/windroc/plugins/mini-op
+WORKDIR /opt/windroc/mini-op
 CMD ["sleep", "infinity"]
 
 # The default target host/start builds: the mini's ssh config and host keys from its generated

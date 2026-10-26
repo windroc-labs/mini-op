@@ -348,7 +348,7 @@ async function headStamp(sb: Sandbox, dir = REPO): Promise<string> {
 async function checkout(sb: Sandbox, untracked: string[] = []): Promise<string> {
   const copy = path.join(sb.dir, "checkout");
   fs.mkdirSync(copy);
-  for (const name of [".gitignore", "README.md", "runbooks", "plugin", "mini", "ctl", "host"]) {
+  for (const name of [".gitignore", "README.md", "runbooks", "skills", "mini", "ctl", "host"]) {
     fs.cpSync(path.join(REPO, name), path.join(copy, name), { recursive: true });
   }
   for (const args of [
@@ -384,16 +384,16 @@ test("untracked files the image would take exit 1, naming them, before any docke
   const sb = await Sandbox.create(t);
   const copy = await checkout(sb, ["runbooks/x.md"]);
   // CI's shipped dirs are read-only, and the copy keeps their modes.
-  for (const dir of ["plugin", "plugin/skills"]) fs.chmodSync(path.join(copy, dir), 0o755);
-  fs.mkdirSync(path.join(copy, "plugin/skills/new"));
-  fs.writeFileSync(path.join(copy, "plugin/skills/new/SKILL.md"), "x\n");
+  fs.chmodSync(path.join(copy, "skills"), 0o755);
+  fs.mkdirSync(path.join(copy, "skills/new"));
+  fs.writeFileSync(path.join(copy, "skills/new/SKILL.md"), "x\n");
   const { r } = await start(t, [], [], path.join(copy, "host/start"), sb);
   assert.equal(r.code, 1);
   assert.equal(
     r.stderr,
     "start: untracked or ignored files would be built into the image:" +
-      " plugin/skills/new/SKILL.md" +
-      " runbooks/x.md; commit or remove them\n",
+      " runbooks/x.md" +
+      " skills/new/SKILL.md; commit or remove them\n",
   );
   assert.equal(r.stdout, "");
   assert.deepEqual(sb.calls("docker"), []);
@@ -426,7 +426,7 @@ test("ignored files the image would take exit 1, naming them, before any docker 
 const EXCLUDED: Record<string, string> = {
   "mini/VERSION": "mini/VERSION",
   "**/node_modules": "ctl/node_modules/x",
-  "**/.tools": "plugin/.tools/x",
+  "**/.tools": "skills/.tools/x",
 };
 
 test("each exclusion of host/Dockerfile.dockerignore after its allowlist has a case here", () => {
@@ -469,7 +469,10 @@ test("outside a git checkout it exits 1 before any docker call", async (t) => {
   }
   const { r } = await start(t, [], [], path.join(copy, "host/start"), sb);
   assert.equal(r.code, 1);
-  assert.equal(r.stderr, `start: ${copy} is not a git checkout; cannot stamp the plugin version\n`);
+  assert.equal(
+    r.stderr,
+    `start: ${copy} is not a git checkout; cannot stamp the runtime version\n`,
+  );
   assert.deepEqual(sb.calls("docker"), []);
 });
 

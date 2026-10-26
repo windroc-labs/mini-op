@@ -1,7 +1,7 @@
 [
   {
     "file": "host/Dockerfile",
-    "reason": "the mini-op image: base digest, claude-code pin, npm checksum, user agent, plugin root, PATH, ssh config",
+    "reason": "the mini-op image: base digest, claude-code pin, npm checksum, user agent, runtime root, PATH, ssh config",
     "tests": [
       "tests/host/Dockerfile.test.ts"
     ]
@@ -53,13 +53,6 @@
     "reason": "the held-modifier chord program: AppleScript, as JXA's keyDown sends nothing useful (tests/registry/applescript.json)",
     "tests": [
       "tests/ctl/mini.test.ts"
-    ]
-  },
-  {
-    "file": "plugin/.claude-plugin/plugin.json",
-    "reason": "the mini-op plugin manifest: its name; the image build stamps its version",
-    "tests": [
-      "tests/plugin/skills/run.test.ts"
     ]
   }
 ]

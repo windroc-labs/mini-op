@@ -17,8 +17,7 @@ const base = {
   "host/start": "#!/usr/bin/env bash\n",
   "host/ssh_config": "Host mini\n",
   "host/proxy/acl.yaml": "x: 1\n",
-  "plugin/.claude-plugin/plugin.json": "{}\n",
-  "plugin/skills/run/SKILL.md": "# run\n",
+  "skills/mini-op/SKILL.md": "# run\n",
 };
 
 export const violation = {
@@ -38,10 +37,10 @@ export const violation = {
   "ctl/notes.txt": "x\n",
   "ctl/sub/x": script,
   "host/proxy/a/b": "x\n",
-  "plugin/README.md": "# x\n",
-  "plugin/.claude-plugin/marketplace.json": "{}\n",
-  "plugin/skills/SKILL.md": "# x\n",
-  "plugin/skills/run/notes.md": "# x\n",
+  "skills/README.md": "# x\n",
+  "skills/.claude-plugin/marketplace.json": "{}\n",
+  "skills/SKILL.md": "# x\n",
+  "skills/mini-op/notes.md": "# x\n",
 };
 
 export const clean = base;
@@ -50,7 +49,7 @@ export const clean = base;
 export const expected = [
   "notes.md:1: the root holds only docs and tool configs",
   "playbook.md:1: the root holds only docs and tool configs",
-  "scripts/ans:1: scripts/ is not a layout dir (mini/, ctl/, host/, plugin/, runbooks/, tests/)",
+  "scripts/ans:1: scripts/ is not a layout dir (mini/, ctl/, host/, skills/, runbooks/, tests/)",
   "runbooks/clean:1: runbooks/ holds docs only",
   "runbooks/sub/x.md:1: runbooks/ holds docs only",
   "runbooks/test-board.toml:1: runbooks/ holds docs only",
@@ -61,8 +60,8 @@ export const expected = [
   "ctl/notes.txt:1: ctl/ holds scripts, CLAUDE.md and lib/",
   "ctl/sub/x:1: ctl/ holds scripts, CLAUDE.md and lib/",
   "host/proxy/a/b:1: host/ holds its files and proxy/",
-  "plugin/README.md:1: plugin/ holds .claude-plugin/plugin.json and skills/<name>/SKILL.md",
-  "plugin/.claude-plugin/marketplace.json:1: plugin/ holds .claude-plugin/plugin.json and skills/<name>/SKILL.md",
-  "plugin/skills/SKILL.md:1: plugin/ holds .claude-plugin/plugin.json and skills/<name>/SKILL.md",
-  "plugin/skills/run/notes.md:1: plugin/ holds .claude-plugin/plugin.json and skills/<name>/SKILL.md",
+  "skills/README.md:1: skills/ holds <name>/SKILL.md",
+  "skills/.claude-plugin/marketplace.json:1: skills/ holds <name>/SKILL.md",
+  "skills/SKILL.md:1: skills/ holds <name>/SKILL.md",
+  "skills/mini-op/notes.md:1: skills/ holds <name>/SKILL.md",
 ];

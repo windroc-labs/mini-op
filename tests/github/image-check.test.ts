@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
 import { parse } from "yaml";
-import { PLUGIN_ROOT } from "../lib/repo.ts";
+import { RUNTIME_ROOT } from "../lib/repo.ts";
 import { REPO, Sandbox, type FakeRule } from "../lib/sandbox.ts";
 import { steps, type Job } from "../lib/workflows.ts";
 
@@ -98,7 +98,7 @@ for (const file of [
   "host/claude-code.asc",
   "host/ssh_config.container",
   "host/ssh_config.keys",
-  "plugin/.claude-plugin/plugin.json",
+  "skills/mini-op/SKILL.md",
   "ctl/mini",
   "mini/lib/secrets.zsh",
   "runbooks/x.md",
@@ -281,12 +281,13 @@ function smokeRules(stamp: string): FakeRule[] {
     { argv: [...IN, "npm", "--version"], stdout: "10.9.9\n" },
     { argv: [...IN, "node", "--version"], stdout: "v20.19.2\n" },
     {
-      argv: [...IN, "jq", "-r", ".version", `${PLUGIN_ROOT}/.claude-plugin/plugin.json`],
+      argv: [...IN, "cat", `${RUNTIME_ROOT}/mini/VERSION`],
       stdout: `${stamp}\n`,
     },
+    { argv: [...IN, "test", "-r", "/etc/claude-code/.claude/skills/mini-op/SKILL.md"] },
     { argv: [...LABELS, TAG], stdout: "mini-op.version\n\n" },
     { argv: [...IN, "find", "/home/agent", ...HOME_FILES, "-o", "-name", "plugin.json"] },
-    { argv: [...MINI_H, TAG, `${PLUGIN_ROOT}/ctl/mini`, "-h"], stdout: "mini <command>\n" },
+    { argv: [...MINI_H, TAG, `${RUNTIME_ROOT}/ctl/mini`, "-h"], stdout: "mini <command>\n" },
     { argv: [...IN, "ssh", "-V"], stderr: "OpenSSH_10.0\n" },
     { argv: [...IN, "zsh", "--version"] },
     { argv: [...IN, "jq", "--version"] },
@@ -314,7 +315,8 @@ test("smoke: an image meeting every check passes, each row from a container with
     "user agent, non-root (uid 1000)",
     "npm --version",
     "node --version",
-    `plugin.json version ${stamp}`,
+    `mini/VERSION ${stamp}`,
+    "standalone mini-op skill readable",
     "no windroc./ensemble. label",
     "/home/agent has no plugin files",
     "ctl/mini -h, ensemble PATH, cwd /tmp",
@@ -350,8 +352,13 @@ for (const [label, rule, row] of [
   ["another user", { argv: [...IN, "id"], stdout: "uid=1000(op) gid=1000(op)\n" }, "user agent"],
   ["no npm", { argv: [...IN, "npm", "--version"], exit: 127 }, "npm --version"],
   ["no node", { argv: [...IN, "node", "--version"], exit: 127 }, "node --version"],
-  ["another version", { argv: [...IN, "jq", "-r"], stdout: "0123\n" }, "plugin.json version"],
-  ["no plugin.json", { argv: [...IN, "jq", "-r"], exit: 2 }, "plugin.json version"],
+  ["another version", { argv: [...IN, "cat"], stdout: "0123\n" }, "mini/VERSION"],
+  ["no mini/VERSION", { argv: [...IN, "cat"], exit: 2 }, "mini/VERSION"],
+  [
+    "unreadable standalone skill",
+    { argv: [...IN, "test", "-r", "/etc/claude-code/.claude/skills/mini-op/SKILL.md"], exit: 1 },
+    "standalone mini-op skill readable",
+  ],
   ["a windroc. label", { argv: LABELS, stdout: "mini-op.version\nwindroc.x\n" }, "label"],
   ["an ensemble. label", { argv: LABELS, stdout: "ensemble.y\n" }, "label"],
   ["labels unreadable", { argv: LABELS, exit: 1 }, "label"],

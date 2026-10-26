@@ -2,7 +2,7 @@
 
 Docs and scripts that set up and drive a Mac mini for live tests. A project's
 own test runbooks and mini-side scripts live in that project's `.mini-op/runbooks/`
-(ensemble's: `windroc-labs/ensemble`), found by `/mini-op:run`.
+(ensemble's: `windroc-labs/ensemble`), found by `/mini-op`.
 
 Private repo. It holds no secrets: passwords, API keys and tokens live in the
 mini's login keychain, and the scripts read them from there.
@@ -22,16 +22,40 @@ the task. Each fact has one home; the others point to it.
 | `runbooks/visible-operations.md` | every mini-side operation: visible route, protected exceptions and result recovery |
 | `host/README.md` | the mini-op container that operates the mini, and its environment definition for ensemble |
 
+## Install the skill
+
+The skill is named `mini-op` (formerly the plugin's `run`). Copy the same `skills/mini-op/` directory for every client; no marketplace or plugin manifest is needed.
+
+| Client | User skills directory | Project skills directory | Load/use |
+| --- | --- | --- | --- |
+| [Claude Code](https://code.claude.com/docs/en/skills#choose-where-skills-load) | `~/.claude/skills/mini-op/` | `.claude/skills/mini-op/` | `/mini-op <task>` |
+| [Codex](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills) | `~/.agents/skills/mini-op/` | `.agents/skills/mini-op/` | `$mini-op <task>` or select it with `/skills` |
+| [OpenCode](https://opencode.ai/docs/skills/) | `~/.config/opencode/skills/mini-op/` | `.opencode/skills/mini-op/` | Ask to use the `mini-op` skill; the agent loads it with its skill tool |
+
+These are the clients' official locations; each destination contains a SKILL.md file. Project paths are relative to the project root. Start a new client session after copying, and confirm `mini-op` appears in its skill list. Do not install duplicate copies for one client.
+
+For example, install for Codex from this checkout's root (access to this private repo is required):
+
+<!-- skill-install -->
+```sh
+mkdir -p "$HOME/.agents/skills"
+cp -R skills/mini-op "$HOME/.agents/skills/"
+```
+
+For another client or project scope, use the destination in the table. This copies only the skill instructions. The runtime is a separate prerequisite: retain this checkout with `ctl/`, `mini/`, `runbooks/` and this README, install its existing dependencies and configure SSH as described in `host/README.md`. Supply its absolute path in the request (for example, “Use mini-op from /absolute/path/to/mini-op to check the connection”), or put that checkout's `ctl/` on the client's `PATH`. The skill validates the root before invoking any tool. An image built here already has the runtime at `/opt/windroc/mini-op/` and the skill installed for Claude Code at `/etc/claude-code/.claude/skills/mini-op/`, the [Linux managed skills location](https://code.claude.com/docs/en/skills#choose-where-skills-load).
+
+The skill is portable; the provided container still runs Claude Code with Claude-specific network access (`host/README.md`). To use Codex or OpenCode, install the skill where that client actually runs and prepare the runtime and SSH access there. Installing this skill does not add either client to the container.
+
 ## Layout
 
 Files sit by where they run.
 
 | Path | What it is |
 | --- | --- |
-| `status.md`, `runbooks/` | current records and the procedures (Start here), each runbook opening with a frontmatter `when:` line, the only part `/mini-op:run`'s lookup reads |
+| `status.md`, `runbooks/` | current records and the procedures (Start here), each runbook opening with a frontmatter `when:` line, the only part `/mini-op`'s lookup reads |
 | `mini/` | runs on the mini, copied there as `~/apm/` by `ctl/mini sync` (`host/README.md`, Deploy to the mini), which keeps the mini's runtime state in `~/apm/state/`: `bin/` basic operations, `ts/` the JXA programs' TypeScript and `ts/page/` the page programs' (the code `o eval` runs in a page), `js/` and `js/page/` the programs `tsc` builds from them (committed, never edited by hand), `lib/chord.applescript` the one AppleScript program (held-modifier chords), `lib/secrets.zsh` the one list of secret patterns, `lib/opencli.zsh` the one parser of OpenCLI's replies (`opencli_data`) and the page-program caller (`page_js`), `lib/keychain.zsh` the one keychain reader (`keychain_read`, `keychain_has`; runbook steps and project scripts source it too); on the mini they run as `~/apm/bin/<name>` |
-| `ctl/` | runs in the mini-op container (baked into the image's plugin root, on its `PATH`) or on this Mac; `ctl/lib/secrets.zsh` names the secrets dir; `ctl/CLAUDE.md` is the container operator's routing table and hard rules; `ctl/runbook` is `/mini-op:run`'s runbook lookup (Scripts) |
-| `plugin/` | the mini-op plugin, baked into the mini-op image under `/opt/windroc/plugins/mini-op/`: `plugin/.claude-plugin/plugin.json` its manifest, `plugin/skills/run/SKILL.md` its skill `/mini-op:run`; listed as `mini-op` in marketplace `windroc` (`windroc-labs/agent-plugins-marketplace`): installing it needs access to `windroc/mini-op`, and it works only in the mini-op image |
+| `ctl/` | runs in the mini-op container (baked into the image's runtime root, on its `PATH`) or on this Mac; `ctl/lib/secrets.zsh` names the secrets dir; `ctl/CLAUDE.md` is the container operator's routing table and hard rules; `ctl/runbook` is `/mini-op`'s runbook lookup (Scripts) |
+| `skills/mini-op/` | the standalone `mini-op` skill for Claude Code, Codex and OpenCode; see Install the skill |
 | `host/` | runs on this Mac: the mini-op container and its proxy, `update` (hands a project's runbooks to the direct-use container), and `config.yaml` (every setting's default; the mini's address and account empty) with `config`, which merges `~/.mini-op/config.local.yaml` onto it and generates the ssh and proxy configs into `~/.mini-op/` (`host/README.md`) |
 | `tests/`, `.github/`, `.githooks/` | offline tests, CI and the optional pre-commit hook (Offline checks) |
 
@@ -52,7 +76,7 @@ Files sit by where they run.
 | `mini/bin/shot [out.png]` | screenshots the mini, refused while a Terminal window holds a secret (a pattern in `mini/lib/secrets.zsh`) or cannot be read |
 | `ctl/mini sync [--check]` | run on this Mac or in mini-op: copy `mini/` to the mini's `~/apm/` with its `VERSION` stamp, keeping `~/apm/state/`; `--check` exits 1 unless the mini's `~/apm/VERSION` matches |
 | `host/update <checkout>` | on this Mac: snapshots the checkout's `.mini-op/runbooks/` into the direct-use container's workspace, regular files only (`host/README.md`, Hand over a project) |
-| `ctl/runbook list\|path <name> [--project <name>] [--workspace <dir>]` | in mini-op: `/mini-op:run`'s runbook lookup, the current project's runbooks before the plugin's; details: `ctl/runbook -h` |
+| `ctl/runbook list\|path <name> [--project <name>] [--workspace <dir>]` | in mini-op: `/mini-op`'s runbook lookup, the current project's runbooks before the built-in; details: `ctl/runbook -h` |
 | `ctl/runbook deploy <name> [--project <name>] [--workspace <dir>]` | in mini-op: puts a project runbook's scripts on the mini; details: `ctl/runbook -h` |
 | `ctl/mini exec [secs]`, `mini exec --collect <id>` | public noninteractive stdin runs through `mini/bin/visible` in Terminal; returns complete separate stdout/stderr and original status 0–255; a timeout retains a private job for collect, which never executes it again (`runbooks/visible-operations.md`) |
 | `ctl/mini run [secs] [--to <id>]` | run on this Mac or in mini-op: types stdin into the mini's Terminal with `~/apm/bin/ans` and waits (Waiting and answering); not for secrets: use mini pw |
@@ -161,7 +185,7 @@ npm run coverage
 - Every script and program entry (`mini/`, `ctl/`, `host/`, `.github/`, `.githooks/`, and the JXA entries in `mini/ts/`, which `mini/js/` is built from) has its test at `tests/<path without a leading period or code extension>.test.ts`, asserting exits 0, 1, 2 (and 124 when it can time out; a JXA entry 0 and 1, as osascript exits 1 on any thrown error); `tests/registry/untested.json`, the list of scripts without one, stays empty. The help probe (`tests/lib/help_probe.test.ts`) runs every script with `-h` (exit 0, usage on stdout starting with its name, no stdin read, command run or file written) and with an unknown option (exit 2, stderr starting `<name>: `), but those the sandbox's tripwire (`tests/lib/tripwire.ts`) refuses: registered secrets readers, and registered PATH bypasses that put a dir ahead of PATH (`mini/bin/o` only appends opencli's dirs, so it runs). Shipped files that are not code are listed with their covering tests in `tests/registry/non-code.json`. osascript runs only a `mini/js` program or a file listed in `tests/registry/applescript.json`, never `-e` or stdin, and shell strings embed no osascript program or page JS: page JS is a page program in `mini/ts/page/`, built to `mini/js/page/` and called with `page_js` (`mini/lib/opencli.zsh`), its arguments JSON strings.
 - `npm run coverage` runs the suite again with node's TS coverage and the sandbox's shell line trace (zsh and bash DEBUG traps, written to their own fd), then fails unless every managed script ran and 85% of the TS lines and branches and of the shell statements changed since `origin/main` (CI: the PR's base, else the commit the push followed; a push that creates its branch has none, so every line counts) are covered. Commit first: untracked files are not in the diff.
 - The host tests (`tests/host/`) also run under bash 3.2.57, built in CI from GNU's tarball, as macOS's `/bin/bash`.
-- CI's Image job is the one check that builds the image. When an image input changed (`.github/image-check changed`) and weekly, it builds `host/Dockerfile`'s `image` target with this checkout's stamp (`.github/image-check build`; no `host/start`, proxy or mini, so no mini address), checks its history for secrets and for a copied-in mini ssh config or host key (`history`), then prints a PASS/FAIL table from containers without a network (`smoke`): Claude Code runs, no python3 or sudo, user `agent` non-root, npm and node, the plugin root's `plugin.json` version is the stamp, no `windroc.` or `ensemble.` label, nothing of the plugin under `/home/agent`, `ctl/mini -h` under the ensemble layer's `PATH` from `/tmp`, ssh, zsh, jq and nc, no `mini.conf` or `mini_known_hosts`. Any FAIL fails the job naming its row. Otherwise it reports "No build needed (无需构建)".
+- CI's Image job is the one check that builds the image. When an image input changed (`.github/image-check changed`) and weekly, it builds `host/Dockerfile`'s `image` target with this checkout's stamp (`.github/image-check build`; no `host/start`, proxy or mini, so no mini address), checks its history for secrets and for a copied-in mini ssh config or host key (`history`), then prints a PASS/FAIL table from containers without a network (`smoke`): Claude Code runs, no python3 or sudo, user `agent` non-root, npm and node, mini/VERSION matches the stamp, the installed standalone skill is readable, no `windroc.` or `ensemble.` label, no runtime or plugin files under `/home/agent`, `ctl/mini -h` under the ensemble layer's `PATH` from `/tmp`, ssh, zsh, jq and nc, no `mini.conf` or `mini_known_hosts`. Any FAIL fails the job naming its row. Otherwise it reports "No build needed (无需构建)".
 - Optional: `git config core.hooksPath .githooks` makes each commit format its staged bash and TS files with the pinned versions.
 
 For changing mini-op's files on the user's Mac, see [host/README.md](host/README.md#change-or-remove).

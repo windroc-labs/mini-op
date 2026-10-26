@@ -4,8 +4,8 @@ A Docker container on this Mac running Claude Code as user `agent`, made to oper
 
 | What | How |
 | --- | --- |
-| Image | `mini-op:env`, whatever the Claude Code version: Debian `trixie-20261005-slim` (digest-pinned), Claude Code from its signed apt repo (version: `ARG CLAUDE_CODE_VERSION` in `Dockerfile`), git, openssh-client, netcat-openbsd (ssh's proxy hop), tmux, curl, jq, zsh, Debian's Node.js and npm (the registry tarball, pinned by SHA-256 in `Dockerfile`). User `agent` (uid and gid 1000), no sudo. The plugin root `/opt/windroc/plugins/mini-op/`, the working directory, root-owned and read-only to `agent`: the plugin (`../plugin/`), `../ctl/` (on `PATH`) with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/windroc/plugins/mini-op/CLAUDE.md`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`), `../README.md` and `../runbooks/`. The mini's ssh settings (`~/.mini-op/ssh_config`) and its host key (this Mac's `~/.ssh/known_hosts` entry) are built in: the image's ssh (`ssh_config.keys`) trusts only that key, never asks about or adds one, and uses `/run/ensemble/secrets/env/mini-ssh-key` when an environment gives it, else the volume's key. No python3 (FR-68): Claude Code's apt package runs without it, which CI's Image job checks on every image change and weekly (`claude --version` passes, `command -v python3` finds nothing). No secrets. |
-| Host files | none mounted: `start` bakes the Image's files in at build, stamped with this checkout's commit (plus `-dirty` when anything is uncommitted) as the plugin's version and mini/'s `VERSION`; it refuses to build outside a git checkout or with untracked or ignored files under `../ctl/`, `../mini/`, `../runbooks/` or `../plugin/` (other than what `Dockerfile.dockerignore` leaves out). `../status.md` stays on this Mac. `ctl/`'s `mini pw`, `mini sudo` and `mini-autologin` read `/run/secrets/mini-password` |
+| Image | `mini-op:env`, whatever the Claude Code version: Debian `trixie-20261005-slim` (digest-pinned), Claude Code from its signed apt repo (version: `ARG CLAUDE_CODE_VERSION` in `Dockerfile`), git, openssh-client, netcat-openbsd (ssh's proxy hop), tmux, curl, jq, zsh, Debian's Node.js and npm (the registry tarball, pinned by SHA-256 in `Dockerfile`). User `agent` (uid and gid 1000), no sudo. The runtime root `/opt/windroc/mini-op/`, the working directory, root-owned and read-only to `agent`: the skill (`../skills/mini-op/`, linked at `/etc/claude-code/.claude/skills/mini-op/`), `../ctl/` (on `PATH`) with `../ctl/CLAUDE.md` (the operator's instructions) as `/opt/windroc/mini-op/CLAUDE.md`, `../mini/` (the mini's `~/apm/` copy, not on `PATH`), `../README.md` and `../runbooks/`. The mini's ssh settings (`~/.mini-op/ssh_config`) and its host key (this Mac's `~/.ssh/known_hosts` entry) are built in: the image's ssh (`ssh_config.keys`) trusts only that key, never asks about or adds one, and uses `/run/ensemble/secrets/env/mini-ssh-key` when an environment gives it, else the volume's key. No python3 (FR-68): Claude Code's apt package runs without it, which CI's Image job checks on every image change and weekly (`claude --version` passes, `command -v python3` finds nothing). No secrets. |
+| Host files | none mounted: `start` bakes the Image's files in at build, stamped with this checkout's commit (plus `-dirty` when anything is uncommitted) as the image label and mini/'s `VERSION`; it refuses to build outside a git checkout or with untracked or ignored files under `../ctl/`, `../mini/`, `../runbooks/` or `../skills/` (other than what `Dockerfile.dockerignore` leaves out). `../status.md` stays on this Mac. `ctl/`'s `mini pw`, `mini sudo` and `mini-autologin` read `/run/secrets/mini-password` |
 | Persistent state | named volume `mini-op-home` (`/home/agent`): Claude login (`~/.claude/.credentials.json`), Claude settings (`~/.claude/settings.json`; `start` sets `promptSuggestionEnabled` false, keeping other keys), ssh key `~/.ssh/id_ed25519` (comment `mini-op container`) |
 | Secrets | `/run/secrets`, a 64k tmpfs only `agent` can read; empty after every container start |
 | Hardening | `--cap-drop ALL`, `no-new-privileges`, non-root user |
@@ -61,7 +61,7 @@ ssh -F ~/.mini-op/ssh_config mini true
    ~/playground/mini-op/host/verify-egress
    ```
 
-6. Work with it. The first start asks to trust the plugin root `/opt/windroc/plugins/mini-op/`. Detach with Ctrl-b d; the same command reattaches.
+6. Work with it. The first start asks to trust the runtime root `/opt/windroc/mini-op/`. Detach with Ctrl-b d; the same command reattaches.
 
    ```sh
    docker exec -it mini-op tmux new -A -s op claude --dangerously-skip-permissions
@@ -101,7 +101,7 @@ What ensemble needs to run mini-op as an environment: for `verifier` runs, and f
 | Caller network | `mini-op`: the egress gateway's network for mini-op, defined by the `mini-op` section of egress's local config |
 | Lock | `mini-op` |
 | Direct-use session | `mini-op`, its local cwd `~/.mini-op/workspace` |
-| Plugin | `mini-op`, in `/opt/windroc/plugins/mini-op/` |
+| Skill | `mini-op`, installed at `/etc/claude-code/.claude/skills/mini-op/` |
 | Mini-side tools | `~/apm/bin/*` and `~/apm/lib/*.zsh` (`mini/`): the only ones a project's scripts call |
 | Project scripts | a project runbook's scripts, on the mini in `~/mini-op-projects/<project>/<name>/` |
 | Secrets | the keychain items below; in the container each is `/run/ensemble/secrets/env/<file>` |
@@ -151,7 +151,6 @@ Then add the environment to `~/.ensemble/config.local.toml`; it prefetches nothi
 [delegate.environments.mini-op]   # no prefetch
 image = "mini-op:env"
 gateway = "mini-op"
-plugins = ["mini-op"]
 lock = "mini-op"
 
 [[delegate.environments.mini-op.secrets]]
@@ -170,7 +169,7 @@ file = "mini-ssh-key"
 
 ## Hand over a project
 
-In direct use, `/mini-op:run` finds a project's runbooks in a snapshot that `update` copies into the container; the container never mounts the checkout. It needs ensemble's direct-use container (labels `windroc.lock=mini-op`, `windroc.lock.owner=mini-op`, a workspace volume at `~/.mini-op/workspace`): the session `mini-op` of Environment definition, not the container of Steps.
+In direct use, `/mini-op` finds a project's runbooks in a snapshot that `update` copies into the container; the container never mounts the checkout. It needs ensemble's direct-use container (labels `windroc.lock=mini-op`, `windroc.lock.owner=mini-op`, a workspace volume at `~/.mini-op/workspace`): the session `mini-op` of Environment definition, not the container of Steps.
 
 ```sh
 ~/playground/mini-op/host/update ~/src/ensemble

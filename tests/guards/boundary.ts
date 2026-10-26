@@ -1,10 +1,10 @@
 import { lineAt, type Guard, type Violation } from "../lib/guard.ts";
-import { containerToRepo, PLUGIN_ROOT, scanned, shellKind } from "../lib/repo.ts";
+import { containerToRepo, RUNTIME_ROOT, scanned, shellKind } from "../lib/repo.ts";
 import { shellCode } from "../lib/shell.ts";
 
 // mini/ runs on the mini: it never names the container, its secrets dir, docker or the other dirs.
 const MINI_NAMES: [RegExp, string][] = [
-  [new RegExp(`${PLUGIN_ROOT}(?![\\w.-])`, "g"), PLUGIN_ROOT],
+  [new RegExp(`${RUNTIME_ROOT}(?![\\w.-])`, "g"), RUNTIME_ROOT],
   [new RegExp("/run/" + "secrets\\b", "g"), "the container's secrets dir"],
   [/(?<![\w.-])docker(?![\w-])/g, "docker"],
   [/(?<![\w.-])ctl\//g, "ctl/"],

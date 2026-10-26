@@ -3,13 +3,13 @@ import { lineAt, type Guard, type Violation } from "../lib/guard.ts";
 import {
   containerToRepo,
   isShipped,
-  PLUGIN_ROOT,
+  RUNTIME_ROOT,
   scanned,
   SHIPPED_DIRS,
   type RepoView,
 } from "../lib/repo.ts";
 
-// The container's operator reads ctl/CLAUDE.md as the plugin root's CLAUDE.md, beside the other
+// The container's operator reads ctl/CLAUDE.md as the runtime root's CLAUDE.md, beside the other
 // baked files: its paths resolve from the repo root only. The root before it is retired.
 const CLAUDE = "ctl/CLAUDE.md";
 const RETIRED = /^\/opt\/mini-op(?:\/|$)/;
@@ -44,7 +44,7 @@ function exists(view: RepoView, file: string): boolean {
   return view.files.some((f) => f === target || f.startsWith(target + "/"));
 }
 
-// The repo paths a backticked token may name; null: not a path to check; UNBAKED: a plugin-root
+// The repo paths a backticked token may name; null: not a path to check; UNBAKED: a runtime-root
 // path the image does not have.
 const UNBAKED = "unbaked";
 function repoPath(doc: string, token: string): string[] | null | typeof UNBAKED {
@@ -153,9 +153,9 @@ export const guard: Guard = {
         const candidates = repoPath(file, span);
         if (RETIRED.test(span)) {
           const word = span.split(/\s/)[0];
-          at(match.index, `\`${word}\` is retired: the image's plugin root is ${PLUGIN_ROOT}`);
+          at(match.index, `\`${word}\` is retired: the image's runtime root is ${RUNTIME_ROOT}`);
         } else if (candidates === UNBAKED) {
-          at(match.index, `\`${span.split(/\s/)[0]}\` is not in the image's plugin root`);
+          at(match.index, `\`${span.split(/\s/)[0]}\` is not in the image's runtime root`);
         } else if (candidates && !candidates.some((c) => exists(view, c))) {
           at(match.index, `\`${span.split(/\s/)[0]}\` does not exist`);
         } else if (candidates) {

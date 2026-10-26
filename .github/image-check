@@ -29,13 +29,13 @@ esac
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(dirname "$here")
 tag=mini-op-image-check
-root=/opt/windroc/plugins/mini-op
-# The PATH the ensemble layer sets: the plugin must work under it (FR-209).
+root=/opt/windroc/mini-op
+# The PATH the ensemble layer sets: the runtime must work under it (FR-209).
 ensemble_path=/opt/ensemble/bin:/home/agent/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
 
 # What the image is built from, and the scripts this job runs.
 INPUTS='^(host/(Dockerfile(\.dockerignore)?|claude-code\.asc|ssh_config\..+)'
-INPUTS+='|(plugin|ctl|mini|runbooks)/.+|README\.md|\.github/(workflows/ci\.yml|image-check))$'
+INPUTS+='|(skills|ctl|mini|runbooks)/.+|README\.md|\.github/(workflows/ci\.yml|image-check))$'
 # FR-34's secret patterns (SECRET_NAMES, SECRET_RES) have one home, written for bash and zsh alike.
 secrets_lib=$repo/mini/lib/secrets.zsh
 # Only host/start's env stage copies in the mini's ssh config and host key (FR-210).
@@ -119,9 +119,11 @@ smoke() {
     row "$tool --version" "$r"
   done
   stamp=$(checkout_stamp 2>/dev/null) || stamp=
-  out=$(in_image jq -r .version "$root/.claude-plugin/plugin.json") || out=
+  out=$(in_image cat "$root/mini/VERSION") || out=
   [[ -n $stamp && $out == "$stamp" ]] && r=PASS || r=FAIL
-  row "plugin.json version ${stamp:-?}" "$r"
+  row "mini/VERSION ${stamp:-?}" "$r"
+  in_image test -r /etc/claude-code/.claude/skills/mini-op/SKILL.md && r=PASS || r=FAIL
+  row "standalone mini-op skill readable" "$r"
   out=$(docker image inspect -f '{{range $k, $v := .Config.Labels}}{{println $k}}{{end}}' \
     "$tag" 2>/dev/null) && ! grep -Eq '^(windroc|ensemble)\.' <<<"$out" && r=PASS || r=FAIL
   row "no windroc./ensemble. label" "$r"

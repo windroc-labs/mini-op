@@ -28,7 +28,7 @@ const testJob = [
   "      - uses: actions/checkout@x # v7",
   "        with:",
   "          persist-credentials: false",
-  "      - run: chmod -R a-w ctl mini plugin",
+  "      - run: chmod -R a-w ctl mini skills",
   "      - run: npm test",
   "      - name: Require unchanged checkout",
   `        run: '${UNCHANGED.replace(/'/g, "''")}'`,
@@ -56,7 +56,7 @@ const ciJob = [
 const shipped = {
   "mini/bin/x": "#!/bin/zsh\n",
   "ctl/lib/y.zsh": "f() {}\n",
-  "plugin/skills/run/SKILL.md": "# run\n",
+  "skills/mini-op/SKILL.md": "# run\n",
 };
 
 export const violation = {
@@ -122,11 +122,11 @@ export const expected = [
   ".github/workflows/ci.yml:1: job test needs timeout-minutes <= 15",
   ".github/workflows/ci.yml:1: job test checks out without persist-credentials: false",
   ".github/workflows/ci.yml:1: job test must end with the 'Require unchanged checkout' step",
-  ".github/workflows/ci.yml:1: job test must run 'chmod -R a-w ctl mini plugin' before its tests",
+  ".github/workflows/ci.yml:1: job test must run 'chmod -R a-w ctl mini skills' before its tests",
   ".github/workflows/ci.yml:1: job other needs timeout-minutes <= 15",
   ".github/workflows/ci.yml:1: job other downloads without sha256sum -c",
-  ".github/workflows/ci.yml:1: job other must run 'chmod -R a-w ctl mini plugin' before its tests",
-  ".github/workflows/ci.yml:1: job host must run 'chmod -R a-w ctl mini plugin' before its tests",
+  ".github/workflows/ci.yml:1: job other must run 'chmod -R a-w ctl mini skills' before its tests",
+  ".github/workflows/ci.yml:1: job host must run 'chmod -R a-w ctl mini skills' before its tests",
   ".github/workflows/ci.yml:1: job CI must need every other job",
   ".github/workflows/ci.yml:1: job CI must run if: always()",
   ".github/workflows/ci.yml:1: job CI must fail when a needed job failed or was cancelled",

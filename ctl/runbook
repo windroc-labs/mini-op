@@ -3,8 +3,8 @@ setopt pipefail extendedglob
 usage="runbook list [--project <name>] [--workspace <dir>]
 runbook path <name> [--project <name>] [--workspace <dir>]
 runbook deploy <name> [--project <name>] [--workspace <dir>]
-Finds /mini-op:run's runbook. Candidates, in order: the current project's .mini-op/runbooks/*.md,
-then the plugin's runbooks/*.md; each needs a when line in its frontmatter (closed within 100
+Finds /mini-op's runbook. Candidates, in order: the current project's .mini-op/runbooks/*.md,
+then the builtin's runbooks/*.md; each needs a when line in its frontmatter (closed within 100
 lines and 64 KiB), the only part read.
 The workspace (default: the working directory) is a checkout when it holds .mini-op/runbooks/,
 the project named by its origin repo; else the projects are its snapshots,
@@ -12,9 +12,9 @@ the project named by its origin repo; else the projects are its snapshots,
 snapshot (FR-216 writes them) is named by its origin repo like the checkout case and counts only
 with a real .mini-op/runbooks directory; entries under projects/ starting with . (staging) are
 ignored.
-list prints each candidate as <source> TAB <path> TAB <when>, source plugin or project:<name>;
-path prints the first candidate named <name> as <source> TAB <path>, a plugin one before any
-project is chosen. A project runbook named like a plugin one, a symlink or other non-regular
+list prints each candidate as <source> TAB <path> TAB <when>, source builtin or project:<name>;
+path prints the first candidate named <name> as <source> TAB <path>, a builtin one before any
+project is chosen. A project runbook named like a builtin one, a symlink or other non-regular
 file, and a name that is not plain are skipped, each with a stderr line
 'runbook: skipped <path>: <reason>'. Exits 0, 1 (refused or not found), 2 (usage error) or 3
 (several projects and no --project: ask the user which one).
@@ -88,8 +88,8 @@ origin_url() {
   wait $pid && print -r -- $url
 }
 
-typeset -a project_rows plugin_rows
-typeset -A plugin_names plugin_paths project_paths
+typeset -a project_rows builtin_rows
+typeset -A builtin_names builtin_paths project_paths
 # scan <dir> <source>: the candidates in <dir> into the rows, skipping and reporting the rest.
 scan() {
   local f n w
@@ -99,15 +99,15 @@ scan() {
       skip $f "not a plain runbook name"
     elif [[ ! -f $f || -L $f ]]; then
       skip $f "not a regular file"
-    elif [[ $2 != plugin ]] && ((${+plugin_names[$n]})); then
-      skip $f "the plugin has a runbook named $n"
+    elif [[ $2 != builtin ]] && ((${+builtin_names[$n]})); then
+      skip $f "the builtin has a runbook named $n"
     else
-      [[ $2 == plugin ]] && plugin_names[$n]=1
+      [[ $2 == builtin ]] && builtin_names[$n]=1
       if ! w=$(read_when $f); then
         skip $f "no when in its frontmatter"
-      elif [[ $2 == plugin ]]; then
-        plugin_rows+=("plugin"$'\t'"$f"$'\t'"$w")
-        plugin_paths[$n]="plugin"$'\t'"$f"
+      elif [[ $2 == builtin ]]; then
+        builtin_rows+=("builtin"$'\t'"$f"$'\t'"$w")
+        builtin_paths[$n]="builtin"$'\t'"$f"
       else
         project_rows+=("$2"$'\t'"$f"$'\t'"$w")
         project_paths[$n]="$2"$'\t'"$f"
@@ -155,9 +155,9 @@ done
 [[ -d $workspace ]] || die "no workspace $(shown $workspace)"
 ws=${workspace:A}
 
-scan $root/runbooks plugin
-if [[ $cmd == path && -n ${plugin_paths[$name]} ]]; then
-  print -r -- ${plugin_paths[$name]}
+scan $root/runbooks builtin
+if [[ $cmd == path && -n ${builtin_paths[$name]} ]]; then
+  print -r -- ${builtin_paths[$name]}
   exit 0
 fi
 
@@ -194,7 +194,7 @@ fi
 [[ -n $pdir ]] && scan $pdir project:$pname
 
 if [[ $cmd == list ]]; then
-  (($#project_rows + $#plugin_rows)) && print -rl -- $project_rows $plugin_rows
+  (($#project_rows + $#builtin_rows)) && print -rl -- $project_rows $builtin_rows
   exit 0
 fi
 if [[ $cmd == path ]]; then

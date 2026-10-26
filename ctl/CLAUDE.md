@@ -7,7 +7,7 @@
 | Before any task | `README.md` › Start here |
 | Working from this container | `host/README.md` |
 | The environment definition for ensemble | `host/README.md` › Environment definition |
-| A project's own tests on the mini, in its `.mini-op/runbooks/` (for ensemble: install, cleanup, its manager, test accounts) | `plugin/skills/run/SKILL.md` |
+| A project's own tests on the mini, in its `.mini-op/runbooks/` (for ensemble: install, cleanup, its manager, test accounts) | `skills/mini-op/SKILL.md` |
 | Machine access, browser | `runbooks/setup-test-env.md` |
 | Erasing the mini | `runbooks/return-mini.md` |
 | Checking mini-op reaches the mini | `runbooks/check-connection.md` |
