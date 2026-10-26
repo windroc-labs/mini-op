@@ -1,10 +1,5 @@
 // The docs every view needs; the violation lacks return-mini.md.
-const runbooks = Object.fromEntries(
-  ["setup-test-env", "install-ensemble", "clean-ensemble", "manager-on-mini"].map((name) => [
-    `runbooks/${name}.md`,
-    `# ${name}\n`,
-  ]),
-);
+const runbooks = { "runbooks/setup-test-env.md": "# setup-test-env\n" };
 const required = {
   ...runbooks,
   "runbooks/return-mini.md": "# return\n",
@@ -15,11 +10,11 @@ const files = {
   ...runbooks,
   "mini/bin/ans": "#!/bin/zsh\n~/apm/bin/termwait 1 --after x; mkdir -p ~/apm/state/done\n",
   "mini/bin/termwait": "#!/bin/zsh\n",
-  "mini/runbooks/setup/lq": "#!/bin/zsh\n",
+  "mini/bin/lq": "#!/bin/zsh\n",
   "host/README.md": "Edit `proxy/acl.yaml`, then `../README.md`.\n",
   "host/proxy/acl.yaml": "x: 1\n",
   "plugin/.claude-plugin/plugin.json": "{}\n",
-  "runbooks/setup.md": "Run `ssh mini '~/apm/runbooks/setup/lq body'` (`../status.md`).\n",
+  "runbooks/setup.md": "Run `ssh mini '~/apm/bin/lq body'` (`../status.md`).\n",
   "status.md": [
     "# status",
     "",
@@ -89,7 +84,7 @@ export const clean = {
   "runbooks/return-mini.md": "# return\n",
   "README.md": [
     "See `runbooks/setup.md`, `mini/bin/*` and `docs/credentials.md` (ensemble's).",
-    "Run `ssh mini '~/apm/bin/ans 60'`, ~/apm/runbooks/<runbook>/<name>, `mini sync` and `mini pw`.",
+    "Run `ssh mini '~/apm/bin/ans 60'`, ~/apm/bin/<name>, `mini sync` and `mini pw`.",
     "The marker `~/apm/state/done/<id>`, the stamp `~/apm/VERSION`; `mini ~ %` is a prompt.",
     "Run `mini sync --check`, `mini sudo rm -rf x`, `mini sudo -v` and `mini run 5 --to 1-2-3`.",
     "Edit `plugin/.claude-plugin/plugin.json`, in the image",
@@ -113,7 +108,7 @@ export const clean = {
     "",
   ].join("\n"),
   "runbooks/setup.md": [
-    "Run `ssh mini '~/apm/runbooks/setup/lq body'` (`../status.md` › Machine (built 1)).",
+    "Run `ssh mini '~/apm/bin/lq body'` (`../status.md` › Machine (built 1)).",
     "| `../status.md` › status | `../status.md` › Deep, Machine (built 1) |",
     "See `../status.md` › status.",
     "",

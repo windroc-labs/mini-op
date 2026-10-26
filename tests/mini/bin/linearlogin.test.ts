@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
-import { Page, type PageEvent } from "../../../lib/page.ts";
-import { REPO, Sandbox, type FakeRule } from "../../../lib/sandbox.ts";
+import { Page, type PageEvent } from "../../lib/page.ts";
+import { REPO, Sandbox, type FakeRule } from "../../lib/sandbox.ts";
 
-const LINEARLOGIN = path.join(REPO, "mini/runbooks/setup-test-env/linearlogin");
+const LINEARLOGIN = path.join(REPO, "mini/bin/linearlogin");
 const EMAIL = "role@x.com";
 const LOGIN = "https://linear.app/login | Log in to Linear";
 const PICKER = "https://linear.app/login | Choose a workspace";
@@ -69,7 +69,7 @@ async function sandbox(
   };
   stand("o", "bin", [{ shell: O, ignoresStdin: true }]);
   stand("front", "bin", [{ ignoresStdin: true }]);
-  stand("maillink", "runbooks/setup-test-env", [
+  stand("maillink", "bin", [
     opts.mark ?? { argv: ["mark"], stdout: "marked\n", ignoresStdin: true },
     opts.follow ?? FOLLOWED,
     opts.code ?? { argv: ["code"], shell: `${LANDS}; print entered`, ignoresStdin: true },

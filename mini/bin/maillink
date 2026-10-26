@@ -14,8 +14,8 @@ s", naming any folder that did not render on some look).'
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
 [[ $# -eq 2 && $1 == (mark|follow|code) && $2 =~ '^[A-Za-z0-9._%+][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+$' ]] ||
   { print -u2 -r -- 'maillink: usage: maillink mark|follow|code <email>'; exit 2; }
-source ${0:A:h}/../../lib/timeout.zsh || exit 1
-source ${0:A:h}/../../lib/opencli.zsh || exit 1
+source ${0:A:h}/../lib/timeout.zsh || exit 1
+source ${0:A:h}/../lib/opencli.zsh || exit 1
 umask 077
 cmd=$1; E=$2; S=~/apm/state/maillink.${E//[^A-Za-z0-9]/_}
 folders=(https://outlook.live.com/mail/0/ https://outlook.live.com/mail/0/junkemail)

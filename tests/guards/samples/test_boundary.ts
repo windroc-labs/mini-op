@@ -23,7 +23,7 @@ export const clean = {
     '#!/usr/bin/env zsh\nprint "/usr/bin/x is a path"\ntar -C /opt -xf - >/dev/null 2>&1\nmy_TESTS=1\n# /usr/bin/foo in a comment\npath=(/usr/local/bin $path)\n',
   "mini/bin/d": "#!/usr/bin/env zsh\n/usr/bin/ssh mini true\n",
   "host/cont": "#!/usr/bin/env bash\ntar -C \\\n  /opt/foo -xf x\n",
-  "mini/runbooks/x/y": "#!/usr/bin/env zsh\n~/apm/runbooks/setup-test-env/maillink mark e\n",
+  "mini/bin/y": "#!/usr/bin/env zsh\n~/apm/bin/maillink mark e\n",
   "host/Dockerfile": "FROM x\nRUN /usr/bin/apt-get update\n",
   "tests/y.test.ts":
     'const s = "#!/bin/zsh\\nprint hi\\n";\nconst h = process.env.HOME;\nconst t = path.join(sb.dir, "bin");\nconst e = "#!/usr/bin/env bash";\nsb.fake("sh", [{ stdout: "/usr/bin/nc\\n" }]);\n',

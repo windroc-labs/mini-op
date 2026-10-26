@@ -20,7 +20,7 @@ export type Scenario = {
   check(sb: Sandbox, r: RunResult, secrets: string[]): void;
 };
 
-export const hex = () => randomBytes(8).toString("hex");
+const hex = () => randomBytes(8).toString("hex");
 
 const ID = "1761200000-4242-17";
 
@@ -43,12 +43,6 @@ function screen(): { text: string; secrets: string[] } {
   ];
   return { text: lines.join("\n") + "\n", secrets };
 }
-
-const stdinOf = (sb: Sandbox, cmd: string) =>
-  sb
-    .calls(cmd)
-    .map((call) => call.stdin)
-    .join("");
 
 function sshGotCanary(sb: Sandbox, r: RunResult): void {
   assert.equal(r.code, 0, r.stderr);
@@ -76,7 +70,7 @@ const ctl = ({ script, title, args, env }: CtlRow): Scenario => ({
 
 export const SECRET_SCRIPTS: Scenario[] = [
   {
-    script: "mini/runbooks/setup-test-env/maillink",
+    script: "mini/bin/maillink",
     title: "consumes a mail login link through JXA stdin without token argv",
     args: () => ["follow", "role@example.com"],
     setup(sb) {
@@ -204,83 +198,6 @@ export const SECRET_SCRIPTS: Scenario[] = [
         typed.map((call) => call.stdin),
         [sb.canary],
       );
-    },
-  },
-  {
-    script: "mini/runbooks/setup-test-env/storekey",
-    title: "stores the clipboard's Linear key and checks it",
-    args: () => ["agentpm-test-linear-key", "ensemble-test"],
-    input: (sb) => sb.canary + "\n",
-    setup(sb) {
-      const clip = hex();
-      const stored = hex();
-      sb.fake("pbpaste", [{ stdout: `lin_api_${clip}` }]);
-      sb.fake("pbcopy", [{}]);
-      sb.fake("security", [
-        { argv: ["-i"] },
-        { argv: ["find-generic-password"], stdout: `lin_api_${stored}\n` },
-      ]);
-      sb.fake("curl", [{ stdout: '{"data":{"viewer":{"name":"x"}}}' }]);
-      return [sb.canary, clip, stored];
-    },
-    consumers: ["security", "curl"],
-    check(sb, r, secrets) {
-      assert.equal(r.code, 0, r.stderr);
-      const [password, clip, stored] = secrets;
-      const security = stdinOf(sb, "security");
-      assert.ok(security.includes(`unlock-keychain -p "${password}"`));
-      assert.ok(security.includes(`-w "lin_api_${clip}"`));
-      assert.equal(stdinOf(sb, "curl"), `Authorization: lin_api_${stored}\n`);
-      assert.deepEqual(
-        sb.calls("pbcopy").map((call) => call.stdin),
-        ["x"],
-      );
-    },
-  },
-  {
-    script: "mini/runbooks/setup-test-env/importkey",
-    title: "copies an exported keychain item into the login keychain",
-    args: () => ["/tmp/apm.x/export.keychain-db", "agentpm-test-github", "dotpm2026"],
-    input: (sb) => sb.canary + "\n",
-    setup(sb) {
-      const item = hex();
-      sb.fake("security", [
-        { argv: ["-i"] },
-        {
-          argv: ["find-generic-password", "-s", "agentpm-test-github", "-a", "dotpm2026", "-w"],
-          stdout: `${item}\n`,
-        },
-        { argv: ["find-generic-password"] },
-        { argv: ["lock-keychain"] },
-      ]);
-      return [sb.canary, item];
-    },
-    consumers: ["security"],
-    check(sb, r, secrets) {
-      assert.equal(r.code, 0, r.stderr);
-      assert.equal(r.stdout, "importkey: agentpm-test-github/dotpm2026 imported\n");
-      const [password, item] = secrets;
-      const security = stdinOf(sb, "security");
-      assert.ok(security.includes(`unlock-keychain -p "${password}" login.keychain`));
-      assert.ok(security.includes(`-w "${item}" login.keychain`));
-    },
-  },
-  {
-    script: "mini/runbooks/setup-test-env/lq",
-    title: "sends a Linear request with the keychain key",
-    args: (sb) => {
-      const body = path.join(sb.dir, "tmp/body.json");
-      fs.writeFileSync(body, '{"query":"{ viewer { id } }"}');
-      return [body];
-    },
-    setup(sb) {
-      sb.fake("security", [{ argv: ["find-generic-password"], stdout: sb.canary + "\n" }]);
-      sb.fake("curl", [{ stdout: "{}" }]);
-    },
-    consumers: ["curl"],
-    check(sb, r) {
-      assert.equal(r.code, 0, r.stderr);
-      assert.equal(stdinOf(sb, "curl"), `Authorization: ${sb.canary}\n`);
     },
   },
   {

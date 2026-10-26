@@ -88,7 +88,7 @@ After every `mini sync`, the operator smoke-tests the real mini from mini-op, ou
 
 ```sh
 mini sync --check
-printf '%s\n' 'cd ~/apm && rc=0; for f in bin/* runbooks/*/*; do [ -x "$f" ] || continue; if "./$f" -h </dev/null >/dev/null 2>&1; then echo "ok $f"; else echo "FAIL $f"; rc=1; fi; done; exit $rc' | mini exec
+printf '%s\n' 'cd ~/apm && rc=0; for f in bin/*; do [ -x "$f" ] || continue; if "./$f" -h </dev/null >/dev/null 2>&1; then echo "ok $f"; else echo "FAIL $f"; rc=1; fi; done; exit $rc' | mini exec
 ```
 
 ## Environment definition

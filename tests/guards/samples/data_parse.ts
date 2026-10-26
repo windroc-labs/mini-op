@@ -5,7 +5,7 @@ export const violation = {
     `v=$(o eval x | sed -E 's/.*\\"data\\": *"([^"]*)".*/\\1/')`,
     "",
   ].join("\n"),
-  "mini/runbooks/setup/b": "#!/usr/bin/env zsh\ngrep -o '\"data\" : [^,]*' r\n",
+  "mini/bin/b": "#!/usr/bin/env zsh\ngrep -o '\"data\" : [^,]*' r\n",
   "ctl/c": "#!/usr/bin/env zsh\nawk -F'\"data\":' '{print $2}'\n",
 };
 
@@ -22,6 +22,6 @@ const message = "parses OpenCLI's data itself; pipe the reply to opencli_data (m
 export const expected = [
   `mini/bin/a:2: ${message}`,
   `mini/bin/a:3: ${message}`,
-  `mini/runbooks/setup/b:2: ${message}`,
+  `mini/bin/b:2: ${message}`,
   `ctl/c:2: ${message}`,
 ];

@@ -13,7 +13,7 @@ export const SHIPPED_DIRS = ["ctl", "mini", "host", "plugin"];
 export const TESTED_DIRS = [...SHIPPED_DIRS, ".github", ".githooks"];
 
 // The mini's copy of mini/: these dirs land under ~/apm.
-export const APM_DIRS = ["bin", "js", "lib", "ts", "runbooks"];
+export const APM_DIRS = ["bin", "js", "lib", "ts"];
 
 // Where a mini/ file lives on the mini, as scripts and docs name it.
 export function apmPath(file: string): string | undefined {
