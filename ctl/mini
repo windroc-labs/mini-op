@@ -25,6 +25,7 @@ mini exec exits 255 on SSH failure; command completion is unknown."
 source ${0:A:h}/lib/ssh.zsh
 source ${0:A:h}/lib/version.sh
 source ${0:A:h}/lib/secrets.zsh
+source ${0:A:h}/lib/pack.zsh
 root=${0:A:h:h}
 die() { print -u2 -r -- "mini: $1"; exit 1; }
 # usage_error <synopsis>
@@ -46,11 +47,10 @@ sync_mini() {
   tmp=$(mktemp -d) || die "cannot make a temp dir"
   trap 'rm -rf -- "${tmp:?}"' EXIT
   print -r -- $v > $tmp/VERSION
-  local -a entries flags=(--no-xattrs)
+  local -a entries
   entries=($root/mini/*(DN:t))
   entries=(${entries:#VERSION})
-  [[ $(tar --version) == *bsdtar* ]] && flags+=(--no-mac-metadata)
-  COPYFILE_DISABLE=1 tar $flags -cf - -C $root/mini $entries -C $tmp VERSION |
+  pack_tar -cf - -C $root/mini $entries -C $tmp VERSION |
     mini_ssh -o BatchMode=yes mini $unpack ||
     die "sync to the mini failed; ~/apm is unchanged or partly updated"
   print -r -- "mini: synced mini/ to the mini's ~/apm at $v"

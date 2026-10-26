@@ -205,7 +205,13 @@ test("without a VERSION outside a checkout sync and --check exit 1 and never cal
   const root = path.join(sb.dir, "plugin-root");
   fs.mkdirSync(path.join(root, "ctl/lib"), { recursive: true });
   fs.mkdirSync(path.join(root, "mini/bin"), { recursive: true });
-  for (const file of ["ctl/mini", "ctl/lib/ssh.zsh", "ctl/lib/secrets.zsh", "ctl/lib/version.sh"]) {
+  for (const file of [
+    "ctl/mini",
+    "ctl/lib/ssh.zsh",
+    "ctl/lib/secrets.zsh",
+    "ctl/lib/version.sh",
+    "ctl/lib/pack.zsh",
+  ]) {
     fs.copyFileSync(path.join(REPO, file), path.join(root, file));
   }
   for (const args of [["sync"], ["sync", "--check"]]) {

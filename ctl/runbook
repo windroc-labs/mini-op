@@ -28,6 +28,7 @@ export LC_ALL=C
 zmodload -F zsh/system b:sysopen b:sysread
 zmodload -F zsh/stat b:zstat
 source ${0:A:h}/lib/ssh.zsh
+source ${0:A:h}/lib/pack.zsh
 root=${0:A:h:h}
 die() { print -u2 -r -- "runbook: $1"; exit 1; }
 usage_error() { print -u2 -r -- "runbook: usage: $1"; exit 2; }
@@ -235,9 +236,7 @@ if [[ ! -d $src ]]; then
   print -r -- "runbook: $name has no scripts; nothing on the mini"
   exit 0
 fi
-typeset -a flags=(--no-xattrs)
-[[ $(tar --version) == *bsdtar* ]] && flags+=(--no-mac-metadata)
-COPYFILE_DISABLE=1 tar $flags -cf - -C $src . |
+pack_tar -cf - -C $src . |
   mini_ssh -o BatchMode=yes mini "set -- $pname $name; $drop; $place" ||
   die "deploying to the mini failed; $dest/ unchanged or partly updated"
 print -r -- "runbook: deployed $(shown $src) to the mini's $dest/"
