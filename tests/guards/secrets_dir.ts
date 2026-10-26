@@ -9,10 +9,8 @@ const LITERAL = "/run/" + "secrets";
 // The environment's secrets dir (AC9b): named only by the resolver, the ssh settings and docs.
 const ENV_LITERAL = "/run/ensemble/" + "secrets/env";
 const ENV_NAMERS = new Set([RESOLVER, "host/ssh_config.keys"]);
-// The direct users of the literal left after E2 put ctl/'s readers on the resolver. A move may
-// rename a row (same count, same commit); a new file may never be added: new code goes through the
-// resolver.
-const BASELINE = new Set(["host/start", "host/stop"]);
+// No direct-path consumers remain after the broker cutover.
+const BASELINE = new Set<string>();
 const SETS = new RegExp(
   `(?:^|[^A-Za-z0-9_])(?:(?:export|typeset|declare|local|readonly)\\s+(?:-\\S+\\s+)*${VARIABLE}\\b|${VARIABLE}:?=)`,
   "g",

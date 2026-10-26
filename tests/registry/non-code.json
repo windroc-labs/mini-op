@@ -28,13 +28,6 @@
     ]
   },
   {
-    "file": "host/proxy/Dockerfile",
-    "reason": "the mini-op-proxy image: smokescreen release checksums and base digests",
-    "tests": [
-      "tests/host/proxy/Dockerfile.test.ts"
-    ]
-  },
-  {
     "file": "host/ssh_config.container",
     "reason": "the container's proxy hop to the mini",
     "tests": [

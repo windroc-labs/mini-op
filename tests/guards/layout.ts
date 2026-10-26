@@ -33,7 +33,7 @@ function problem(file: string, script: () => boolean): string | null {
       if (/^lib\/[^/]+$/.test(rest) || rest === "CLAUDE.md") return null;
       return /^[^/]+$/.test(rest) && script() ? null : "ctl/ holds scripts, CLAUDE.md and lib/";
     case "host":
-      return /^(proxy\/)?[^/]+$/.test(rest) ? null : "host/ holds its files and proxy/";
+      return /^[^/]+$/.test(rest) ? null : "host/ holds files only";
     case "skills":
       return /^[^/]+\/SKILL\.md$/.test(rest) ? null : "skills/ holds <name>/SKILL.md";
     default:

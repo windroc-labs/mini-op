@@ -6,7 +6,7 @@ export const violation = {
   "mini/bin/lq": script,
   "ctl/mini-x": script,
   "host/start": script,
-  "host/stop": script,
+  "host/unused": script,
   "README.md": "Run `~/apm/bin/ans` and `mini/bin/answers`; `lq`; `mini-xy`; start, then stop.\n",
   "tests/x.test.ts": "ctl/mini-x host/start\n",
 };
@@ -27,5 +27,5 @@ export const expected = [
   "mini/bin/lq:1: no doc or other script names bin/lq",
   "ctl/mini-x:1: no doc or other script names mini-x",
   "host/start:1: no doc or other script names /start",
-  "host/stop:1: no doc or other script names /stop",
+  "host/unused:1: no doc or other script names /unused",
 ];

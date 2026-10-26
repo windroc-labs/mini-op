@@ -16,7 +16,6 @@ const base = {
   "ctl/lib/ssh.zsh": "f() {}\n",
   "host/start": "#!/usr/bin/env bash\n",
   "host/ssh_config": "Host mini\n",
-  "host/proxy/acl.yaml": "x: 1\n",
   "skills/mini-op/SKILL.md": "# run\n",
 };
 
@@ -36,7 +35,7 @@ export const violation = {
   "mini/runbooks/gone/lq": script,
   "ctl/notes.txt": "x\n",
   "ctl/sub/x": script,
-  "host/proxy/a/b": "x\n",
+  "host/extra/a/b": "x\n",
   "skills/README.md": "# x\n",
   "skills/.claude-plugin/marketplace.json": "{}\n",
   "skills/SKILL.md": "# x\n",
@@ -59,7 +58,7 @@ export const expected = [
   "mini/runbooks/gone/lq:1: mini/ holds bin/, js/*.js, js/page/*.js, lib/ and ts/",
   "ctl/notes.txt:1: ctl/ holds scripts, CLAUDE.md and lib/",
   "ctl/sub/x:1: ctl/ holds scripts, CLAUDE.md and lib/",
-  "host/proxy/a/b:1: host/ holds its files and proxy/",
+  "host/extra/a/b:1: host/ holds files only",
   "skills/README.md:1: skills/ holds <name>/SKILL.md",
   "skills/.claude-plugin/marketplace.json:1: skills/ holds <name>/SKILL.md",
   "skills/SKILL.md:1: skills/ holds <name>/SKILL.md",

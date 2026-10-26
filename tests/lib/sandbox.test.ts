@@ -56,6 +56,24 @@ test("env holds only the sandbox variables", async (t) => {
   assert.deepEqual(keys.sort(), expected.sort());
 });
 
+test("nested secret links cannot escape into another sandbox", async (t) => {
+  const sb = await Sandbox.create(t);
+  const other = await Sandbox.create(t);
+  fs.rmSync(sb.passwordFile);
+  fs.symlinkSync(other.passwordFile, sb.passwordFile);
+  await assert.rejects(
+    sb.run(["sh", "-c", 'cat "$MINI_OP_SECRETS_DIR/env/mini-password"']),
+    /must point inside/,
+  );
+});
+
+test("a nested directory link inside the sandbox can be checked without looping", async (t) => {
+  const sb = await Sandbox.create(t);
+  fs.symlinkSync(sb.secrets, path.join(sb.secrets, "env/back"));
+  const r = await sb.run(["true"]);
+  assert.equal(r.code, 0);
+});
+
 test("the override variable must be set and point inside the sandbox", async (t) => {
   const sb = await Sandbox.create(t);
   const outside = path.dirname(sb.dir);
@@ -65,9 +83,9 @@ test("the override variable must be set and point inside the sandbox", async (t)
       (err: Error) => err instanceof SandboxError && /MINI_OP_SECRETS_DIR/.test(err.message),
     );
   }
-  const r = await sb.run(["sh", "-c", 'cat "$MINI_OP_SECRETS_DIR/mini-password"']);
+  const r = await sb.run(["sh", "-c", 'cat "$MINI_OP_SECRETS_DIR/env/mini-password"']);
   assert.equal(r.stdout, sb.canary);
-  assert.equal(sb.passwordFile, path.join(sb.secrets, "mini-password"));
+  assert.equal(sb.passwordFile, path.join(sb.secrets, "env/mini-password"));
 });
 
 test("a secrets entry linking out of the sandbox rejects", async (t) => {
@@ -555,7 +573,7 @@ test("real tools run through shims that log their name, argv and env (FR-36)", a
 });
 
 // Scripts reading the canary from the secrets dir, each sending it somewhere.
-const READ = 'tok=$(cat "$MINI_OP_SECRETS_DIR/mini-password"); ';
+const READ = 'tok=$(cat "$MINI_OP_SECRETS_DIR/env/mini-password"); ';
 
 test("leaks: a canary in a real tool's argv is caught (the sed variant)", async (t) => {
   const sb = await Sandbox.create(t);
@@ -567,7 +585,7 @@ test("leaks: a canary in a real tool's argv is caught (the sed variant)", async 
 test("leaks: the canary only on a consumer's stdin is clean", async (t) => {
   const sb = await Sandbox.create(t);
   sb.fake("ssh", [{ stdout: "" }]);
-  await sb.run(["zsh", "-fc", 'ssh mini cat < "$MINI_OP_SECRETS_DIR/mini-password"']);
+  await sb.run(["zsh", "-fc", 'ssh mini cat < "$MINI_OP_SECRETS_DIR/env/mini-password"']);
   assert.deepEqual(sb.leaks({ consumers: ["ssh"] }), []);
   assert.equal(sb.calls("ssh")[0]?.stdin, sb.canary);
 });

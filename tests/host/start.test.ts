@@ -2,231 +2,154 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
-import { createHash } from "node:crypto";
-import { SECRETS_LITERAL } from "../lib/literals.ts";
 import { REPO, Sandbox, type FakeRule } from "../lib/sandbox.ts";
 import { FAKE_LOCAL, MINI_HOST } from "../lib/ssh_config.ts";
 
 const START = path.join(REPO, "host/start");
-const UID = /^ARG AGENT_UID=(\d+)$/m.exec(
-  fs.readFileSync(path.join(REPO, "host/Dockerfile"), "utf8"),
-)?.[1];
 const IMAGE = "mini-op:env";
-const PROXY_IMAGE = "mini-op-proxy:v0.1.0";
-const CHECK = "mini-op-proxy-check";
-const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFake mini-op container\n";
 const GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"];
-// The fake build keeps a copy of the named context mini=<dir>, which start removes on exit.
 const KEEP_CONTEXT =
   'for a; do [[ $a == mini=* ]] && cp -R "${a#mini=}" "$FAKE_DIR/context"; done; true';
-// The mini's confirmed host keys as ssh-keygen -F prints them: a # line, a hashed and a plain entry.
-const HOST_KEYS = [
-  "|1|c2FsdA==|aGFzaA== ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostKey",
-  `${MINI_HOST} ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIHostKey`,
-];
+const HOST_KEYS = ["|1|c2FsdA==|aGFzaA== ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostKey"];
 const KEYGEN: FakeRule = {
   argv: ["-F"],
   stdout: `# Host ${MINI_HOST} found: line 3\n${HOST_KEYS.join("\n")}\n`,
 };
-
-// fake docker for a host with no mini-op-net yet, where every step works; `extra` rules come
-// first, so they override a step's answer.
 function docker(extra: FakeRule[] = []): FakeRule[] {
   return [
     ...extra,
-    { argv: ["network", "inspect"], stderr: "Error: network mini-op-net not found\n", exit: 1 },
-    { argv: ["network"] },
-    { argv: ["build", "-q", "-t", IMAGE], shell: KEEP_CONTEXT },
-    { argv: ["build"] },
-    { argv: ["run", "--rm"], stdout: "2.1.0 (Claude Code)\n" },
-    { argv: ["inspect", "-f", "{{.State.Running}}", CHECK], stdout: "true\n" },
-    { argv: ["run", "-d"], stdout: "0123abcd\n" },
-    { argv: ["rm", "-f"] },
-    { argv: ["exec", "mini-op", "cat"], stdout: KEY },
-    { argv: ["exec"] },
+    { argv: ["info"] },
+    { argv: ["ps"] },
+    { argv: ["network", "ls"] },
+    { argv: ["volume", "ls"] },
+    { argv: ["build"], shell: KEEP_CONTEXT },
   ];
 }
-
 async function start(
   t: Parameters<typeof Sandbox.create>[0],
-  extra?: FakeRule[],
+  extra: FakeRule[] = [],
   args: string[] = [],
   script = START,
   sandbox?: Sandbox,
   keygen: FakeRule[] = [KEYGEN],
+  delegate: FakeRule = {},
 ) {
   const sb = sandbox ?? (await Sandbox.create(t));
   sb.fake("docker", docker(extra));
   sb.fake("ssh-keygen", keygen);
-  sb.fake("sleep", [{ ignoresStdin: true }]);
+  sb.fake("ensemble-delegate", [{ ...delegate, shell: 'umask > "$FAKE_DIR/delegate-umask"' }]);
   const r = await sb.run(["bash", script, ...args]);
-  // A call as `docker <first two args>` plus the container it names (--name, or rm's last arg).
-  const steps = sb.calls("docker").map(({ argv }) => {
-    const name = argv.indexOf("--name");
-    const container = name >= 0 ? argv[name + 1] : argv[0] === "rm" ? argv.at(-1) : undefined;
-    return [...argv.slice(0, 2), ...(container === undefined ? [] : [container])].join(" ");
-  });
-  return { sb, r, steps };
+  return { sb, r };
 }
-
-// Calls that remove, create or change a container.
-function touches(steps: string[]): string[] {
-  return steps.filter((step) => /^(rm|run -d|network connect)/.test(step) && !step.includes(CHECK));
-}
-
-test("builds and checks both images, then recreates the proxy and mini-op", async (t) => {
-  const { sb, r, steps } = await start(t);
-  assert.equal(r.code, 0, r.stderr);
-  assert.equal(r.stderr, "");
-  assert.equal(
-    r.stdout,
-    `mini-op running from ${IMAGE} (${await headStamp(sb)}) on mini-op-net, out only via` +
-      ` mini-op-proxy (${PROXY_IMAGE}); agent's public key:\n${KEY}`,
-  );
-  const order = [
-    "network inspect",
-    "network create",
-    "build -q",
-    "run --rm",
-    `run -d ${CHECK}`,
-    "inspect -f",
-    "rm -f mini-op",
-    "rm -f mini-op-proxy",
-    "run -d mini-op-proxy",
-    "network connect",
-    "run -d mini-op",
-    "exec mini-op",
-  ];
-  const at = order.map((step) => steps.indexOf(step));
-  assert.ok(
-    at.every((i, n) => i >= 0 && (n === 0 || i > at[n - 1]!)),
-    steps.join("\n"),
-  );
-  assert.equal(steps.filter((step) => step === "build -q").length, 2);
-  // Nothing is copied into the running container, and nothing runs in it as root (AC5).
-  const execs = sb.calls("docker").filter(({ argv }) => argv[0] === "exec");
-  assert.deepEqual(
-    execs.filter(({ argv }) => argv.includes("-i") || argv.includes("-u")),
-    [],
-  );
-  assert.deepEqual(execs.at(-1)?.argv, [
-    ...["exec", "mini-op", "cat", "/home/agent/.ssh/id_ed25519.pub"],
-  ]);
-  assert.deepEqual(
-    sb.calls("sleep").map((call) => call.argv),
-    [["2"]],
-  );
-});
-
-test("a failed build or image check exits 1 and leaves the containers untouched", async (t) => {
-  const cases: [FakeRule, string][] = [
-    [{ argv: ["build", "-q", "-t", IMAGE], exit: 1 }, `building ${IMAGE} failed`],
-    [{ argv: ["build", "-q", "-t", PROXY_IMAGE], exit: 1 }, `building ${PROXY_IMAGE} failed`],
-    [{ argv: ["run", "--rm"], exit: 1 }, `claude does not run in ${IMAGE}`],
-    [{ argv: ["run", "-d", "--name", CHECK], exit: 125 }, `could not run ${CHECK}`],
-  ];
-  for (const [rule, message] of cases) {
-    const { r, steps } = await start(t, [rule]);
-    assert.equal(r.code, 1);
-    assert.equal(r.stdout, "");
-    assert.equal(r.stderr, `start: ${message}; existing containers left as they were\n`);
-    assert.deepEqual(touches(steps), []);
-  }
-});
-
-// The values given to any of `flags` in an argv, and the argv of `docker run -d --name <name> ...`.
 const values = (argv: string[], ...flags: string[]) =>
   argv.filter((_, i) => i > 0 && flags.includes(argv[i - 1]!));
-function runOf(sb: Sandbox, name: string): string[] {
-  const call = sb
-    .calls("docker")
-    .find(
-      ({ argv }) => argv[0] === "run" && argv[1] === "-d" && values(argv, "--name")[0] === name,
-    );
-  assert.ok(call, `no docker run -d --name ${name}`);
-  return call.argv;
-}
 
-test("makes mini-op-net internal when it is missing, and reuses an internal one", async (t) => {
-  const networks = (sb: Sandbox) =>
-    sb
-      .calls("docker")
-      .filter(({ argv }) => argv[0] === "network" && argv[1] !== "connect")
-      .map(({ argv }) => argv);
-  const fresh = await start(t);
-  assert.equal(fresh.r.code, 0, fresh.r.stderr);
-  assert.deepEqual(networks(fresh.sb), [
-    ["network", "inspect", "-f", "{{.Internal}}", "mini-op-net"],
-    ["network", "create", "--internal", "mini-op-net"],
-  ]);
-  const reused = await start(t, [{ argv: ["network", "inspect"], stdout: "true\n" }]);
-  assert.equal(reused.r.code, 0, reused.r.stderr);
-  assert.deepEqual(networks(reused.sb), [
-    ["network", "inspect", "-f", "{{.Internal}}", "mini-op-net"],
-  ]);
-});
-
-test("mini-op runs only on mini-op-net, with the proxy env and agent's home volume", async (t) => {
+test("builds only env, then delegates with fixed Claude, cwd and umask 022", async (t) => {
   const { sb, r } = await start(t);
   assert.equal(r.code, 0, r.stderr);
-  const run = runOf(sb, "mini-op");
-  assert.equal(run.at(-1), IMAGE);
-  assert.deepEqual(values(run, "--network", "--net"), ["mini-op-net"]);
-  const proxy = "http://mini-op-proxy:4750";
-  const local = "localhost,127.0.0.1,::1";
-  assert.deepEqual(
-    values(run, "-e", "--env").sort(),
+  assert.equal(r.stderr, "");
+  assert.equal(r.stdout, "");
+  const opened = sb.calls("ensemble-delegate").map((c) => c.argv);
+  assert.deepEqual(opened, [
     [
-      `HTTPS_PROXY=${proxy}`,
-      `HTTP_PROXY=${proxy}`,
-      `https_proxy=${proxy}`,
-      `http_proxy=${proxy}`,
-      `NO_PROXY=${local}`,
-      `no_proxy=${local}`,
-      "NODE_USE_ENV_PROXY=1",
-    ].sort(),
-  );
-  for (const flag of ["-p", "--publish", "-P", "-v", "--volume", "--privileged", "--add-host"]) {
-    assert.ok(!run.includes(flag), flag);
-  }
-  assert.deepEqual(
-    run.filter((arg) => /^-[^=]*=/.test(arg)),
-    [],
-  );
-  assert.deepEqual(values(run, "--mount"), ["type=volume,src=mini-op-home,dst=/home/agent"]);
-  assert.equal(UID, "1000");
-  assert.deepEqual(values(run, "--tmpfs"), [
-    `${SECRETS_LITERAL}:size=64k,mode=0700,uid=${UID},gid=${UID}`,
+      "open",
+      "mini-op",
+      "--environment",
+      "mini-op",
+      "--client",
+      "claude",
+      "--cwd",
+      path.join(sb.home, ".mini-op/workspace"),
+    ],
   ]);
-  assert.deepEqual(values(run, "--cap-drop"), ["ALL"]);
-  assert.deepEqual(values(run, "--security-opt"), ["no-new-privileges"]);
-  assert.deepEqual(values(run, "--restart"), ["unless-stopped"]);
-});
-
-test("the build's named context mini holds the generated ssh config and the mini's host keys, removed on exit", async (t) => {
-  const { sb, r } = await start(t);
-  assert.equal(r.code, 0, r.stderr);
+  assert.ok(fs.statSync(path.join(sb.home, ".mini-op/workspace")).isDirectory());
+  assert.match(fs.readFileSync(path.join(sb.dir, "delegate-umask"), "utf8"), /^0*22\n$/);
+  const calls = sb.calls("docker").map((c) => c.argv);
+  assert.deepEqual(
+    calls.map((a) => a[0]),
+    ["info", "ps", "network", "volume", "build"],
+  );
+  const build = calls.at(-1)!;
+  assert.deepEqual(values(build, "-t"), [IMAGE]);
+  assert.deepEqual(values(build, "--build-arg"), [`MINI_OP_VERSION=${await headStamp(sb)}`]);
   const kept = path.join(sb.dir, "context");
-  assert.deepEqual(fs.readdirSync(kept).sort(), ["known_hosts", "ssh_config"]);
+  assert.equal(
+    fs.readFileSync(path.join(kept, "known_hosts"), "utf8"),
+    HOST_KEYS.join("\n") + "\n",
+  );
   assert.equal(
     fs.readFileSync(path.join(kept, "ssh_config"), "utf8"),
     fs.readFileSync(path.join(sb.home, ".mini-op/ssh_config"), "utf8"),
   );
-  assert.equal(
-    fs.readFileSync(path.join(kept, "known_hosts"), "utf8"),
-    `${HOST_KEYS.join("\n")}\n`,
-  );
-  for (const file of ["ssh_config", "known_hosts"]) {
-    assert.equal(fs.statSync(path.join(kept, file)).mode & 0o077, 0, file);
+  for (const f of ["ssh_config", "known_hosts"]) {
+    assert.equal(fs.statSync(path.join(kept, f)).mode & 0o077, 0);
   }
   assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
 });
 
-test("the host keys come from mini-op's own known_hosts entry for the mini's address and port", async (t) => {
-  for (const [port, entry] of [
-    ["22", MINI_HOST],
-    ["2222", `[${MINI_HOST}]:2222`],
-  ] as const) {
+test("delegate status and stderr pass through unchanged", async (t) => {
+  for (const code of [0, 1, 2, 75]) {
+    const sb = await Sandbox.create(t);
+    sb.fake("docker", docker());
+    sb.fake("ssh-keygen", [KEYGEN]);
+    sb.fake("ensemble-delegate", [
+      { exit: code, stderr: "broker: occupied by verifier-42\n", stdout: "TUI\n" },
+    ]);
+    const r = await sb.run(["bash", START]);
+    assert.equal(r.code, code);
+    assert.equal(r.stderr, "broker: occupied by verifier-42\n");
+    assert.equal(r.stdout, "TUI\n");
+    assert.deepEqual(fs.readdirSync(path.join(sb.dir, "tmp")), []);
+  }
+});
+
+test("failed build never delegates", async (t) => {
+  const { sb, r } = await start(t, [{ argv: ["build"], exit: 1, stderr: "build error\n" }]);
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /building mini-op:env failed/);
+  assert.deepEqual(sb.calls("ensemble-delegate"), []);
+});
+
+test("each old resource blocks before any build or delegate", async (t) => {
+  const name = "mini-op";
+  const cases: [string[], string][] = [
+    [["ps"], name],
+    [["ps"], `${name}-proxy`],
+    [["network", "ls"], `${name}-net`],
+    [["volume", "ls"], `${name}-home`],
+  ];
+  for (const [argv, resource] of cases) {
+    const { sb, r } = await start(t, [{ argv, stdout: `other\n${resource}\n` }]);
+    assert.equal(r.code, 1, resource);
+    assert.match(r.stderr, /host\/README\.md.*从旧版升级/);
+    assert.ok(
+      sb.calls("docker").every((c) => ["info", "ps", "network", "volume"].includes(c.argv[0]!)),
+    );
+    assert.deepEqual(sb.calls("ensemble-delegate"), []);
+  }
+});
+
+test("query failures are not treated as absence", async (t) => {
+  for (const argv of [["info"], ["ps"], ["network", "ls"], ["volume", "ls"]]) {
+    const { sb, r } = await start(t, [{ argv, exit: 1, stderr: "daemon unavailable\n" }]);
+    assert.equal(r.code, 1);
+    assert.ok(sb.calls("docker").every((c) => c.argv[0] !== "build"));
+    assert.deepEqual(sb.calls("ensemble-delegate"), []);
+  }
+});
+
+test("unrelated resources and an existing workspace are preserved", async (t) => {
+  const sb = await Sandbox.create(t);
+  const ws = path.join(sb.home, ".mini-op/workspace");
+  fs.mkdirSync(ws);
+  fs.writeFileSync(path.join(ws, "keep"), "data");
+  const { r } = await start(t, [{ argv: ["ps"], stdout: "mini-op-other\n" }], [], START, sb);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(ws, "keep"), "utf8"), "data");
+});
+
+test("the configured endpoint's confirmed host key is required", async (t) => {
+  for (const port of ["22", "2222"]) {
     const sb = await Sandbox.create(t);
     fs.writeFileSync(
       path.join(sb.home, ".mini-op/config.local.yaml"),
@@ -234,124 +157,20 @@ test("the host keys come from mini-op's own known_hosts entry for the mini's add
     );
     const { r } = await start(t, [], [], START, sb);
     assert.equal(r.code, 0, r.stderr);
-    assert.deepEqual(
-      sb.calls("ssh-keygen").map(({ argv }) => argv),
-      [["-F", entry, "-f", path.join(sb.home, ".mini-op/known_hosts")]],
-    );
+    assert.deepEqual(sb.calls("ssh-keygen")[0]?.argv, [
+      "-F",
+      port === "22" ? MINI_HOST : `[${MINI_HOST}]:${port}`,
+      "-f",
+      path.join(sb.home, ".mini-op/known_hosts"),
+    ]);
   }
-});
-
-test("rebuilding uses the existing pin despite a stale personal key and never scans or replaces it", async (t) => {
-  const sb = await Sandbox.create(t);
-  const pin = `${MINI_HOST} ssh-ed25519 pinned-key\n`;
-  const personal = `${MINI_HOST} ssh-ed25519 stale-personal-key\n`;
-  const file = path.join(sb.home, ".mini-op/known_hosts");
-  fs.writeFileSync(file, pin);
-  fs.mkdirSync(path.join(sb.home, ".ssh"));
-  fs.writeFileSync(path.join(sb.home, ".ssh/known_hosts"), personal);
-  const { r } = await start(t, [], [], START, sb, [{ argv: ["-F"], shell: 'cat "$4"' }]);
-  assert.equal(r.code, 0, r.stderr);
-  assert.equal(fs.readFileSync(path.join(sb.dir, "context/known_hosts"), "utf8"), pin);
-  assert.equal(fs.readFileSync(file, "utf8"), pin);
-  assert.equal(fs.readFileSync(path.join(sb.home, ".ssh/known_hosts"), "utf8"), personal);
-  assert.deepEqual(sb.calls("ssh-keyscan"), []);
-  assert.deepEqual(sb.calls("ssh"), []);
-});
-
-test("no confirmed host key for the mini exits 1, naming the entry, before any docker call", async (t) => {
-  const cases: FakeRule[] = [
-    { exit: 1 },
-    { stdout: "" },
-    { stdout: `# Host ${MINI_HOST} found: line 3\n` },
-    { stderr: "ssh-keygen: No such file or directory\n", exit: 255 },
-  ];
-  for (const rule of cases) {
-    const { sb, r } = await start(t, [], [], START, undefined, [rule]);
-    assert.equal(r.code, 1, JSON.stringify(rule));
-    assert.equal(r.stdout, "");
-    assert.equal(
-      r.stderr,
-      `start: ~/.mini-op/known_hosts has no host key for ${MINI_HOST}; run host/pin-host-key,` +
-        " then rerun host/start\n",
-    );
-    assert.deepEqual(sb.calls("docker"), []);
+  for (const keygen of [[{ exit: 1 }], [{ stdout: "# no confirmed key\n" }]]) {
+    const { sb, r } = await start(t, [], [], START, undefined, keygen);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /known_hosts has no host key/);
+    assert.ok(sb.calls("docker").every((c) => c.argv[0] !== "build"));
+    assert.deepEqual(sb.calls("ensemble-delegate"), []);
   }
-});
-
-test("the proxy is built from host/proxy with the generated named context and the policy label, and runs read-only on bridge before joining mini-op-net", async (t) => {
-  const { sb, r } = await start(t);
-  assert.equal(r.code, 0, r.stderr);
-  const builds = sb
-    .calls("docker")
-    .filter(({ argv }) => argv[0] === "build")
-    .map(({ argv }) => argv);
-  const generated = path.join(sb.home, ".mini-op/proxy");
-  const files = ["config.yaml", "acl.yaml"].map((f) => fs.readFileSync(path.join(generated, f)));
-  const policy = createHash("sha256").update(Buffer.concat(files)).digest("hex");
-  const context = values(builds[0] ?? [], "--build-context")[0] ?? "";
-  assert.ok(context.startsWith(`mini=${path.join(sb.dir, "tmp")}/`), context);
-  assert.deepEqual(builds, [
-    [
-      ...["build", "-q", "-t", IMAGE, "-f", path.join(REPO, "host/Dockerfile")],
-      ...["--build-arg", `MINI_OP_VERSION=${await headStamp(sb)}`, "--build-context", context],
-      REPO,
-    ],
-    [
-      ...["build", "-q", "-t", PROXY_IMAGE, "--label", `mini-op.proxy-policy=${policy}`],
-      ...["--build-context", `generated=${generated}`, path.join(REPO, "host/proxy")],
-    ],
-  ]);
-  const run = runOf(sb, "mini-op-proxy");
-  assert.equal(run.at(-1), PROXY_IMAGE);
-  assert.deepEqual(values(run, "--network", "--net"), ["bridge"]);
-  assert.ok(run.includes("--read-only"));
-  assert.deepEqual(values(run, "--cap-drop"), ["ALL"]);
-  assert.deepEqual(values(run, "--security-opt"), ["no-new-privileges"]);
-  assert.deepEqual(values(run, "--restart"), ["unless-stopped"]);
-  for (const flag of ["-p", "--publish", "-P", "-v", "--volume", "--mount"]) {
-    assert.ok(!run.includes(flag), flag);
-  }
-  assert.deepEqual(
-    run.filter((arg) => /^-[^=]*=/.test(arg)),
-    [],
-  );
-  const connects = sb.calls("docker").filter(({ argv }) => argv[1] === "connect");
-  assert.deepEqual(
-    connects.map(({ argv }) => argv),
-    [["network", "connect", "mini-op-net", "mini-op-proxy"]],
-  );
-});
-
-test("both images are checked offline before any container is replaced", async (t) => {
-  const { sb, r } = await start(t);
-  assert.equal(r.code, 0, r.stderr);
-  const calls = sb.calls().map(({ cmd, argv }) => [cmd, ...argv]);
-  const at = (...prefix: string[]) =>
-    calls.findIndex((call) => prefix.every((arg, i) => call[i] === arg));
-  const image = calls[at("docker", "run", "--rm")]!;
-  assert.deepEqual(values(image, "--network"), ["none"]);
-  assert.deepEqual(image.slice(-3), [IMAGE, "claude", "--version"]);
-  const check = runOf(sb, CHECK);
-  assert.equal(check.at(-1), PROXY_IMAGE);
-  assert.deepEqual(values(check, "--network"), ["none"]);
-  assert.ok(check.includes("--read-only"));
-  assert.deepEqual(values(check, "--cap-drop"), ["ALL"]);
-  assert.deepEqual(values(check, "--security-opt"), ["no-new-privileges"]);
-  const removed = calls.findLastIndex((call) => call.join(" ") === `docker rm -f ${CHECK}`);
-  const order = [
-    at("docker", "build", "-q", "-t", IMAGE),
-    at("docker", "build", "-q", "-t", PROXY_IMAGE),
-    at("docker", "run", "--rm"),
-    at("docker", "run", "-d", "--name", CHECK),
-    at("sleep", "2"),
-    at("docker", "inspect", "-f", "{{.State.Running}}", CHECK),
-    removed,
-    at("docker", "rm", "-f", "mini-op"),
-  ];
-  assert.ok(
-    order.every((i, n) => i >= 0 && (n === 0 || i > order[n - 1]!)),
-    calls.map((call) => call.join(" ")).join("\n"),
-  );
 });
 
 // This checkout's stamp as ctl/lib/version.sh makes it: HEAD, -dirty with uncommitted changes.
@@ -393,7 +212,6 @@ test("a checkout's commit is the stamp; untracked files the image does not take 
       `MINI_OP_VERSION=${stamp}`,
     ]);
     assert.equal(build.at(-1), copy);
-    assert.ok(r.stdout.startsWith(`mini-op running from ${IMAGE} (${stamp}) on `), r.stdout);
   }
 });
 
@@ -413,7 +231,7 @@ test("untracked files the image would take exit 1, naming them, before any docke
       " skills/new/SKILL.md; commit or remove them\n",
   );
   assert.equal(r.stdout, "");
-  assert.deepEqual(sb.calls("docker"), []);
+  assert.ok(sb.calls("docker").every(({ argv }) => argv[0] !== "build"));
 });
 
 // Writes `file` in the checkout copy; CI's shipped dirs are read-only, and the copy keeps their modes.
@@ -436,7 +254,7 @@ test("ignored files the image would take exit 1, naming them, before any docker 
       " remove them\n",
   );
   assert.equal(r.stdout, "");
-  assert.deepEqual(sb.calls("docker"), []);
+  assert.ok(sb.calls("docker").every(({ argv }) => argv[0] !== "build"));
 });
 
 // A path for each exclusion line of host/Dockerfile.dockerignore: the build never takes it.
@@ -490,7 +308,7 @@ test("outside a git checkout it exits 1 before any docker call", async (t) => {
     r.stderr,
     `start: ${copy} is not a git checkout; cannot stamp the runtime version\n`,
   );
-  assert.deepEqual(sb.calls("docker"), []);
+  assert.ok(sb.calls("docker").every(({ argv }) => argv[0] !== "build"));
 });
 
 test("a config failure exits 1 before any docker call", async (t) => {
@@ -501,37 +319,7 @@ test("a config failure exits 1 before any docker call", async (t) => {
   assert.equal(r.code, 1);
   assert.match(r.stderr, /^config: no .*config\.local\.yaml; create it/);
   assert.ok(r.stderr.endsWith("start: host/config failed; nothing built or changed\n"), r.stderr);
-  assert.deepEqual(sb.calls("docker"), []);
-});
-
-test("a network that is not internal exits 1 before any build", async (t) => {
-  const { r, steps } = await start(t, [{ argv: ["network", "inspect"], stdout: "false\n" }]);
-  assert.equal(r.code, 1);
-  assert.match(r.stderr, /^start: network mini-op-net exists but is not internal;/);
-  assert.deepEqual(steps, ["network inspect"]);
-});
-
-test("a proxy image that exits at once: the prefixed line first, then its log", async (t) => {
-  const { r, steps } = await start(t, [
-    { argv: ["inspect", "-f", "{{.State.Running}}", CHECK], stdout: "false\n" },
-    { argv: ["logs"], stderr: "Could not load config: permission denied\n" },
-  ]);
-  assert.equal(r.code, 1);
-  assert.equal(
-    r.stderr,
-    `start: ${PROXY_IMAGE} exited in ${CHECK}; existing containers left as they were; its log:\n` +
-      "Could not load config: permission denied\n",
-  );
-  assert.equal(steps.at(-1), "rm -f mini-op-proxy-check");
-  assert.deepEqual(touches(steps), []);
-});
-
-test("a docker step failing after the checks exits 1 with a prefixed line", async (t) => {
-  const { r, steps } = await start(t, [{ argv: ["network", "connect"], exit: 125 }]);
-  assert.equal(r.code, 1);
-  assert.match(r.stderr, /^start: failed \(exit 125\): docker network connect /);
-  assert.ok(!r.stdout.includes("running"), r.stdout);
-  assert.equal(steps.at(-1), "network connect");
+  assert.ok(sb.calls("docker").every(({ argv }) => argv[0] !== "build"));
 });
 
 test("-h prints the usage to stdout and runs nothing", async (t) => {

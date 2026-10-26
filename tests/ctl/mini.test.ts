@@ -297,7 +297,7 @@ const HANGS = "kill -ALRM $PPID";
 // runs the command after --.
 const SUDO = [
   { argv: ["-k"], ignoresStdin: true },
-  { argv: ["-S"], shell: `[[ $(cat) == "$(<$FAKE_DIR/secrets/mini-password)" ]]` },
+  { argv: ["-S"], shell: `[[ $(cat) == "$(<$FAKE_DIR/secrets/env/mini-password)" ]]` },
   { argv: ["-n"], shell: 'shift; [[ $1 == -- ]] && shift; "$@"' },
 ];
 
@@ -495,7 +495,7 @@ test("pw and sudo without the password file exit 1 and call no ssh", async (t) =
     const sub = args[0];
     assert.equal(
       r.stderr,
-      `mini: ${sub}: no mini password in ${envPassword(sb)} or ${sb.passwordFile}; the user writes it (host/README.md, Steps 4); ${nothing}\n`,
+      `mini: ${sub}: ${envPassword(sb)} is missing, empty or unreadable; import with ensemble-broker login env mini-op-password (host/README.md, Environment definition); ${nothing}\n`,
     );
     assert.deepEqual(sb.calls(), []);
   }
@@ -504,7 +504,8 @@ test("pw and sudo without the password file exit 1 and call no ssh", async (t) =
 const envPassword = (sb: Sandbox) => path.join(sb.secrets, "env/mini-password");
 
 function writeEnvPassword(sb: Sandbox, text: string): void {
-  fs.mkdirSync(path.join(sb.secrets, "env"));
+  fs.mkdirSync(path.join(sb.secrets, "env"), { recursive: true });
+  fs.rmSync(envPassword(sb), { force: true });
   fs.writeFileSync(envPassword(sb), text, { mode: 0o400 });
 }
 
@@ -534,7 +535,7 @@ test("pw and sudo with an empty environment mini-password exit 1 and call no ssh
     assert.equal(r.stdout, "");
     assert.equal(
       r.stderr,
-      `mini: ${args[0]}: ${envPassword(sb)} is empty or unreadable; ${nothing}\n`,
+      `mini: ${args[0]}: ${envPassword(sb)} is missing, empty or unreadable; import with ensemble-broker login env mini-op-password (host/README.md, Environment definition); ${nothing}\n`,
     );
     assert.deepEqual(sb.calls(), []);
   }
@@ -706,7 +707,7 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
   assert.ok(r.stdout.includes("mini sudo -v"));
   const env = r.stdout.indexOf("$(env_secrets_dir)/mini-password");
   assert.ok(env >= 0);
-  assert.ok(r.stdout.indexOf("$(secrets_dir)/mini-password") > env);
+  assert.ok(!r.stdout.includes("$(secrets_dir)/mini-password"));
   assert.doesNotMatch(r.stdout, /<account>/);
   assert.deepEqual(sb.calls(), []);
 });

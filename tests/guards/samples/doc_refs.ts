@@ -12,7 +12,7 @@ const files = {
   "mini/bin/termwait": "#!/bin/zsh\n",
   "mini/bin/lq": "#!/bin/zsh\n",
   "host/README.md": "Edit `proxy/acl.yaml`, then `../README.md`.\n",
-  "host/proxy/acl.yaml": "x: 1\n",
+  "host/extra/acl.yaml": "x: 1\n",
   "skills/mini-op/SKILL.md": "{}\n",
   "runbooks/setup.md": "Run `ssh mini '~/apm/bin/lq body'` (`../status.md`).\n",
   "status.md": [

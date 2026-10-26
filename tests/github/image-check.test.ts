@@ -17,7 +17,6 @@ const LABELS = [
   "-f",
   "{{range $k, $v := .Config.Labels}}{{println $k}}{{end}}",
 ];
-const HOME_FILES = ["-name", "mini", "-o", "-name", "ctl", "-o", "-name", ".claude-plugin"];
 // The PATH the ensemble layer sets (its Dockerfile), built from parts.
 const ENSEMBLE_PATH = [
   "/opt/ensemble/bin",
@@ -80,8 +79,6 @@ for (const file of [
   "host/README.md",
   "host/config",
   "host/config.yaml",
-  "host/proxy/acl.yaml",
-  "host/proxy/Dockerfile",
   "host/start",
   "host/verify-egress",
 ]) {
@@ -279,6 +276,8 @@ function smokeRules(stamp: string): FakeRule[] {
     { argv: [...IN, "sh", "-c", "! command -v python3"] },
     { argv: [...IN, "id"], stdout: "uid=1000(agent) gid=1000(agent) groups=1000(agent)\n" },
     { argv: [...IN, "npm", "--version"], stdout: "10.9.9\n" },
+    ...["git", "apt-get", "dpkg"].map((tool) => ({ argv: [...IN, tool, "--version"] })),
+    { argv: [...IN, "tmux", "-V"] },
     { argv: [...IN, "node", "--version"], stdout: "v20.19.2\n" },
     {
       argv: [...IN, "cat", `${RUNTIME_ROOT}/mini/VERSION`],
@@ -286,7 +285,7 @@ function smokeRules(stamp: string): FakeRule[] {
     },
     { argv: [...IN, "test", "-r", "/etc/claude-code/.claude/skills/mini-op/SKILL.md"] },
     { argv: [...LABELS, TAG], stdout: "mini-op.version\n\n" },
-    { argv: [...IN, "find", "/home/agent", ...HOME_FILES, "-o", "-name", "plugin.json"] },
+    { argv: [...IN, "find", "/home/agent", "-mindepth", "1"] },
     { argv: [...MINI_H, TAG, `${RUNTIME_ROOT}/ctl/mini`, "-h"], stdout: "mini <command>\n" },
     { argv: [...IN, "ssh", "-V"], stderr: "OpenSSH_10.0\n" },
     { argv: [...IN, "zsh", "--version"] },
@@ -315,10 +314,14 @@ test("smoke: an image meeting every check passes, each row from a container with
     "user agent, non-root (uid 1000)",
     "npm --version",
     "node --version",
+    "git --version",
+    "apt-get --version",
+    "dpkg --version",
+    "tmux -V",
     `mini/VERSION ${stamp}`,
     "standalone mini-op skill readable",
     "no windroc./ensemble. label",
-    "/home/agent has no plugin files",
+    "/home/agent is empty",
     "ctl/mini -h, ensemble PATH, cwd /tmp",
     "ssh -V",
     "zsh --version",
@@ -350,6 +353,7 @@ for (const [label, rule, row] of [
   ],
   ["root", { argv: [...IN, "id"], stdout: "uid=0(root) gid=0(root)\n" }, "user agent"],
   ["another user", { argv: [...IN, "id"], stdout: "uid=1000(op) gid=1000(op)\n" }, "user agent"],
+  ["home skeleton", { argv: [...IN, "find"], stdout: "/home/agent/.profile\n" }, "/home/agent"],
   ["no npm", { argv: [...IN, "npm", "--version"], exit: 127 }, "npm --version"],
   ["no node", { argv: [...IN, "node", "--version"], exit: 127 }, "node --version"],
   ["another version", { argv: [...IN, "cat"], stdout: "0123\n" }, "mini/VERSION"],

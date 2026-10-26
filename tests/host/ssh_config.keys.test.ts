@@ -22,31 +22,42 @@ function blocks(text: string): { match: string; settings: string[] }[] {
   return found;
 }
 
-test("the environment's key when it is readable, else the volume's, never both", () => {
-  const [env, volume] = blocks(KEYS);
-  const exec = `exec "test -r ${ENV_KEY}"`;
-  assert.deepEqual(env, {
-    match: `Match originalhost mini ${exec}`,
-    settings: [`IdentityFile ${ENV_KEY}`],
-  });
-  assert.deepEqual(volume, {
-    match: `Match originalhost mini !${exec}`,
-    settings: ["IdentityFile ~/.ssh/id_ed25519"],
-  });
-});
-
-test("ssh trusts only the baked host key and never adds or asks about one", () => {
-  const [, , common, ...more] = blocks(KEYS);
+test("ssh uses only the injected key and the baked host key", () => {
+  const [, common, ...more] = blocks(KEYS);
   assert.deepEqual(more, []);
   assert.deepEqual(common, {
     match: "Match originalhost mini",
     settings: [
+      `IdentityFile ${ENV_KEY}`,
       "IdentitiesOnly yes",
       "StrictHostKeyChecking yes",
       "UserKnownHostsFile /dev/null",
       "GlobalKnownHostsFile /etc/ssh/mini_known_hosts",
     ],
   });
+});
+
+test("missing injected key fails before connecting and names the file and import command", async (t) => {
+  const missing = blocks(KEYS)[0]!;
+  const condition = /^Match originalhost mini !exec "(.+)"$/.exec(missing.match)?.[1];
+  assert.ok(condition, "missing-key Match must run a readability check");
+  const sb = await Sandbox.create(t);
+  // env executes the fake test from PATH; no real secret path is examined.
+  sb.fake("test", [{ argv: ["-r", ENV_KEY], exit: 1 }]);
+  sb.fake("nc", [{}]);
+  const check = await sb.run(["sh", "-c", condition]);
+  assert.equal(check.code, 1);
+  const command = missing.settings[0]?.replace(/^ProxyCommand /, "");
+  assert.ok(command);
+  const refused = await sb.run(["sh", "-c", command]);
+  assert.equal(refused.code, 1);
+  assert.equal(refused.stdout, "");
+  assert.ok(refused.stderr.includes(ENV_KEY));
+  assert.match(refused.stderr, /ensemble-broker login env mini-op-ssh-key/);
+  assert.deepEqual(sb.calls("nc"), []);
+  sb.fake("test", [{ argv: ["-r", ENV_KEY] }]);
+  const readable = await sb.run(["sh", "-c", condition]);
+  assert.equal(readable.code, 0);
 });
 
 test("the image reads it before mini.conf, and the env stage bakes the host keys it names", () => {
