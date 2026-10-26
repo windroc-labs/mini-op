@@ -148,6 +148,13 @@ test("README lists the plugin's marketplace and requirements, and the runbook lo
     !scripts.includes("<workspace>/projects/"),
     "the snapshot rules live in ctl/runbook -h",
   );
+  const deploy = readme.split("\n").find((line) => line.startsWith("| `ctl/runbook deploy ")) ?? "";
+  assert.ok(deploy.includes("details: `ctl/runbook -h`"), "README's deploy row points nowhere");
+  assert.ok(!deploy.includes("~/mini-op-projects"), "deploy's behaviour lives in ctl/runbook -h");
+  assert.ok(
+    !readme.includes("convention, not a sandbox"),
+    "the warning's homes are SKILL.md and host/README.md",
+  );
 });
 
 // FR-213, FR-214: the toolset is synced, then a project runbook's scripts go to the mini, then it runs.
