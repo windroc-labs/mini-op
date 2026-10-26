@@ -23,16 +23,7 @@ const ENSEMBLE_PATH = [
   "/home/agent/.npm-global/bin",
   ...["usr/local/bin", "usr/bin", "bin"].map((dir) => "/" + dir),
 ].join(":");
-const MINI_H = [
-  "run",
-  "--rm",
-  "--network",
-  "none",
-  "-e",
-  `PATH=${ENSEMBLE_PATH}`,
-  "-w",
-  "/tmp",
-];
+const MINI_H = ["run", "--rm", "--network", "none", "-e", `PATH=${ENSEMBLE_PATH}`, "-w", "/tmp"];
 const GIT_ENV = {
   GIT_AUTHOR_NAME: "t",
   GIT_AUTHOR_EMAIL: "t@example.com",
