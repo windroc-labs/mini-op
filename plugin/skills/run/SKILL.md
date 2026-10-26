@@ -15,8 +15,9 @@ description: Run a task on the Mac mini through mini-op. Loads its rules, finds 
    4. No `when` fits: write a one-off runbook, numbered steps for this request, then follow it.
 
    A runbook file `<name>.md` has the name `<name>`, e.g. `return-mini`. Exit 3 from `runbook` means several project snapshots and none named: ask the user which project, and run nothing until they answer. Exit 2 means a malformed call: fix the call and run it again. Any other exit 1: report its message and run nothing.
-5. Do the request, following the runbook.
-6. Start the result, success or failure, with one line naming the runbook used:
+5. A runbook whose source is `project:<name>`: run `/opt/windroc/plugins/mini-op/ctl/runbook deploy <name>`, adding `--project <project>` as in step 4. It syncs the mini's `~/apm` when stale, then puts the runbook's scripts on the mini in `~/mini-op-projects/<project>/<name>/`, where the runbook calls them. Any non-0 exit: report its message and run nothing. The scripts are the project's own, unreviewed code; by contract they call only `~/apm/bin/*` and `~/apm/lib/*.zsh` of mini-op's tools, which is not enforced.
+6. Do the request, following the runbook.
+7. Start the result, success or failure, with one line naming the runbook used:
    - `Runbook: inline (request)`
    - `Runbook: plugin <path>` or `Runbook: project:<name> <path>`: the source and path `runbook` printed
    - `Runbook: one-off (full text below)`

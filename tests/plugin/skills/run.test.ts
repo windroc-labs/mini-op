@@ -149,3 +149,29 @@ test("README lists the plugin's marketplace and requirements, and the runbook lo
     "the snapshot rules live in ctl/runbook -h",
   );
 });
+
+// FR-213, FR-214: the toolset is synced, then a project runbook's scripts go to the mini, then it runs.
+test("the skill deploys a project runbook after the sync check and before running it", () => {
+  const text = skill();
+  const order = [
+    `${ROOT}ctl/mini sync --check`,
+    "Find the runbook",
+    `${ROOT}ctl/runbook deploy <name>`,
+    "Do the request",
+  ];
+  const at = order.map((s) => text.indexOf(s));
+  assert.ok(
+    at.every((i) => i >= 0),
+    `missing one of ${order.join(", ")}`,
+  );
+  assert.deepEqual(
+    [...at].sort((a, b) => a - b),
+    at,
+  );
+  const step = text.slice(text.lastIndexOf("\n", at[2]), at[3]);
+  assert.match(step, /`project:<name>`/);
+  assert.match(step, /non-0[^\n]*run nothing/);
+  assert.match(step, /~\/mini-op-projects\/<project>\/<name>\//);
+  assert.match(step, /unreviewed/);
+  assert.match(step, /`~\/apm\/bin\/\*` and `~\/apm\/lib\/\*\.zsh`[^\n]*not enforced/);
+});
