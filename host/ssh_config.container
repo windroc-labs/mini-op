@@ -1,3 +1,3 @@
-# mini-op has no direct way out: reach the mini's ssh through mini-op-proxy (HTTP CONNECT).
+# The broker supplies the HTTP CONNECT endpoint at runtime.
 Host mini
-    ProxyCommand nc -X connect -x mini-op-proxy:4750 %h %p
+    ProxyCommand sh -c 'proxy=${HTTPS_PROXY:?HTTPS_PROXY is required}; proxy=${proxy#http://}; exec nc -X connect -x "$proxy" "$1" "$2"' proxy %h %p

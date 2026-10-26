@@ -22,31 +22,17 @@ function blocks(text: string): { match: string; settings: string[] }[] {
   return found;
 }
 
-test("the environment's key when it is readable, else the volume's, never both", () => {
-  const [env, volume] = blocks(KEYS);
-  const exec = `exec "test -r ${ENV_KEY}"`;
-  assert.deepEqual(env, {
-    match: `Match originalhost mini ${exec}`,
-    settings: [`IdentityFile ${ENV_KEY}`],
-  });
-  assert.deepEqual(volume, {
-    match: `Match originalhost mini !${exec}`,
-    settings: ["IdentityFile ~/.ssh/id_ed25519"],
-  });
-});
-
-test("ssh trusts only the baked host key and never adds or asks about one", () => {
-  const [, , common, ...more] = blocks(KEYS);
-  assert.deepEqual(more, []);
-  assert.deepEqual(common, {
+test("ssh uses only the injected key and the baked host key", () => {
+  assert.deepEqual(blocks(KEYS), [{
     match: "Match originalhost mini",
     settings: [
+      `IdentityFile ${ENV_KEY}`,
       "IdentitiesOnly yes",
       "StrictHostKeyChecking yes",
       "UserKnownHostsFile /dev/null",
       "GlobalKnownHostsFile /etc/ssh/mini_known_hosts",
     ],
-  });
+  }]);
 });
 
 test("the image reads it before mini.conf, and the env stage bakes the host keys it names", () => {

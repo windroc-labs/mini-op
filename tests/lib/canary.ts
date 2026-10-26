@@ -50,18 +50,13 @@ function sshGotCanary(sb: Sandbox, r: RunResult): void {
   for (const call of sb.calls("ssh")) assert.equal(call.stdin, sb.canary);
 }
 
-// ctl/ scripts send the mini account's password from the secrets dir, or with env from its env/
-// dir, to ssh's stdin.
+// ctl/ scripts send only the injected password to ssh stdin.
 type CtlRow = { script: string; title: string; args: string[]; env?: boolean };
-const ctl = ({ script, title, args, env }: CtlRow): Scenario => ({
+const ctl = ({ script, title, args }: CtlRow): Scenario => ({
   script,
   title,
   args: () => args,
   setup(sb) {
-    if (env) {
-      fs.mkdirSync(path.join(sb.secrets, "env"));
-      fs.renameSync(sb.passwordFile, path.join(sb.secrets, "env/mini-password"));
-    }
     sb.fake("ssh", [{ stdout: "ok\n" }]);
   },
   consumers: ["ssh"],

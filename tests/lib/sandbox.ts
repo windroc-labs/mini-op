@@ -38,6 +38,7 @@ export const FORBIDDEN = [
   "osascript",
   "security",
   "docker",
+  "ensemble-delegate",
   "curl",
   "pbpaste",
   "pbcopy",
@@ -205,7 +206,7 @@ export class Sandbox {
     this.dir = dir;
     this.home = path.join(dir, "home");
     this.secrets = path.join(dir, "secrets");
-    this.passwordFile = path.join(this.secrets, "mini-password");
+    this.passwordFile = path.join(this.secrets, "env/mini-password");
     this.bin = path.join(dir, "bin");
     this.path = `${this.bin}:${path.join(dir, "allow")}`;
     this.canary = `canary-${randomBytes(8).toString("hex")}`;
@@ -226,6 +227,7 @@ export class Sandbox {
     for (const sub of ["bin", "allow", "real", "home", "tmp", "secrets", "fakes"]) {
       fs.mkdirSync(path.join(sb.dir, sub));
     }
+    fs.mkdirSync(path.dirname(sb.passwordFile), { recursive: true });
     fs.writeFileSync(sb.passwordFile, sb.canary, { mode: 0o400 });
     // The user's local config with the fake values, and the ssh config host/config generates
     // from it (tests that need them missing or different rewrite them).

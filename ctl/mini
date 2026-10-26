@@ -17,8 +17,8 @@ mini chord <mods> <key code>  in the mini's front Terminal hold the modifiers (c
                               option,shift), press and release the key, release the modifiers last
 mini sync [--check]           copy mini/ with its VERSION stamp to the mini's ~/apm, keeping
                               ~/apm/state/; --check exits 1 unless the mini's ~/apm/VERSION matches
-pw and sudo send the mini account's password from \$(env_secrets_dir)/mini-password when it
-exists, else \$(secrets_dir)/mini-password, to ssh's stdin only. Exits 0, 1 (refused or failed), 2
+pw and sudo send the mini account's password from \$(env_secrets_dir)/mini-password
+to ssh's stdin only. Exits 0, 1 (refused or failed), 2
 (usage error), 75 (run: look now, command not finished) or 124 (a wait timed out).
 Interactive installs use at most 30 s per wait. exec returns the captured original status.
 mini exec exits 255 on SSH failure; command completion is unknown."

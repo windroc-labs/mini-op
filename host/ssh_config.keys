@@ -1,9 +1,6 @@
-# ssh to the mini: the environment's key if given, else the volume's; only the baked host key.
-Match originalhost mini exec "test -r /run/ensemble/secrets/env/mini-ssh-key"
-    IdentityFile /run/ensemble/secrets/env/mini-ssh-key
-Match originalhost mini !exec "test -r /run/ensemble/secrets/env/mini-ssh-key"
-    IdentityFile ~/.ssh/id_ed25519
+# Only the broker-injected identity and the confirmed, baked host key.
 Match originalhost mini
+    IdentityFile /run/ensemble/secrets/env/mini-ssh-key
     IdentitiesOnly yes
     StrictHostKeyChecking yes
     UserKnownHostsFile /dev/null

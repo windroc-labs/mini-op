@@ -236,7 +236,7 @@ test("with no password file it exits 1 and never calls ssh", async (t) => {
   assert.equal(r.stdout, "");
   assert.equal(
     r.stderr,
-    `mini-autologin: no mini password in ${envPassword(sb)} or ${sb.passwordFile}; the user writes it (host/README.md, Steps 4); changed nothing\n`,
+    `mini-autologin: ${envPassword(sb)} is missing, empty or unreadable; import with ensemble-broker login env mini-op-password (host/README.md, Environment definition); changed nothing\n`,
   );
   assert.deepEqual(sb.calls("ssh"), []);
 });
@@ -244,11 +244,12 @@ test("with no password file it exits 1 and never calls ssh", async (t) => {
 const envPassword = (sb: Sandbox) => path.join(sb.secrets, "env/mini-password");
 
 function writeEnvPassword(sb: Sandbox, text: string): void {
-  fs.mkdirSync(path.join(sb.secrets, "env"));
+  fs.mkdirSync(path.join(sb.secrets, "env"), { recursive: true });
+  fs.rmSync(envPassword(sb), { force: true });
   fs.writeFileSync(envPassword(sb), text, { mode: 0o400 });
 }
 
-test("the environment's mini-password comes before the secrets dir's", async (t) => {
+test("uses only the environment mini-password", async (t) => {
   const sb = await mini(t);
   writeEnvPassword(sb, "from-env");
   const r = await sb.run(["zsh", SCRIPT]);
@@ -266,7 +267,7 @@ test("an empty environment mini-password exits 1 and never calls ssh", async (t)
   assert.equal(r.stdout, "");
   assert.equal(
     r.stderr,
-    `mini-autologin: ${envPassword(sb)} is empty or unreadable; changed nothing\n`,
+    `mini-autologin: ${envPassword(sb)} is missing, empty or unreadable; import with ensemble-broker login env mini-op-password (host/README.md, Environment definition); changed nothing\n`,
   );
   assert.deepEqual(sb.calls(), []);
 });
@@ -312,7 +313,6 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
     "only at the login window",
     "300 s",
     "$(env_secrets_dir)/mini-password",
-    "$(secrets_dir)/mini-password",
     "sudo -S",
     "perl",
     "124",

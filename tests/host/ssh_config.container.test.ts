@@ -55,15 +55,24 @@ test("the generated ssh_config alone names the mini directly, for the MacBook", 
   assert.deepEqual(hostMini(config), { hostName: MINI_HOST, user: MINI_USER });
 });
 
-test("with ssh_config.container the same host goes through mini-op-proxy", async (t) => {
+test("the proxy hop reads HTTPS_PROXY at runtime and passes data as arguments", async (t) => {
   const mini = resolve([await generated(t), CONTAINER], "mini");
-  assert.equal(mini.get("hostname"), MINI_HOST);
-  assert.equal(mini.get("user"), MINI_USER);
-  assert.equal(mini.get("proxycommand"), "nc -X connect -x mini-op-proxy:4750 %h %p");
-  assert.ok(
-    !/hostname|user/i.test(CONTAINER.replace(/^#.*$/gm, "")),
-    "the container file holds no address",
-  );
+  const proxy = mini.get("proxycommand") ?? "";
+  assert.ok(proxy.includes("HTTPS_PROXY"));
+  const sb = await Sandbox.create(t);
+  sb.fake("nc", [{}]);
+  // SSH substitutes only the endpoint tokens; the shell expands the proxy when the hop runs.
+  const command = proxy.replaceAll("%h", MINI_HOST).replaceAll("%p", "22");
+  for (const endpoint of ["gateway.example:3128", "other.example:8080"]) {
+    const r = await sb.run(["sh", "-c", command], { env: { HTTPS_PROXY: `http://${endpoint}` } });
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(sb.calls("nc").at(-1)?.argv, ["-X", "connect", "-x", endpoint, MINI_HOST, "22"]);
+  }
+  const before = sb.calls("nc").length;
+  const missing = await sb.run(["sh", "-c", command]);
+  assert.notEqual(missing.code, 0);
+  assert.match(missing.stderr, /HTTPS_PROXY/);
+  assert.equal(sb.calls("nc").length, before);
   assert.deepEqual(resolve([CONTAINER], "other"), new Map());
 });
 
