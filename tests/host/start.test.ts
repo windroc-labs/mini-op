@@ -49,7 +49,8 @@ test("builds only env, then delegates with fixed Claude, cwd and umask 022", asy
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stderr, "");
   assert.equal(r.stdout, "");
-  assert.deepEqual(sb.calls("ensemble-delegate").map((c) => c.argv), [
+  const opened = sb.calls("ensemble-delegate").map((c) => c.argv);
+  assert.deepEqual(opened, [
     [
       "open",
       "mini-op",
@@ -64,7 +65,10 @@ test("builds only env, then delegates with fixed Claude, cwd and umask 022", asy
   assert.ok(fs.statSync(path.join(sb.home, ".mini-op/workspace")).isDirectory());
   assert.match(fs.readFileSync(path.join(sb.dir, "delegate-umask"), "utf8"), /^0*22\n$/);
   const calls = sb.calls("docker").map((c) => c.argv);
-  assert.deepEqual(calls.map((a) => a[0]), ["info", "ps", "network", "volume", "build"]);
+  assert.deepEqual(
+    calls.map((a) => a[0]),
+    ["info", "ps", "network", "volume", "build"],
+  );
   const build = calls.at(-1)!;
   assert.deepEqual(values(build, "-t"), [IMAGE]);
   assert.deepEqual(values(build, "--build-arg"), [`MINI_OP_VERSION=${await headStamp(sb)}`]);

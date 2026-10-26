@@ -53,7 +53,10 @@ test("only the direct owner is selected and only two end-to-end rows run", async
   assert.equal(rows.length, 2);
   assert.match(rows[0]!, /^claude -p answers\s+\| PASS$/);
   assert.match(rows[1]!, /^ssh mini echo ok\s+\| PASS$/);
-  assert.deepEqual(sb.calls("docker").map((c) => c.argv), [PS, CLAUDE, SSH]);
+  assert.deepEqual(
+    sb.calls("docker").map((c) => c.argv),
+    [PS, CLAUDE, SSH],
+  );
   assert.ok(sb.calls("docker").every((c) => c.stdin === ""));
 });
 
@@ -62,7 +65,10 @@ test("no direct container, including a verifier-only host, never execs", async (
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
   assert.match(r.stderr, /host\/start/);
-  assert.deepEqual(sb.calls("docker").map((c) => c.argv), [PS]);
+  assert.deepEqual(
+    sb.calls("docker").map((c) => c.argv),
+    [PS],
+  );
   assert.ok(PS.includes("label=windroc.lock.owner=mini-op"));
 });
 
@@ -72,7 +78,10 @@ test("multiple matching containers or a failed query never exec", async (t) => {
     assert.equal(r.code, 1);
     assert.equal(r.stdout, "");
     assert.match(r.stderr, /host\/start/);
-    assert.deepEqual(sb.calls("docker").map((c) => c.argv), [PS]);
+    assert.deepEqual(
+      sb.calls("docker").map((c) => c.argv),
+      [PS],
+    );
   }
 });
 

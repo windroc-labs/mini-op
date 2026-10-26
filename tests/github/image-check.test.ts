@@ -23,7 +23,17 @@ const ENSEMBLE_PATH = [
   "/home/agent/.npm-global/bin",
   ...["usr/local/bin", "usr/bin", "bin"].map((dir) => "/" + dir),
 ].join(":");
-const MINI_H = ["container", "run", "--rm", "--network", "none", "-e", `PATH=${ENSEMBLE_PATH}`, "-w", "/tmp"];
+const MINI_H = [
+  "container",
+  "run",
+  "--rm",
+  "--network",
+  "none",
+  "-e",
+  `PATH=${ENSEMBLE_PATH}`,
+  "-w",
+  "/tmp",
+];
 const GIT_ENV = {
   GIT_AUTHOR_NAME: "t",
   GIT_AUTHOR_EMAIL: "t@example.com",
@@ -339,7 +349,8 @@ test("smoke: an image meeting every check passes, each row from a container with
   assert.ok(calls.every((call) => call.matched !== null));
   for (const call of calls) {
     assert.ok(
-      call.argv[0] === "image" || call.argv.slice(0, 4).join(" ") === "run --rm --network none",
+      call.argv[0] === "image" ||
+        call.argv.slice(0, 5).join(" ") === "container run --rm --network none",
     );
   }
 });

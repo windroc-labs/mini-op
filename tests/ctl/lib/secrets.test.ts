@@ -6,7 +6,8 @@ import { REPO, Sandbox } from "../../lib/sandbox.ts";
 
 const RESOLVER = path.join(REPO, "ctl/lib/secrets.zsh");
 const ENV_DIR = "/run/ensemble/" + "secrets/env";
-const IMPORT = "import with ensemble-broker login env mini-op-password (host/README.md, Environment definition)";
+const IMPORT =
+  "import with ensemble-broker login env mini-op-password (host/README.md, Environment definition)";
 
 test("env_secrets_dir is the environment's dir, or env/ under the override", async (t) => {
   const sb = await Sandbox.create(t);
@@ -49,7 +50,10 @@ test("a legacy direct password file is never used", async (t) => {
   const r = await pick(sb);
   assert.equal(r.code, 1);
   assert.equal(r.stdout, "");
-  assert.equal(r.stderr, `mini: pw: ${sb.passwordFile} is missing, empty or unreadable; ${IMPORT}; typed nothing\n`);
+  assert.equal(
+    r.stderr,
+    `mini: pw: ${sb.passwordFile} is missing, empty or unreadable; ${IMPORT}; typed nothing\n`,
+  );
 });
 
 test("an empty environment file fails naming it, with no fallback", async (t) => {

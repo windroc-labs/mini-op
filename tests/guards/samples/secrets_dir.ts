@@ -33,7 +33,8 @@ export const clean = {
   "tests/registry/secrets.json": registry([]),
   "ctl/lib/secrets.zsh": resolver,
   "host/start": "#!/usr/bin/env bash\necho start\n",
-  "ctl/mini": '#!/bin/zsh\nsource ${0:A:h}/lib/secrets.zsh\nssh mini x < "$(env_secrets_dir)/mini-password"\n',
+  "ctl/mini":
+    '#!/bin/zsh\nsource ${0:A:h}/lib/secrets.zsh\nssh mini x < "$(env_secrets_dir)/mini-password"\n',
   "tests/a.test.ts": 'const s = "/run/" + "secrets";\n',
   "tests/b.test.ts": 'const dir = "/run/ensemble/" + "secrets/env";\n',
   "host/ssh_config.keys": `Match originalhost mini\n    IdentityFile ${env}/mini-ssh-key\n`,

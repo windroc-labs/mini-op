@@ -66,7 +66,8 @@ test("the proxy hop reads HTTPS_PROXY at runtime and passes data as arguments", 
   for (const endpoint of ["gateway.example:3128", "other.example:8080"]) {
     const r = await sb.run(["sh", "-c", command], { env: { HTTPS_PROXY: `http://${endpoint}` } });
     assert.equal(r.code, 0, r.stderr);
-    assert.deepEqual(sb.calls("nc").at(-1)?.argv, ["-X", "connect", "-x", endpoint, MINI_HOST, "22"]);
+    const expected = ["-X", "connect", "-x", endpoint, MINI_HOST, "22"];
+    assert.deepEqual(sb.calls("nc").at(-1)?.argv, expected);
   }
   const before = sb.calls("nc").length;
   const missing = await sb.run(["sh", "-c", command]);
