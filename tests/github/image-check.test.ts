@@ -348,8 +348,7 @@ test("smoke: an image meeting every check passes, each row from a container with
   assert.ok(calls.every((call) => call.matched !== null));
   for (const call of calls) {
     assert.ok(
-      call.argv[0] === "image" ||
-        call.argv.slice(0, 4).join(" ") === "run --rm --network none",
+      call.argv[0] === "image" || call.argv.slice(0, 4).join(" ") === "run --rm --network none",
     );
   }
 });
