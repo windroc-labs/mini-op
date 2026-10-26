@@ -61,6 +61,19 @@ test("the connectivity runbook is read-only: ssh mini echo ok and mini sync --ch
   assert.match(read("ctl/CLAUDE.md"), /^\| [^|]+ \| `runbooks\/check-connection\.md` \|$/m);
 });
 
+test("every runtime path in the skill's Run section is root-prefixed and exists", () => {
+  const start = skill().indexOf("\n## Run\n");
+  assert.ok(start >= 0, "missing Run section");
+  const text = skill().slice(start);
+  const paths = [...text.matchAll(/(?<![\w.-])(?:\.\.?\/)?(?:ctl|mini|runbooks)\/[\w./-]*/g)];
+  assert.ok(paths.length > 0, "no runtime paths in Run");
+  for (const match of paths) {
+    const before = text.slice(0, match.index);
+    assert.ok(before.endsWith(ROOT), `relative path ${match[0]} in the skill`);
+    assert.ok(fs.existsSync(path.join(REPO, match[0])), `${match[0]} does not exist in the repo`);
+  }
+});
+
 test("the skill reads CLAUDE.md and the README sections before the lookup", () => {
   const text = skill().slice(skill().indexOf("\n## Run\n"));
   const readme = read("README.md");
@@ -131,7 +144,25 @@ test("README cites the official client skill directories and runtime prerequisit
   ])
     assert.ok(text.includes(url), url);
   assert.match(text, /runtime is a separate prerequisite/);
+  assert.ok(text.includes("`/etc/claude-code/.claude/skills/mini-op/`"));
   assert.doesNotMatch(text, /\/plugin install|plugins = \["mini-op"\]|mini-op:run/);
+});
+
+test("README keeps the runbook lookup details in ctl/runbook -h", () => {
+  const readme = read("README.md");
+  const scripts = readme.split("\n").find((line) => line.startsWith("| `ctl/runbook ")) ?? "";
+  assert.ok(scripts.includes("`ctl/runbook -h`"), "README › Scripts' ctl/runbook row has no -h");
+  assert.ok(
+    !scripts.includes("<workspace>/projects/"),
+    "the snapshot rules live in ctl/runbook -h",
+  );
+  const deploy = readme.split("\n").find((line) => line.startsWith("| `ctl/runbook deploy ")) ?? "";
+  assert.ok(deploy.includes("details: `ctl/runbook -h`"), "README's deploy row points nowhere");
+  assert.ok(!deploy.includes("~/mini-op-projects"), "deploy's behaviour lives in ctl/runbook -h");
+  assert.ok(
+    !readme.includes("convention, not a sandbox"),
+    "the warning's homes are SKILL.md and host/README.md",
+  );
 });
 
 // FR-213, FR-214: the toolset is synced, then a project runbook's scripts go to the mini, then it runs.

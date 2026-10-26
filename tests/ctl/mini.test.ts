@@ -85,10 +85,10 @@ async function checkout(sb: Sandbox): Promise<{ dir: string; commit: string }> {
   return { dir, commit: head.stdout.trim() };
 }
 
-// The image's plugin root as host/Dockerfile lays it out: ctl/ and mini/ side by side, no git
+// The image's runtime root as host/Dockerfile lays it out: ctl/ and mini/ side by side, no git
 // checkout around them, mini/VERSION the stamp host/start built it with.
-function pluginRoot(sb: Sandbox, stamp: string): string {
-  const root = path.join(sb.dir, "plugin-root");
+function runtimeRoot(sb: Sandbox, stamp: string): string {
+  const root = path.join(sb.dir, "runtime-root");
   for (const dir of ["ctl", "mini"]) {
     fs.cpSync(path.join(REPO, dir), path.join(root, dir), { recursive: true });
   }
@@ -102,10 +102,10 @@ function remoteCommands(sb: Sandbox): string[][] {
   return sb.calls("ssh").map((call) => (call.argv.at(-1) ?? "").split("; "));
 }
 
-test("the image's plugin root syncs to ~/apm with its baked mini/VERSION", async (t) => {
+test("the image's runtime root syncs to ~/apm with its baked mini/VERSION", async (t) => {
   const sb = await Sandbox.create(t);
   const commit = "0123456789abcdef0123456789abcdef01234567-dirty";
-  const root = pluginRoot(sb, commit);
+  const root = runtimeRoot(sb, commit);
   sb.fake("ssh", [{ local: true }]);
   const r = await sb.run(["zsh", path.join(root, "ctl/mini"), "sync"]);
   assert.equal(r.code, 0, r.stderr);
@@ -202,7 +202,7 @@ test("on the MacBook checkout sync stamps on the spot, -dirty included, via ~/.m
 test("without a VERSION outside a checkout sync and --check exit 1 and never call ssh", async (t) => {
   const sb = await Sandbox.create(t);
   sb.fake("ssh", [{ local: true }]);
-  const root = path.join(sb.dir, "plugin-root");
+  const root = path.join(sb.dir, "runtime-root");
   fs.mkdirSync(path.join(root, "ctl/lib"), { recursive: true });
   fs.mkdirSync(path.join(root, "mini/bin"), { recursive: true });
   for (const file of [

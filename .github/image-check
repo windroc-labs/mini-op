@@ -122,7 +122,7 @@ smoke() {
   out=$(in_image cat "$root/mini/VERSION") || out=
   [[ -n $stamp && $out == "$stamp" ]] && r=PASS || r=FAIL
   row "mini/VERSION ${stamp:-?}" "$r"
-  in_image test -r /etc/claude-code/skills/mini-op/SKILL.md && r=PASS || r=FAIL
+  in_image test -r /etc/claude-code/.claude/skills/mini-op/SKILL.md && r=PASS || r=FAIL
   row "standalone mini-op skill readable" "$r"
   out=$(docker image inspect -f '{{range $k, $v := .Config.Labels}}{{println $k}}{{end}}' \
     "$tag" 2>/dev/null) && ! grep -Eq '^(windroc|ensemble)\.' <<<"$out" && r=PASS || r=FAIL

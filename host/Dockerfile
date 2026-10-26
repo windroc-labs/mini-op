@@ -43,8 +43,8 @@ RUN set -eux; \
     printf '%s\n' "$MINI_OP_VERSION" > mini/VERSION; \
     chown -R root:root .; \
     chmod -R a+rX,go-w .; \
-    mkdir -p /etc/claude-code/skills; \
-    ln -s /opt/windroc/mini-op/skills/mini-op /etc/claude-code/skills/mini-op
+    mkdir -p /etc/claude-code/.claude/skills; \
+    ln -s /opt/windroc/mini-op/skills/mini-op /etc/claude-code/.claude/skills/mini-op
 # ssh settings without the mini's address or account: only the env stage below adds those.
 COPY host/ssh_config.container /etc/ssh/ssh_config.d/mini-proxy.conf
 COPY host/ssh_config.keys /etc/ssh/ssh_config.d/mini-keys.conf

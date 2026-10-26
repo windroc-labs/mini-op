@@ -284,7 +284,7 @@ function smokeRules(stamp: string): FakeRule[] {
       argv: [...IN, "cat", `${RUNTIME_ROOT}/mini/VERSION`],
       stdout: `${stamp}\n`,
     },
-    { argv: [...IN, "test", "-r", "/etc/claude-code/skills/mini-op/SKILL.md"] },
+    { argv: [...IN, "test", "-r", "/etc/claude-code/.claude/skills/mini-op/SKILL.md"] },
     { argv: [...LABELS, TAG], stdout: "mini-op.version\n\n" },
     { argv: [...IN, "find", "/home/agent", ...HOME_FILES, "-o", "-name", "plugin.json"] },
     { argv: [...MINI_H, TAG, `${RUNTIME_ROOT}/ctl/mini`, "-h"], stdout: "mini <command>\n" },
@@ -356,7 +356,7 @@ for (const [label, rule, row] of [
   ["no mini/VERSION", { argv: [...IN, "cat"], exit: 2 }, "mini/VERSION"],
   [
     "unreadable standalone skill",
-    { argv: [...IN, "test", "-r", "/etc/claude-code/skills/mini-op/SKILL.md"], exit: 1 },
+    { argv: [...IN, "test", "-r", "/etc/claude-code/.claude/skills/mini-op/SKILL.md"], exit: 1 },
     "standalone mini-op skill readable",
   ],
   ["a windroc. label", { argv: LABELS, stdout: "mini-op.version\nwindroc.x\n" }, "label"],

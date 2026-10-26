@@ -100,7 +100,7 @@ test("every label key starts mini-op., none windroc. or ensemble. (FR-42)", () =
   for (const [, key] of keys) assert.match(key ?? "", /^mini-op\./);
 });
 
-test("PATH starts with the runtime root's ctl/ is on PATH and the standalone skill uses the managed skills directory", () => {
+test("PATH starts with the runtime root's ctl/ and the standalone skill uses the managed skills directory", () => {
   const entries = /\sPATH=(\S+)/.exec(TEXT)?.[1]?.split(":") ?? [];
   assert.equal(entries[0], `${RUNTIME_ROOT}/ctl`);
   assert.deepEqual(
@@ -110,7 +110,7 @@ test("PATH starts with the runtime root's ctl/ is on PATH and the standalone ski
   assert.doesNotMatch(TEXT, /CLAUDE_CODE_PLUGIN_DIRS|plugin\.json/);
   assert.match(
     TEXT,
-    /ln -s \/opt\/windroc\/mini-op\/skills\/mini-op \/etc\/claude-code\/skills\/mini-op/,
+    /ln -s \/opt\/windroc\/mini-op\/skills\/mini-op \/etc\/claude-code\/\.claude\/skills\/mini-op/,
   );
   assert.deepEqual(lines(TEXT, "WORKDIR"), [RUNTIME_ROOT]);
 });
