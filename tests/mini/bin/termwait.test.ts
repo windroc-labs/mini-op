@@ -218,10 +218,18 @@ test("invalid options fail before touching anything", async (t) => {
     ["oops"],
     ["--no-such-option"],
     ["-h", "x"],
+    ["3", "--after", ID, "--until-input", "--until-input"],
+    ["3", "--until-input", "--after", ID],
+    ["--until-input", "3", "--after", ID],
+    ["3", "--after", ID, "--until"],
   ]) {
     const r = await wait(args);
     assert.equal(r.code, 2, args.join(" "));
-    assert.equal(r.stderr, "termwait: usage: termwait <secs> --after <id>\n", args.join(" "));
+    assert.equal(
+      r.stderr,
+      "termwait: usage: termwait <secs> --after <id> [--until-input]\n",
+      args.join(" "),
+    );
     assert.equal(r.stdout, "");
     assert.deepEqual(events(sb), []);
     assert.ok(fs.existsSync(stale));
@@ -256,4 +264,281 @@ test("-h prints the usage to stdout and touches nothing", async (t) => {
   assert.match(r.stdout, /^termwait <secs> --after <id> /);
   assert.match(r.stdout, /124/);
   assert.deepEqual(sb.calls(), []);
+});
+
+// --until-input scenes: the screen, the front tab's tty, its stty modes and the dialogs listing.
+// A file named <name>.<n> wins over <name> once n seconds have passed.
+const AT = (name: string) =>
+  `f=$FAKE_DIR/${name}.$(( $(cat "$FAKE_DIR/clock") - $(cat "$FAKE_DIR/start") )); [[ -e $f ]] || f=$FAKE_DIR/${name}`;
+const TTY = "/dev/ttys001";
+const NO_ECHO = "lflags: icanon isig iexten -echo echoe echok\n";
+type Scene = {
+  screen?: string;
+  stty?: string | null;
+  tty?: string | null;
+  tmux?: string;
+  // "FAIL" at a second makes that second's read fail.
+  dialogs?: Record<string, string> | null;
+  finish?: string;
+  // the last 3 nonblank lines ans --to recorded when it answered
+  answered?: string;
+  // seconds after which the screen changes to this text
+  later?: [number, string];
+};
+
+async function inputSandbox(t: Parameters<typeof Sandbox.create>[0]) {
+  const { sb, done } = await sandbox(t);
+  const wait = async (args: string[], scene: Scene = {}) => {
+    fakeTerminal(sb, { screen: scene.screen ?? "mini ~ % " }, FINISHING_SLEEP);
+    for (const name of ["clock", "start"]) fs.writeFileSync(path.join(sb.dir, name), "0");
+    if (scene.answered !== undefined) {
+      fs.mkdirSync(path.join(sb.home, "apm/state/answered"), { recursive: true });
+      fs.writeFileSync(path.join(sb.home, "apm/state/answered", ID), `${scene.answered}\n`);
+    }
+    if (scene.later)
+      fs.writeFileSync(path.join(sb.dir, `screen.${scene.later[0]}`), scene.later[1]);
+    if (scene.finish !== undefined) fs.writeFileSync(path.join(sb.dir, "finish"), scene.finish);
+    for (const [at, text] of Object.entries(scene.dialogs ?? {}))
+      fs.writeFileSync(path.join(sb.dir, at === "0" ? "dialogs" : `dialogs.${at}`), text);
+    sb.fake("osascript", [
+      {
+        program: "terminal.js",
+        args: ["contents"],
+        shell: `${AT("screen")}; cat $f; print
+[[ -e $FAKE_DIR/slow ]] && print $(( $(cat "$FAKE_DIR/clock") + 1 )) > "$FAKE_DIR/clock"; true`,
+      },
+      scene.tty === null
+        ? { program: "terminal.js", args: ["tty"], exit: 1 }
+        : { program: "terminal.js", args: ["tty"], stdout: `${scene.tty ?? TTY}\n` },
+      scene.dialogs === null
+        ? { program: "dialogs.js", exit: 1 }
+        : {
+            program: "dialogs.js",
+            shell: `${AT("dialogs")}; [[ $(cat $f 2>/dev/null) != FAIL ]] || exit 1; cat $f 2>/dev/null; true`,
+          },
+    ]);
+    sb.fake(
+      "stty",
+      scene.stty === null ? [{ exit: 1 }] : [{ argv: ["-a", "-f"], stdout: scene.stty ?? NO_ECHO }],
+    );
+    sb.fake("tmux", [
+      scene.tmux === undefined
+        ? { exit: 1, stderr: "no server running\n" }
+        : { argv: ["display-message", "-c"], stdout: `${scene.tmux}\n` },
+    ]);
+    return sb.run(["zsh", TERMWAIT, ...args], { env: { ID } });
+  };
+  const sttyTtys = () => sb.calls("stty").map((call) => call.argv.at(-1));
+  return { sb, done, wait, sttyTtys };
+}
+
+const PROMPT = `termwait: input: ${ID} at a prompt; answer with ans --to ${ID} --until-input\n`;
+const PASSWORD = `termwait: input: ${ID} at a password prompt (no echo verified); answer with mini pw if the runbook expects it\n`;
+const STILL = (secs: number) =>
+  `termwait: still running: ${ID} (after ${secs} s); keep waiting with termwait <secs> --after ${ID}\n`;
+const SA = "SecurityAgent |  | Always Allow, Deny, Allow";
+const SA_EVENT = (line: string) =>
+  `termwait: input: ${ID} waits on a SecurityAgent dialog (${line}); answer with mini pw --sa if the runbook expects it, then termwait <secs> --after ${ID} --until-input\n`;
+
+test("--until-input: the marker wins over a prompt and a dialog in the same poll", async (t) => {
+  const { done, wait } = await inputSandbox(t);
+  fs.writeFileSync(path.join(done, ID), "0\n");
+  const r = await wait(["30", "--after", ID, "--until-input"], {
+    screen: "Write it? [y/N] ",
+    dialogs: { "0": "Finder | x | OK\n", "1": `${SA}\n` },
+  });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, `Write it? [y/N] \n${ID} exited 0\n`);
+  assert.ok(!fs.existsSync(path.join(done, ID)));
+});
+
+test("--until-input: a marker written later ends the wait as without the flag", async (t) => {
+  const { sb, done, wait } = await inputSandbox(t);
+  const r = await wait(["30", "--after", ID, "--until-input"], { finish: "2 3" });
+  assert.equal(r.code, 1, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.ok(r.stdout.endsWith(`${ID} exited 3\n`));
+  assert.deepEqual(sleeps(sb), ["1", "1"]);
+  assert.deepEqual(fs.readdirSync(done), []);
+});
+
+test("--until-input returns 75 at a question prompt", async (t) => {
+  for (const screen of [
+    "Write it? [y/N] ",
+    "Continue? [Y/n]",
+    "Overwrite [y/n]\n\n  \n",
+    "Project name ?:",
+  ]) {
+    const { sb, done, wait } = await inputSandbox(t);
+    const r = await wait(["30", "--after", ID, "--until-input"], { screen });
+    assert.equal(r.code, 75, screen);
+    assert.equal(r.stderr, PROMPT, screen);
+    assert.deepEqual(sleeps(sb), [], screen);
+    assert.ok(r.stdout.includes(screen.split("\n")[0] ?? ""), screen);
+    assert.deepEqual(fs.readdirSync(done), []);
+  }
+});
+
+test("--until-input: an answered prompt is no event", async (t) => {
+  const { sb, wait } = await inputSandbox(t);
+  const r = await wait(["3", "--after", ID, "--until-input"], { screen: "Write it? [y/N] y" });
+  assert.equal(r.code, 124);
+  assert.equal(r.stderr, STILL(3));
+  assert.equal(sleeps(sb).length, 3);
+});
+
+test("--until-input returns 75 only at a no-echo password prompt", async (t) => {
+  for (const screen of [
+    "Password:",
+    "[sudo] password for dot: ",
+    "Enter passphrase for key 'k':",
+  ]) {
+    const { sttyTtys, wait } = await inputSandbox(t);
+    const r = await wait(["30", "--after", ID, "--until-input"], { screen });
+    assert.equal(r.code, 75, screen);
+    assert.equal(r.stderr, PASSWORD, screen);
+    assert.deepEqual(sttyTtys(), [TTY]);
+  }
+  for (const scene of [
+    { stty: "lflags: icanon isig iexten echo echoe\n" },
+    { stty: "lflags: -icanon isig iexten -echo echoe\n" },
+    { stty: null },
+    { tty: null },
+    { tty: "not a tty" },
+  ]) {
+    const { sb, wait } = await inputSandbox(t);
+    const r = await wait(["3", "--after", ID, "--until-input"], { screen: "Password:", ...scene });
+    assert.equal(r.code, 124, JSON.stringify(scene));
+    assert.equal(r.stderr, STILL(3), JSON.stringify(scene));
+    assert.equal(sleeps(sb).length, 3);
+  }
+});
+
+test("--until-input: Password?: is a password prompt, never a question", async (t) => {
+  const verified = await inputSandbox(t);
+  const r = await verified.wait(["30", "--after", ID, "--until-input"], { screen: "Password?:" });
+  assert.equal(r.code, 75);
+  assert.equal(r.stderr, PASSWORD);
+  const echoing = await inputSandbox(t);
+  const e = await echoing.wait(["2", "--after", ID, "--until-input"], {
+    screen: "Password?:",
+    stty: "lflags: icanon echo\n",
+  });
+  assert.equal(e.code, 124);
+  assert.equal(e.stderr, STILL(2));
+});
+
+test("--until-input checks the tmux pane's tty, not the client's", async (t) => {
+  const { sb, sttyTtys, wait } = await inputSandbox(t);
+  const r = await wait(["30", "--after", ID, "--until-input"], {
+    screen: "Password:",
+    tmux: "/dev/ttys009",
+  });
+  assert.equal(r.code, 75, r.stderr);
+  assert.deepEqual(sttyTtys(), ["/dev/ttys009"]);
+  assert.deepEqual(
+    sb.calls("tmux").map((call) => call.argv),
+    [["display-message", "-c", TTY, "-p", "#{pane_tty}"]],
+  );
+});
+
+test("--until-input returns 75 on a SecurityAgent dialog", async (t) => {
+  const { sb, done, wait } = await inputSandbox(t);
+  const r = await wait(["30", "--after", ID, "--until-input"], {
+    dialogs: { "0": "Finder | x | OK\n", "2": `Finder | x | OK\n${SA}\n` },
+  });
+  assert.equal(r.code, 75, r.stderr);
+  assert.equal(r.stderr, SA_EVENT(SA));
+  assert.deepEqual(sleeps(sb), ["1", "1"]);
+  assert.deepEqual(fs.readdirSync(done), []);
+});
+
+test("--until-input: failed dialogs reads are no event and set no baseline", async (t) => {
+  const failing = await inputSandbox(t);
+  const r = await failing.wait(["3", "--after", ID, "--until-input"], { dialogs: null });
+  assert.equal(r.code, 124);
+  assert.equal(r.stderr, STILL(3));
+  // The first successful read (second 1) is the baseline, not the failed one at second 0.
+  const { sb, wait } = await inputSandbox(t);
+  const dialogs = Object.fromEntries([1, 2, 3, 4, 5].map((at) => [String(at), `${SA}\n`]));
+  const late = await wait(["5", "--after", ID, "--until-input"], {
+    dialogs: { "0": "FAIL", ...dialogs },
+  });
+  assert.equal(late.code, 124, late.stderr);
+  assert.equal(late.stderr, STILL(5));
+  assert.equal(sleeps(sb).length, 5);
+});
+
+test("--until-input: a dialog up at the start is reported only after 10 s", async (t) => {
+  const short = await inputSandbox(t);
+  const r = await short.wait(["5", "--after", ID, "--until-input"], {
+    dialogs: { "0": `${SA}\n` },
+  });
+  assert.equal(r.code, 124);
+  assert.equal(r.stderr, STILL(5));
+  const { sb, wait } = await inputSandbox(t);
+  const lingering = await wait(["30", "--after", ID, "--until-input"], {
+    dialogs: { "0": `${SA}\n` },
+  });
+  assert.equal(lingering.code, 75, lingering.stderr);
+  assert.equal(lingering.stderr, SA_EVENT(SA));
+  assert.equal(sleeps(sb).length, 10);
+  const other = "SecurityAgent | Keychain | Deny, Allow";
+  const fresh = await inputSandbox(t);
+  const n = await fresh.wait(["30", "--after", ID, "--until-input"], {
+    dialogs: { "0": `${SA}\n`, "3": `${SA}\n${other}\n` },
+  });
+  assert.equal(n.code, 75, n.stderr);
+  assert.equal(n.stderr, SA_EVENT(other));
+  assert.equal(sleeps(fresh.sb).length, 3);
+});
+
+test("--until-input never returns the idle 75", async (t) => {
+  const { sb, wait } = await inputSandbox(t);
+  const r = await wait(["5", "--after", ID, "--until-input"], {
+    screen: "no recognizable prompt here",
+  });
+  assert.equal(r.code, 124);
+  assert.equal(r.stderr, STILL(5));
+  assert.equal(sleeps(sb).length, 5);
+});
+
+test("--until-input: the question ans --to answered is no event until the screen changes", async (t) => {
+  const answered = await inputSandbox(t);
+  const r = await answered.wait(["3", "--after", ID, "--until-input"], {
+    screen: "Installing\n\nProceed? [Y/n] \n\n",
+    answered: "Installing\nProceed? [Y/n] ",
+  });
+  assert.equal(r.code, 124, r.stderr);
+  assert.equal(r.stderr, STILL(3));
+  const { sb, wait } = await inputSandbox(t);
+  const next = await wait(["30", "--after", ID, "--until-input"], {
+    screen: "Installing\nProceed? [Y/n] ",
+    answered: "Installing\nProceed? [Y/n] ",
+    later: [2, "Proceed? [Y/n] \nProceed? [Y/n] "],
+  });
+  assert.equal(next.code, 75, next.stderr);
+  assert.equal(next.stderr, PROMPT);
+  assert.deepEqual(sleeps(sb), ["1", "1"]);
+});
+
+test("--until-input: a next question already up at the first read returns 75 at once", async (t) => {
+  for (const answered of ["Proceed? [y/N] ", undefined]) {
+    const { sb, wait } = await inputSandbox(t);
+    const r = await wait(["30", "--after", ID, "--until-input"], {
+      screen: "Proceed? [y/N] y\nOverwrite config? [y/N] ",
+      ...(answered === undefined ? {} : { answered }),
+    });
+    assert.equal(r.code, 75, r.stderr);
+    assert.equal(r.stderr, PROMPT);
+    assert.deepEqual(sleeps(sb), []);
+  }
+});
+
+test("--until-input: a 1 s recheck still reads the prompt after slow reads", async (t) => {
+  const { sb, wait } = await inputSandbox(t);
+  fs.writeFileSync(path.join(sb.dir, "slow"), "");
+  const r = await wait(["1", "--after", ID, "--until-input"], { screen: "Password:" });
+  assert.equal(r.code, 75, r.stderr);
+  assert.equal(r.stderr, PASSWORD);
 });

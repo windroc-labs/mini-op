@@ -336,6 +336,28 @@ test("run sends stdin to ans and passes its rc", async (t) => {
   }
 });
 
+test("run passes --until-input to ans in one ssh call", async (t) => {
+  for (const [args, expected] of [
+    [["--until-input"], "60 --until-input"],
+    [["30", "--until-input"], "30 --until-input"],
+    [
+      ["30", "--to", "1761200000-4242-17", "--until-input"],
+      "30 --to 1761200000-4242-17 --until-input",
+    ],
+  ] as const) {
+    const sb = await sandbox(t);
+    ans(
+      sb,
+      "print -u2 -n -- 'termwait: input: 1-2-3 at a prompt; answer with ans --to 1-2-3'; exit 75",
+    );
+    const r = await sb.run(["zsh", MINI, "run", ...args], { input: "ls -l\n" });
+    assert.equal(r.code, 75, r.stderr);
+    assert.equal(r.stderr, "termwait: input: 1-2-3 at a prompt; answer with ans --to 1-2-3");
+    assert.equal(home(sb, "ans.args"), `${expected}\n`);
+    assert.equal(sb.calls("ssh").length, 1);
+  }
+});
+
 test("run maps another rc of the mini or a failed ssh to 1", async (t) => {
   const sb = await sandbox(t);
   ans(sb, "exit 3");
@@ -756,7 +778,8 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
   assert.match(r.stdout, /exec.*255.*SSH.*completion.*unknown/i);
   const lines = r.stdout.split("\n");
   assert.match(lines[0] ?? "", /^mini exec \[secs\]/);
-  assert.match(lines[2] ?? "", /^mini run \[secs\] \[--to <id>\] .*not for secrets: use mini pw$/);
+  assert.match(lines[2] ?? "", /^mini run \[secs\] \[--to <id>\] \[--until-input\]$/);
+  assert.match(lines[3] ?? "", /not for secrets: use mini pw$/);
   for (const form of [
     "mini pw [--lock | --sa | --settings]",
     "mini sudo <command> [args] ",
@@ -786,11 +809,14 @@ test("run rejects a bad secs or id without ssh", async (t) => {
     ["--to", "1-2-3", "x"],
     ["60", "60"],
     ["--bogus"],
+    ["--until-input", "60"],
+    ["60", "--until-input", "--to", "1-2-3"],
+    ["60", "--until-input", "--until-input"],
   ]) {
     const r = await sb.run(["zsh", MINI, "run", ...args], { input: "ls\n" });
     assert.equal(r.code, 2, args.join(" "));
     assert.equal(r.stdout, "");
-    assert.equal(r.stderr, "mini: usage: mini run [secs] [--to <id>]\n");
+    assert.equal(r.stderr, "mini: usage: mini run [secs] [--to <id>] [--until-input]\n");
   }
   assert.deepEqual(sb.calls(), []);
 });

@@ -8,6 +8,8 @@ How the manager makes a blank macOS machine into the Mac mini mini-op drives: ma
 
 Rules, driving the mini and gotchas: `../README.md`. Read the mini address and account from the container SSH config; on this Mac, use `mini_host` and `mini_user` in `~/.mini-op/config.local.yaml`.
 
+Interactive steps (installing the Node pkg, `npm install -g`) use the wait loop (`../README.md`, Waiting and answering): start with `printf '%s\n' '<cmd>' | mini run 120 --until-input`; at each `termwait: input:` line answer at once (a question: `mini run 120 --to <id> --until-input`; sudo's password prompt in a `sudo` step: `mini pw`; a SecurityAgent dialog: the existing `mini pw --sa`, only in a step that reads the keychain, which none here does, so hand it to the user), then wait again with `ssh mini '~/apm/bin/termwait 120 --after <id> --until-input'` until it exits 0 or 1. No custom wait loops.
+
 Visible routes and protected exceptions: `visible-operations.md`. Run public mini commands in `mini exec` (interactive: `mini run`); ordinary browser steps stay foreground. Credential pipes and authentication mail stay private before their first secret appears; page input only through secfield. A private page that cannot render safely is a failed step, not a reason to show it.
 
 ## 1. Machine access
@@ -22,6 +24,7 @@ Visible routes and protected exceptions: `visible-operations.md`. Run public min
 1. Chrome from Google's dmg (`codesign` team `EQHXZ8M8AV`); Node LTS from nodejs.org's signed pkg (check SHASUMS256).
 2. `npm config set prefix ~/.npm-global; npm install -g @jackwener/opencli`; add the OpenCLI extension from the Chrome Web Store; `opencli doctor` shows daemon and extension connected.
 3. For mail-link follow, the user enables Chrome View › Developer › Allow JavaScript from Apple Events. `chrome.js auth` uses the existing Chrome and macOS JXA, no new software; permission errors are safe failures. `linearlogin --code` uses secfield instead.
+4. Once: grant Terminal Automation for Google Chrome. From mini-op run `printf '%s\n' 'osascript -l JavaScript ~/apm/js/chrome.js activate' | mini exec 30`; the user clicks Allow on "“Terminal” wants access to control “Google Chrome”". Check System Settings › Privacy & Security › Automation › Terminal › Google Chrome is on. Without it the first Terminal command driving Chrome blocks on that prompt (`../README.md`, Gotchas).
 
 ## Reconnect mini-op after a reset
 
@@ -49,5 +52,5 @@ On this Mac (the user, in this checkout):
 In mini-op:
 
 7. `mini sync`, then `mini sync --check`.
-8. Section 1, steps 2–4: the permissions, `mini-autologin` and the settings, Screen Sharing.
+8. Section 1, steps 2–4: the permissions, `mini-autologin` and the settings, Screen Sharing; section 2, step 4: Terminal Automation for Google Chrome.
 9. After mini-op files change, close the session and run `host/start`; `host/update` refreshes only project runbook snapshots.

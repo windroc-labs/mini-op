@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
 import { REPO, Sandbox } from "../../lib/sandbox.ts";
@@ -99,4 +100,82 @@ test("private mode hides Chrome before OpenCLI and never adds foreground", async
   assert.equal(sb.calls("opencli").length, 1);
   const mixed = await sb.run(["zsh", O, "state", "--private", "--window", "foreground"]);
   assert.equal(mixed.code, 2);
+});
+
+const JS = `document.querySelector("a[href='/x']")?.textContent; // "quoted" $HOME \`x\` \\n
+[1, 2].map((n) => n * 2);`;
+const EVAL = (js: string, window: string) => [
+  "browser",
+  "eval",
+  js,
+  "--session",
+  "role",
+  "--window",
+  window,
+];
+
+test("evalfile runs the file's JS as one argv word, with no shell quoting", async (t) => {
+  const sb = await Sandbox.create(t);
+  const file = path.join(sb.home, "read.js");
+  fs.writeFileSync(file, `${JS}\n`);
+  sb.fake("opencli", [{ stdout: '{"data":4}\n', exit: 3 }]);
+  const r = await sb.run(["zsh", O, "evalfile", "role", file]);
+  assert.equal(r.code, 3, r.stderr);
+  assert.equal(r.stdout, '{"data":4}\n');
+  assert.deepEqual(sb.calls("opencli")[0]?.argv, EVAL(JS, "foreground"));
+  const piped = await sb.run(["zsh", O, "evalfile", "role", "/dev/stdin"], { stdinFile: file });
+  assert.equal(piped.code, 3, piped.stderr);
+  assert.deepEqual(sb.calls("opencli")[1]?.argv, EVAL(JS, "foreground"));
+});
+
+test("evalfile --private hides Chrome and uses a background window", async (t) => {
+  const sb = await Sandbox.create(t);
+  const file = path.join(sb.home, "read.js");
+  fs.writeFileSync(file, JS);
+  sb.fake("osascript", [{ program: "chrome.js", args: ["hide"] }]);
+  sb.fake("opencli", [{}]);
+  const r = await sb.run(["zsh", O, "evalfile", "--private", "role", file]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(
+    sb.calls().map((c) => c.cmd),
+    ["osascript", "opencli"],
+  );
+  assert.deepEqual(sb.calls("opencli")[0]?.argv, EVAL(JS, "background"));
+});
+
+test("evalfile refuses a missing, unreadable or empty file and runs nothing", async (t) => {
+  const sb = await Sandbox.create(t);
+  const empty = path.join(sb.home, "empty.js");
+  fs.writeFileSync(empty, " \n\n");
+  const missing = path.join(sb.home, "missing.js");
+  for (const [file, stderr] of [
+    [missing, `o: cannot read ${missing}\n`],
+    [sb.home, `o: cannot read ${sb.home}\n`],
+    [empty, `o: ${empty} is empty\n`],
+  ] as const) {
+    const r = await sb.run(["zsh", O, "evalfile", "role", file, "--private"]);
+    assert.equal(r.code, 1, file);
+    assert.equal(r.stderr, stderr);
+    assert.equal(r.stdout, "");
+  }
+  assert.deepEqual(sb.calls(), []);
+});
+
+test("evalfile with a wrong arg count or an option-like word is a usage error", async (t) => {
+  const sb = await Sandbox.create(t);
+  for (const args of [
+    ["evalfile"],
+    ["evalfile", "role"],
+    ["evalfile", "role", "a.js", "b.js"],
+    ["evalfile", "-x", "a.js"],
+    ["evalfile", "role", "-a.js"],
+    ["evalfile", "role", ""],
+  ]) {
+    const r = await sb.run(["zsh", O, ...args]);
+    assert.equal(r.code, 2, args.join(" "));
+    assert.equal(r.stderr, "o: usage: o evalfile <session> <file.js> [--private]\n");
+  }
+  assert.deepEqual(sb.calls(), []);
+  const help = await sb.run(["zsh", O, "-h"]);
+  assert.match(help.stdout, /\no evalfile <session> <file\.js> \[--private\] /);
 });

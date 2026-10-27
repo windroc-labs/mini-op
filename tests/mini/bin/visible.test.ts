@@ -32,6 +32,7 @@ test("visible returns complete separate streams, preserves blank lines and shows
   assert.match(typed(sb) ?? "", /visible --execute \d+-\d+-\d+/);
   assert.ok(!(typed(sb) ?? "").includes("line 79"));
   assert.deepEqual(fs.readdirSync(jobs(sb)), []);
+  assert.ok(!sb.calls("osascript").some((call) => call.program === "dialogs.js"));
 });
 
 test("exit and syntax errors are captured without losing completion", async (t) => {
@@ -45,12 +46,16 @@ test("exit and syntax errors are captured without losing completion", async (t) 
     const sb = await setup(t);
     const r = await sb.run(["zsh", VISIBLE, "0"], { input: command });
     assert.equal(r.code, code, r.stderr);
+    assert.ok(!r.stderr.includes("dialogs"));
     assert.deepEqual(fs.readdirSync(jobs(sb)), []);
   }
 });
 
+const notDialogs = (sb: Sandbox) =>
+  sb.calls("osascript").filter((call) => call.program !== "dialogs.js").length;
+
 test("timeout preserves a private job; collect never executes it again", async (t) => {
-  const sb = await setup(t, { runs: false });
+  const sb = await setup(t, { runs: false, dialogs: "" });
   const r = await sb.run(["zsh", VISIBLE, "0"], { input: "printf once" });
   assert.equal(r.code, 124, r.stderr);
   const [id] = fs.readdirSync(jobs(sb));
@@ -59,10 +64,10 @@ test("timeout preserves a private job; collect never executes it again", async (
   const dir = path.join(jobs(sb), id!);
   assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
   assert.equal(fs.statSync(path.join(dir, "command")).mode & 0o777, 0o600);
-  const before = sb.calls("osascript").length;
+  const before = notDialogs(sb);
   const pending = await sb.run(["zsh", VISIBLE, "--collect", id!]);
   assert.equal(pending.code, 124);
-  assert.equal(sb.calls("osascript").length, before);
+  assert.equal(notDialogs(sb), before);
   fs.writeFileSync(path.join(dir, "stdout"), "once\n");
   fs.writeFileSync(path.join(dir, "stderr"), "warning");
   fs.writeFileSync(path.join(dir, "rc"), "7\n");
@@ -70,8 +75,28 @@ test("timeout preserves a private job; collect never executes it again", async (
   assert.equal(collected.code, 7, collected.stderr);
   assert.equal(collected.stdout, "once\n");
   assert.equal(collected.stderr, "warning");
-  assert.equal(sb.calls("osascript").length, before);
+  assert.equal(notDialogs(sb), before);
   assert.ok(!fs.existsSync(dir));
+});
+
+test("a 124 prints the mini's dialogs after the still-running line", async (t) => {
+  const listed = "SecurityAgent |  | Always Allow, Deny, Allow\nFinder | x | OK\n";
+  for (const [dialogs, shown] of [
+    [listed, `visible: dialogs on the mini:\n${listed}`],
+    ["", "visible: no dialogs on the mini\n"],
+    [{ exit: 1 }, "visible: cannot list dialogs\n"],
+    [{ shell: "kill -ALRM $PPID" }, "visible: cannot list dialogs\n"],
+  ] as const) {
+    const sb = await setup(t, { runs: false, dialogs });
+    const r = await sb.run(["zsh", VISIBLE, "0"], { input: "printf once" });
+    assert.equal(r.code, 124, r.stderr);
+    const [id] = fs.readdirSync(jobs(sb));
+    const still = `visible: still running or launch uncertain: ${id}; recover with mini exec --collect ${id}\n`;
+    assert.ok(r.stderr.endsWith(still + shown), r.stderr);
+    const pending = await sb.run(["zsh", VISIBLE, "--collect", id!]);
+    assert.equal(pending.code, 124);
+    assert.equal(pending.stderr, still + shown);
+  }
 });
 
 test("frontmost refusal never runs the command", async (t) => {

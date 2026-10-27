@@ -330,6 +330,43 @@ test("a typing failure stops before waiting", async (t) => {
   assert.deepEqual(sleeps(sb), []);
 });
 
+test("--until-input reaches termwait for new commands and --to answers", async (t) => {
+  for (const args of [
+    ["5", "--until-input"],
+    ["5", "--to", "1761200000-4242-17", "--until-input"],
+  ]) {
+    const { sb, r } = await ans(t, "echo hi\n", args, { runs: false, dialogs: "" });
+    assert.equal(r.code, 124, r.stderr);
+    assert.match(r.stderr, /termwait: still running: .* \(after 5 s\)/);
+    assert.ok(!r.stderr.includes("look now"));
+    assert.ok(sb.calls("osascript").some((call) => call.program === "dialogs.js"));
+  }
+});
+
+test("--to --until-input does not re-report the question it just answered with Enter", async (t) => {
+  const { sb, r } = await ans(t, "\n", ["3", "--to", "1761200000-4242-17", "--until-input"], {
+    runs: false,
+    lands: false,
+    screen: "Proceed? [Y/n] ",
+    dialogs: "",
+  });
+  assert.equal(r.code, 124, r.stderr);
+  assert.match(r.stderr, /termwait: still running: 1761200000-4242-17 \(after 3 s\)/);
+  const file = path.join(sb.home, "apm/state/answered/1761200000-4242-17");
+  assert.equal(fs.readFileSync(file, "utf8"), "Proceed? [Y/n] \n");
+  assert.equal(fs.statSync(file).mode & 0o077, 0);
+});
+
+test("only --to --until-input records the answered screen", async (t) => {
+  for (const args of [
+    ["3", "--until-input"],
+    ["3", "--to", "1761200000-4242-17"],
+  ]) {
+    const { sb } = await ans(t, "echo hi\n", args, { runs: false, dialogs: "" });
+    assert.ok(!fs.existsSync(path.join(sb.home, "apm/state/answered")), args.join(" "));
+  }
+});
+
 test("bad arguments and empty commands are refused before typing", async (t) => {
   const cases: [string, string[]][] = [
     ["echo hi", ["--to", "../x"]],
@@ -337,13 +374,20 @@ test("bad arguments and empty commands are refused before typing", async (t) => 
     ["echo hi", ["--no-such-option"]],
     ["echo hi", ["-h", "x"]],
     ["y", ["--to"]],
+    ["echo hi", ["--until-input", "5"]],
+    ["echo hi", ["5", "--until-input", "--to", "1761200000-4242-17"]],
+    ["echo hi", ["5", "--until-input", "--until-input"]],
     ["\n", []],
     ["  ", ["5"]],
   ];
   for (const [text, args] of cases) {
     const { sb, r } = await ans(t, text, args);
     assert.equal(r.code, 2, args.join(" "));
-    assert.match(r.stderr, /^ans: usage: ans \[secs\] \[--to <id>\]/, args.join(" "));
+    assert.match(
+      r.stderr,
+      /^ans: usage: ans \[secs\] \[--to <id>\] \[--until-input\]/,
+      args.join(" "),
+    );
     assert.equal(r.stdout, "");
     assert.equal(typed(sb), undefined);
   }
@@ -356,7 +400,7 @@ test("-h prints the usage to stdout and calls nothing", async (t) => {
   const r = await sb.run(["zsh", ANS, "-h"], { input: "echo hi" });
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stderr, "");
-  assert.match(r.stdout, /^ans \[secs\] \[--to <id>\] /);
+  assert.match(r.stdout, /^ans \[secs\] \[--to <id>\] \[--until-input\] /);
   assert.match(r.stdout, /124/);
   assert.deepEqual(sb.calls(), []);
   assert.deepEqual(events(sb), []);

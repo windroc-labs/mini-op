@@ -2,9 +2,11 @@
 setopt pipefail
 usage="mini exec [secs]             run public stdin in Terminal; complete stdout/stderr and original rc
 mini exec --collect <id>      collect a retained job; never starts another command
-mini run [secs] [--to <id>]   type stdin into the Terminal and wait; not for secrets: use mini pw
+mini run [secs] [--to <id>] [--until-input]
+                              type stdin into the Terminal and wait; not for secrets: use mini pw
                               (~/apm/bin/ans on the mini: secs default 60; --to <id> answers that
-                              command's prompt)
+                              command's prompt; --until-input returns 75 at its first prompt or
+                              SecurityAgent dialog, named on stderr, instead of after 3 s idle)
 mini pw [--lock | --sa | --settings]
                               type the mini account's password into the mini's front Terminal, its
                               lock screen (only while locked), its SecurityAgent dialog (one
@@ -23,7 +25,8 @@ pw and sudo send the mini account's password from \$(env_secrets_dir)/mini-passw
 to ssh's stdin only. Exits 0, 1 (refused or failed), 2
 (usage error), 75 (run: look now, command not finished) or 124 (a wait timed out).
 Interactive installs use at most 30 s per wait. exec returns the captured original status.
-mini exec exits 255 on SSH failure; command completion is unknown."
+mini exec exits 255 on SSH failure; command completion is unknown. A mini exec 124 (timeout or
+launch uncertain) also lists the mini's dialogs, so a blocking macOS prompt shows at once."
 source ${0:A:h}/lib/ssh.zsh
 source ${0:A:h}/lib/version.sh
 source ${0:A:h}/lib/secrets.zsh
@@ -124,15 +127,16 @@ exec_mini() {
 }
 
 run_mini() {
-  local secs=60 to=""
+  local secs=60 to="" until="" synopsis='mini run [secs] [--to <id>] [--until-input]'
   [[ $# -gt 0 && $1 =~ '^[0-9]+$' ]] && { secs=$1; shift; }
+  [[ ${@[-1]} == --until-input ]] && { until=" --until-input"; argv[-1]=(); }
   if [[ $1 == --to ]]; then
-    [[ $# -eq 2 && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error 'mini run [secs] [--to <id>]'
+    [[ $# -eq 2 && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error $synopsis
     to=" --to $2"
     shift 2
   fi
-  [[ $# -eq 0 ]] || usage_error 'mini run [secs] [--to <id>]'
-  on_mini run "~/apm/bin/ans $secs$to"
+  [[ $# -eq 0 ]] || usage_error $synopsis
+  on_mini run "~/apm/bin/ans $secs$to$until"
 }
 
 keys='osascript -l JavaScript ~/apm/js/keys.js'

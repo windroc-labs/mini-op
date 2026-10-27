@@ -1,5 +1,8 @@
 #!/usr/bin/env zsh
-usage="ans [secs] [--to <id>]   type stdin into the Terminal + Enter, then termwait (default 60 s)
+usage="ans [secs] [--to <id>] [--until-input]   type stdin into the Terminal + Enter, then termwait
+(default 60 s; --until-input: termwait --until-input, which returns 75 at the first prompt or
+SecurityAgent dialog instead of after 3 s idle; with --to, the screen's last 3 nonblank lines before
+typing go to ~/apm/state/answered/<id>, so this and later waits skip the question just answered)
 A command is typed as \`{ <stdin>\`, a newline, then \`}; printf '%s\\n' \$? > <marker>.tmp && mv -f
 <marker>.tmp <marker>\`, the marker ~/apm/state/done/<id> with a new <id>, so termwait ends when it
 ends; trailing newlines are dropped, and an unbalanced \`}\` in stdin closes the group early: no
@@ -9,11 +12,12 @@ wait if scrollback is unchanged 5 s after typing. Types only into the front Term
 Exits 0 (the command exited 0), 1 (refused or failed, or the command exited non-zero), 2 (usage),
 75 (unchanged readable contents for 3 s: look now, not completion) or 124 (a wait timed out: \"still
 running: <id>\", \"killed after <N> s\" or \"timed out after <N> s\" on stderr)."
-synopsis='ans [secs] [--to <id>]'
+synopsis='ans [secs] [--to <id>] [--until-input]'
 usage_error() { print -u2 -r -- "ans: usage: $synopsis$1"; exit 2; }
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
-q=60; id=""; answer=0
+q=60; id=""; answer=0; until=()
 if [[ $# -gt 0 && $1 == <-> ]]; then q=$1; shift; fi
+[[ ${@[-1]} == --until-input ]] && { until=(--until-input); argv[-1]=(); }
 if [[ ${1:-} == --to ]]; then
   [[ $# -eq 2 && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error
   id=$2; answer=1; shift 2
@@ -47,6 +51,12 @@ before=$(hist) || {
   killed 5 'reading Terminal; typed nothing'
   print -u2 -r -- 'ans: cannot read Terminal; typed nothing'; exit 1
 }
+if (( answer && $#until )); then
+  answered=~/apm/state/answered
+  mkdir -p $answered && for f in $answered/<->-<->-<->(N.mh+24); do rm -f -- "${f:?}"; done
+  rm -f -- "${answered:?}/${id:?}"
+  last=$(~/apm/bin/termtail 3 2>/dev/null) && (umask 077; print -r -- "$last" > $answered/$id)
+fi
 keys=(osascript -l JavaScript ~/apm/js/keys.js --enter)
 if (( answer )) && [[ -n $input && $input != $'\n' && $input != $'\r\n' ]]; then keys+=(--secret); fi
 print -rn -- "$text" | with_timeout 15 $keys >/dev/null || {
@@ -74,7 +84,7 @@ if (( ! answer )); then
   }
 fi
 with_timeout 5 $terminal bottom >/dev/null || killed 5 "scrolling Terminal; $typed"
-~/apm/bin/termwait "$q" --after "$id"; rc=$?
+~/apm/bin/termwait "$q" --after "$id" $until; rc=$?
 with_timeout 5 $terminal bottom >/dev/null || (( $? != 124 )) ||
   print -u2 -r -- "ans: note: killed after 5 s: scrolling Terminal after $id ended"
 exit $rc
