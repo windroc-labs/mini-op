@@ -3,8 +3,9 @@
 -- JXA: JXA's keyDown sends nothing useful (README.md › Gotchas). Its caller, `mini chord`, checks the
 -- arguments first. Every modifier pressed is released, on success or error.
 -- osascript compiles this against the running macOS's terminology: handler and parameter names are
--- camelCase (no dictionary term is), calls go through `my`, and no script variable is read inside a
--- System Events tell. On macOS 27.2 the plain-word handler `press(modifier, down)` failed with -1750.
+-- camelCase (no dictionary term is), calls go through `my`, and a script variable is read inside a
+-- System Events tell only in a one-line `tell … to` (`key code keyNumber`). On macOS 27.2 the
+-- plain-word handler `press(modifier, down)` failed with -1750.
 on run argv
 	if (count of argv) is not 2 then error "chord: usage: chord.applescript <modifier[,modifier]> <key code>"
 	set AppleScript's text item delimiters to ","
