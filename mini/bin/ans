@@ -1,5 +1,7 @@
 #!/usr/bin/env zsh
-usage="ans [secs] [--to <id>]   type stdin into the Terminal + Enter, then termwait (default 60 s)
+usage="ans [secs] [--to <id>] [--until-input]   type stdin into the Terminal + Enter, then termwait
+(default 60 s; --until-input: termwait --until-input, which returns 75 at the first prompt or
+SecurityAgent dialog instead of after 3 s idle)
 A command is typed as \`{ <stdin>\`, a newline, then \`}; printf '%s\\n' \$? > <marker>.tmp && mv -f
 <marker>.tmp <marker>\`, the marker ~/apm/state/done/<id> with a new <id>, so termwait ends when it
 ends; trailing newlines are dropped, and an unbalanced \`}\` in stdin closes the group early: no
@@ -9,11 +11,12 @@ wait if scrollback is unchanged 5 s after typing. Types only into the front Term
 Exits 0 (the command exited 0), 1 (refused or failed, or the command exited non-zero), 2 (usage),
 75 (unchanged readable contents for 3 s: look now, not completion) or 124 (a wait timed out: \"still
 running: <id>\", \"killed after <N> s\" or \"timed out after <N> s\" on stderr)."
-synopsis='ans [secs] [--to <id>]'
+synopsis='ans [secs] [--to <id>] [--until-input]'
 usage_error() { print -u2 -r -- "ans: usage: $synopsis$1"; exit 2; }
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
-q=60; id=""; answer=0
+q=60; id=""; answer=0; until=()
 if [[ $# -gt 0 && $1 == <-> ]]; then q=$1; shift; fi
+[[ ${@[-1]} == --until-input ]] && { until=(--until-input); argv[-1]=(); }
 if [[ ${1:-} == --to ]]; then
   [[ $# -eq 2 && $2 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error
   id=$2; answer=1; shift 2
@@ -74,7 +77,7 @@ if (( ! answer )); then
   }
 fi
 with_timeout 5 $terminal bottom >/dev/null || killed 5 "scrolling Terminal; $typed"
-~/apm/bin/termwait "$q" --after "$id"; rc=$?
+~/apm/bin/termwait "$q" --after "$id" $until; rc=$?
 with_timeout 5 $terminal bottom >/dev/null || (( $? != 124 )) ||
   print -u2 -r -- "ans: note: killed after 5 s: scrolling Terminal after $id ended"
 exit $rc

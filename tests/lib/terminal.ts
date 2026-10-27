@@ -20,7 +20,14 @@ print Terminal`;
 export const SLEEP = `print -r -- "$1" >> "$FAKE_DIR/sleeps"
 clock=$(cat "$FAKE_DIR/clock" 2>/dev/null || print 0); print $(( clock + $1 )) > "$FAKE_DIR/clock"`;
 
-export type TerminalScene = { front?: string; lands?: boolean; runs?: boolean; screen?: string };
+// dialogs: what ~/apm/bin/dialogs lists (termwait --until-input reads it).
+export type TerminalScene = {
+  front?: string;
+  lands?: boolean;
+  runs?: boolean;
+  screen?: string;
+  dialogs?: string;
+};
 
 export function fakeTerminal(sb: Sandbox, scene: TerminalScene = {}, sleep = SLEEP): void {
   const file = (name: string) => path.join(sb.dir, name);
@@ -36,6 +43,7 @@ export function fakeTerminal(sb: Sandbox, scene: TerminalScene = {}, sleep = SLE
     { program: "terminal.js", args: ["contents"], shell: log("contents") + SCREEN },
     { program: "terminal.js", args: ["bottom"], shell: log("bottom") + "print bottom" },
     { program: "keys.js", args: ["--enter"], shell: TYPE },
+    ...(scene.dialogs === undefined ? [] : [{ program: "dialogs.js", stdout: scene.dialogs }]),
   ]);
   sb.fake("sleep", [{ shell: sleep }]);
   sb.fake("date", [
