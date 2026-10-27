@@ -1,30 +1,77 @@
 #!/usr/bin/env zsh
-usage="termwait <secs> --after <id>   wait up to <secs> s for the command ans typed as <id> to end
+usage="termwait <secs> --after <id> [--until-input]   wait up to <secs> s for the command ans typed as <id> to end
 Prints the Terminal's last 25 nonblank lines (secrets hidden by ~/apm/lib/secrets.zsh) and
 \"<id> exited <rc>\", and deletes its marker ~/apm/state/done/<id> (the typed command writes its rc
 there via <id>.tmp + mv; see ans). Markers and temp files there over a day old are deleted on each
 run. Exits 0 (<id> exited 0), 1 (<id> exited non-zero, or its marker holds no rc), 2 (usage error),
 75 (readable contents unchanged for 3 s: look now, never completion), or 124 (limit reached).
 75 and 124 keep the marker and print the redacted last lines; inspect with termtail, then answer
-with ans --to or keep waiting. Interactive installs: at most 30 s per wait."
+with ans --to or keep waiting. Interactive installs: at most 30 s per wait.
+--until-input: no idle 75; instead 75 at the first input the command waits on, named on stderr
+(\"termwait: input: <id> ...\"): a question prompt (last nonblank line ends in [y/N], [Y/n], [y/n]
+or ?:), a password prompt verified as no echo (stty of the front tab's tty, or its tmux pane's,
+shows -echo and icanon), or a SecurityAgent dialog (~/apm/bin/dialogs; one already listed at the
+wait's first read only once it is still up 10 s later). Waits up to 120 s each."
 # Only the marker proves completion. Three seconds of unchanged readable contents is merely a
 # look-now signal (75): a long-running quiet command may also be idle.
-usage_error() { print -u2 -r -- 'termwait: usage: termwait <secs> --after <id>'; exit 2; }
+usage_error() { print -u2 -r -- 'termwait: usage: termwait <secs> --after <id> [--until-input]'; exit 2; }
 [[ $# -eq 1 && $1 == -h ]] && { print -r -- $usage; exit 0; }
+until_input=0
+[[ $# -eq 4 && $4 == --until-input ]] && { until_input=1; argv[4]=(); }
 [[ $# -eq 3 && $1 == <-> && $2 == --after && $3 =~ '^[0-9]+-[0-9]+-[0-9]+$' ]] || usage_error
 source ${0:A:h}/../lib/timeout.zsh || exit 1
 q=$1; id=$3; dir=~/apm/state/done; marker=$dir/$id
 for f in $dir/<->-<->-<->(N.mh+24) $dir/<->-<->-<->.tmp(N.mh+24); do rm -f -- "${f:?}"; done
-end=$(( $(date +%s) + q )); have=0; look_now=0
+end=$(( $(date +%s) + q )); have=0; look_now=0; event=""; sa_read=0; sa_since=0; sa_base=()
+terminal=(osascript -l JavaScript ~/apm/js/terminal.js)
+# A SecurityAgent line not in the first successful read, or still there 10 s after it.
+sa_dialog() {
+  local list line now
+  list=$(with_timeout 5 ~/apm/bin/dialogs </dev/null 2>/dev/null) || return 1
+  now=$(date +%s)
+  if (( ! sa_read )); then sa_read=1; sa_since=$now; sa_base=(${(f)list}); fi
+  for line in ${(f)list}; do
+    [[ $line == 'SecurityAgent | '* ]] || continue
+    (( ${sa_base[(Ie)$line]} && now - sa_since < 10 )) && continue
+    event="$id waits on a SecurityAgent dialog ($line); answer with mini pw --sa if the runbook expects it, then termwait <secs> --after $id --until-input"
+    return 0
+  done
+  return 1
+}
+no_echo() {
+  local tty pane
+  tty=$(with_timeout 5 $terminal tty </dev/null 2>/dev/null) && [[ $tty == /dev/* ]] || return 1
+  if (( $+commands[tmux] )); then
+    pane=$(with_timeout 5 tmux display-message -c $tty -p '#{pane_tty}' </dev/null 2>/dev/null) &&
+      [[ $pane == /dev/* ]] && tty=$pane
+  fi
+  local -a modes
+  modes=(${=$(with_timeout 5 stty -a -f $tty </dev/null 2>/dev/null)}) || return 1
+  (( ${modes[(Ie)-echo]} && ${modes[(Ie)icanon]} ))
+}
+prompt_event() {
+  local -a lines=(${(f)1})
+  local last=${${(M)lines:#*[^[:space:]]*}[-1]-}
+  while [[ $last == *[[:space:]] ]]; do last=${last%?}; done
+  if [[ ${(L)last} =~ '(password|passphrase)[^:]*:$' ]]; then
+    no_echo || return 1
+    event="$id at a password prompt (no echo verified); answer with mini pw if the runbook expects it"
+  elif [[ $last == *('[y/N]'|'[Y/n]'|'[y/n]'|'?:') ]]; then
+    event="$id at a prompt; answer with ans --to $id"
+  else return 1
+  fi
+}
 ready() {
   local snapshot stamp
   [[ -e $marker ]] && return 0
   stamp=$(date +%s)
   (( stamp < end )) || return 0
+  (( until_input )) && sa_dialog && return 0
   snapshot=$(~/apm/bin/termtail --all 2>/dev/null) || { have=0; return 1; }
   [[ -e $marker ]] && return 0
   stamp=$(date +%s)
   (( stamp < end )) || return 0
+  if (( until_input )); then prompt_event "$snapshot"; return; fi
   if (( have )) && [[ $snapshot == "$previous" ]]; then
     if (( stamp - idle_since >= 3 )); then look_now=1; return 0; fi
   else idle_since=$stamp
@@ -35,6 +82,7 @@ ready() {
 poll $((q + 1)) 1 ready
 ~/apm/bin/termtail
 if [[ ! -e $marker ]]; then
+  [[ -z $event ]] || { print -u2 -r -- "termwait: input: $event"; exit 75; }
   if (( look_now )); then
     print -u2 -r -- "termwait: look now: $id idle for 3 s; waiting for input or quiet; not finished; use termtail, then termwait <secs> --after $id"
     exit 75
