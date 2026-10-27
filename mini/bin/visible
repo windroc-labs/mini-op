@@ -16,6 +16,7 @@ elif [[ $# -eq 1 && $1 == <-> ]]; then secs=$1
 elif [[ $# -ne 0 ]]; then usage_error
 fi
 umask 077
+source ${0:A:h}/../lib/timeout.zsh || exit 1
 root=~/apm/state/visible
 if [[ $mode == run ]]; then
   input=$(cat; print x); input=${input%x}
@@ -44,7 +45,6 @@ if [[ $mode == run ]]; then
   end=$(( $(date +%s) + secs ))
   print -r -- "~/apm/bin/visible --execute $id" | ~/apm/bin/ans $secs >/dev/null 2>$job/launch.stderr; wait_rc=$?
   if (( wait_rc == 75 )); then
-    source ${0:A:h}/../lib/timeout.zsh || exit 1
     remaining=$(( end - $(date +%s) )); (( remaining >= 0 )) || remaining=0
     poll $((remaining + 1)) 1 test -e $job/rc
   fi
@@ -56,7 +56,6 @@ fi
 if [[ ! -e $job/rc ]]; then
   [[ $mode != run ]] || cat $job/launch.stderr >&2
   print -u2 -r -- "visible: still running or launch uncertain: $id; recover with mini exec --collect $id"
-  source ${0:A:h}/../lib/timeout.zsh || exit 124
   if ! list=$(with_timeout 10 ~/apm/bin/dialogs </dev/null 2>/dev/null); then
     print -u2 -r -- 'visible: cannot list dialogs'
   elif [[ -z $list ]]; then print -u2 -r -- 'visible: no dialogs on the mini'

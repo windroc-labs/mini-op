@@ -267,9 +267,10 @@ test("-h prints the usage to stdout and touches nothing", async (t) => {
 });
 
 // --until-input scenes: the screen, the front tab's tty, its stty modes and the dialogs listing.
-// A file named <name>.<clock> wins over <name> once the fake clock reaches that second.
+// The fake clock starts at ID's epoch plus the scene's age (0: ans's own wait for a command it just
+// typed). A file named <name>.<n> wins over <name> once n seconds have passed.
 const AT = (name: string) =>
-  `f=$FAKE_DIR/${name}.$(cat "$FAKE_DIR/clock" 2>/dev/null || print 0); [[ -e $f ]] || f=$FAKE_DIR/${name}`;
+  `f=$FAKE_DIR/${name}.$(( $(cat "$FAKE_DIR/clock") - $(cat "$FAKE_DIR/start") )); [[ -e $f ]] || f=$FAKE_DIR/${name}`;
 const TTY = "/dev/ttys001";
 const NO_ECHO = "lflags: icanon isig iexten -echo echoe echok\n";
 type Scene = {
@@ -280,12 +281,19 @@ type Scene = {
   // "FAIL" at a second makes that second's read fail.
   dialogs?: Record<string, string> | null;
   finish?: string;
+  age?: number;
+  // seconds after which the screen changes to this text
+  later?: [number, string];
 };
 
 async function inputSandbox(t: Parameters<typeof Sandbox.create>[0]) {
   const { sb, done } = await sandbox(t);
   const wait = async (args: string[], scene: Scene = {}) => {
     fakeTerminal(sb, { screen: scene.screen ?? "mini ~ % " }, FINISHING_SLEEP);
+    const start = String(Number(ID.split("-")[0]) + (scene.age ?? 0));
+    for (const name of ["clock", "start"]) fs.writeFileSync(path.join(sb.dir, name), start);
+    if (scene.later)
+      fs.writeFileSync(path.join(sb.dir, `screen.${scene.later[0]}`), scene.later[1]);
     if (scene.finish !== undefined) fs.writeFileSync(path.join(sb.dir, "finish"), scene.finish);
     for (const [at, text] of Object.entries(scene.dialogs ?? {}))
       fs.writeFileSync(path.join(sb.dir, at === "0" ? "dialogs" : `dialogs.${at}`), text);
@@ -293,7 +301,8 @@ async function inputSandbox(t: Parameters<typeof Sandbox.create>[0]) {
       {
         program: "terminal.js",
         args: ["contents"],
-        shell: `${AT("screen")}; cat $f; print`,
+        shell: `${AT("screen")}; cat $f; print
+[[ -e $FAKE_DIR/slow ]] && print $(( $(cat "$FAKE_DIR/clock") + 1 )) > "$FAKE_DIR/clock"; true`,
       },
       scene.tty === null
         ? { program: "terminal.js", args: ["tty"], exit: 1 }
@@ -489,4 +498,31 @@ test("--until-input never returns the idle 75", async (t) => {
   assert.equal(r.code, 124);
   assert.equal(r.stderr, STILL(5));
   assert.equal(sleeps(sb).length, 5);
+});
+
+test("--until-input: a question on screen when a later wait starts counts once the screen changes", async (t) => {
+  const answered = await inputSandbox(t);
+  const r = await answered.wait(["3", "--after", ID, "--until-input"], {
+    screen: "Proceed? [Y/n] ",
+    age: 100,
+  });
+  assert.equal(r.code, 124, r.stderr);
+  assert.equal(r.stderr, STILL(3));
+  const { sb, wait } = await inputSandbox(t);
+  const next = await wait(["30", "--after", ID, "--until-input"], {
+    screen: "Proceed? [Y/n] ",
+    age: 100,
+    later: [2, "Proceed? [Y/n] \nInstalling\nOverwrite config? [y/N] "],
+  });
+  assert.equal(next.code, 75, next.stderr);
+  assert.equal(next.stderr, PROMPT);
+  assert.deepEqual(sleeps(sb), ["1", "1"]);
+});
+
+test("--until-input: a 1 s recheck still reads the prompt after slow reads", async (t) => {
+  const { sb, wait } = await inputSandbox(t);
+  fs.writeFileSync(path.join(sb.dir, "slow"), "");
+  const r = await wait(["1", "--after", ID, "--until-input"], { screen: "Password:", age: 30 });
+  assert.equal(r.code, 75, r.stderr);
+  assert.equal(r.stderr, PASSWORD);
 });

@@ -343,6 +343,17 @@ test("--until-input reaches termwait for new commands and --to answers", async (
   }
 });
 
+test("--to --until-input does not re-report the question it just answered with Enter", async (t) => {
+  const { r } = await ans(t, "\n", ["3", "--to", "1761200000-4242-17", "--until-input"], {
+    runs: false,
+    lands: false,
+    screen: "Proceed? [Y/n] ",
+    dialogs: "",
+  });
+  assert.equal(r.code, 124, r.stderr);
+  assert.match(r.stderr, /termwait: still running: 1761200000-4242-17 \(after 3 s\)/);
+});
+
 test("bad arguments and empty commands are refused before typing", async (t) => {
   const cases: [string, string[]][] = [
     ["echo hi", ["--to", "../x"]],

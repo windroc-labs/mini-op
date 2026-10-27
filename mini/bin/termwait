@@ -1,5 +1,6 @@
 #!/usr/bin/env zsh
-usage="termwait <secs> --after <id> [--until-input]   wait up to <secs> s for the command ans typed as <id> to end
+usage="termwait <secs> --after <id> [--until-input]
+wait up to <secs> s for the command ans typed as <id> to end.
 Prints the Terminal's last 25 nonblank lines (secrets hidden by ~/apm/lib/secrets.zsh) and
 \"<id> exited <rc>\", and deletes its marker ~/apm/state/done/<id> (the typed command writes its rc
 there via <id>.tmp + mv; see ans). Markers and temp files there over a day old are deleted on each
@@ -9,7 +10,8 @@ run. Exits 0 (<id> exited 0), 1 (<id> exited non-zero, or its marker holds no rc
 with ans --to or keep waiting. Interactive installs: at most 30 s per wait.
 --until-input: no idle 75; instead 75 at the first input the command waits on, named on stderr
 (\"termwait: input: <id> ...\"): a question prompt (last nonblank line ends in [y/N], [Y/n], [y/n]
-or ?:), a password prompt verified as no echo (stty of the front tab's tty, or its tmux pane's,
+or ?:; one already on screen at the wait's first read counts once the screen changes, unless ans
+typed <id> under 5 s ago), a password prompt verified as no echo (stty of the front tab's tty, or its tmux pane's,
 shows -echo and icanon), or a SecurityAgent dialog (~/apm/bin/dialogs; one already listed at the
 wait's first read only once it is still up 10 s later). Waits up to 120 s each."
 # Only the marker proves completion. Three seconds of unchanged readable contents is merely a
@@ -23,6 +25,9 @@ source ${0:A:h}/../lib/timeout.zsh || exit 1
 q=$1; id=$3; dir=~/apm/state/done; marker=$dir/$id
 for f in $dir/<->-<->-<->(N.mh+24) $dir/<->-<->-<->.tmp(N.mh+24); do rm -f -- "${f:?}"; done
 end=$(( $(date +%s) + q )); have=0; look_now=0; event=""; sa_read=0; sa_since=0; sa_base=()
+# An answered question (Enter on [Y/n]) stays the last line: only ans's own wait for the command it
+# just typed (<id> starts with that epoch) takes a question already on screen at the first read.
+fresh=0; (( end - q - ${id%%-*} >= 0 && end - q - ${id%%-*} < 5 )) && fresh=1; q_base=""; q_read=0
 terminal=(osascript -l JavaScript ~/apm/js/terminal.js)
 # A SecurityAgent line not in the first successful read, or still there 10 s after it.
 sa_dialog() {
@@ -57,6 +62,7 @@ prompt_event() {
     no_echo || return 1
     event="$id at a password prompt (no echo verified); answer with mini pw if the runbook expects it"
   elif [[ $last == *('[y/N]'|'[Y/n]'|'[y/n]'|'?:') ]]; then
+    (( fresh )) || [[ $1 != "$q_base" ]] || return 1
     event="$id at a prompt; answer with ans --to $id"
   else return 1
   fi
@@ -69,9 +75,12 @@ ready() {
   (( until_input )) && sa_dialog && return 0
   snapshot=$(~/apm/bin/termtail --all 2>/dev/null) || { have=0; return 1; }
   [[ -e $marker ]] && return 0
+  if (( until_input )); then
+    (( q_read )) || { q_read=1; q_base=$snapshot; }
+    prompt_event "$snapshot"; return
+  fi
   stamp=$(date +%s)
   (( stamp < end )) || return 0
-  if (( until_input )); then prompt_event "$snapshot"; return; fi
   if (( have )) && [[ $snapshot == "$previous" ]]; then
     if (( stamp - idle_since >= 3 )); then look_now=1; return 0; fi
   else idle_since=$stamp

@@ -32,6 +32,7 @@ test("visible returns complete separate streams, preserves blank lines and shows
   assert.match(typed(sb) ?? "", /visible --execute \d+-\d+-\d+/);
   assert.ok(!(typed(sb) ?? "").includes("line 79"));
   assert.deepEqual(fs.readdirSync(jobs(sb)), []);
+  assert.ok(!sb.calls("osascript").some((call) => call.program === "dialogs.js"));
 });
 
 test("exit and syntax errors are captured without losing completion", async (t) => {
@@ -45,6 +46,7 @@ test("exit and syntax errors are captured without losing completion", async (t) 
     const sb = await setup(t);
     const r = await sb.run(["zsh", VISIBLE, "0"], { input: command });
     assert.equal(r.code, code, r.stderr);
+    assert.ok(!r.stderr.includes("dialogs"));
     assert.deepEqual(fs.readdirSync(jobs(sb)), []);
   }
 });
