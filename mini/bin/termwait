@@ -63,7 +63,7 @@ prompt_event() {
   elif [[ $last == *('[y/N]'|'[Y/n]'|'[y/n]'|'?:') ]]; then
     [[ -n $answered && $(print -r -- "$1" | sed -E '/^[[:space:]]*$/d' | tail -n 3) == "$answered" ]] &&
       return 1
-    event="$id at a prompt; answer with ans --to $id"
+    event="$id at a prompt; answer with ans --to $id --until-input"
   else return 1
   fi
 }

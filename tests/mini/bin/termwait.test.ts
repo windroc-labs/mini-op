@@ -332,7 +332,7 @@ async function inputSandbox(t: Parameters<typeof Sandbox.create>[0]) {
   return { sb, done, wait, sttyTtys };
 }
 
-const PROMPT = `termwait: input: ${ID} at a prompt; answer with ans --to ${ID}\n`;
+const PROMPT = `termwait: input: ${ID} at a prompt; answer with ans --to ${ID} --until-input\n`;
 const PASSWORD = `termwait: input: ${ID} at a password prompt (no echo verified); answer with mini pw if the runbook expects it\n`;
 const STILL = (secs: number) =>
   `termwait: still running: ${ID} (after ${secs} s); keep waiting with termwait <secs> --after ${ID}\n`;
