@@ -15,7 +15,8 @@ mini sudo <command> [args]    run <command> with sudo on the mini (stdin /dev/nu
                               checks the password only
 mini chord <mods> <key code>  in the mini's front Terminal hold the modifiers (command,control,
                               option,shift), press and release the key, release the modifiers last;
-                              a killed chord (124 after 10 s) gets a separate release of them
+                              a killed chord gets a separate release of them and exits 124 (the 10 s
+                              timeout) or 1
 mini sync [--check]           copy mini/ with its VERSION stamp to the mini's ~/apm, keeping
                               ~/apm/state/; --check exits 1 unless the mini's ~/apm/VERSION matches
 pw and sudo send the mini account's password from \$(env_secrets_dir)/mini-password
