@@ -65,23 +65,23 @@ Files sit by where they run.
 
 | Script | What it does |
 | --- | --- |
-| `mini/bin/ans [secs] [--to <id>]` | types stdin into the mini's Terminal plus Enter (a command with an exit-code marker; with `--to`, an answer to command `<id>` as is), scrolls to bottom, then runs `termwait` (Waiting and answering) |
-| `mini/bin/termwait <secs> --after <id>` | marker proves completion; unchanged readable contents for 3 s returns 75 (look now, never completion); limit is 124; last lines redacted (Waiting and answering) |
+| `mini/bin/ans [secs] [--to <id>] [--until-input]` | types stdin into the mini's Terminal plus Enter (a command with an exit-code marker; with `--to`, an answer to command `<id>` as is), scrolls to bottom, then runs `termwait` (with `--until-input`: `termwait --until-input`; Waiting and answering) |
+| `mini/bin/termwait <secs> --after <id> [--until-input]` | marker proves completion; unchanged readable contents for 3 s returns 75 (look now, never completion); `--until-input` instead returns 75 at the first prompt, verified no-echo password prompt or SecurityAgent dialog, named on stderr; limit is 124; last lines redacted (Waiting and answering) |
 | `mini/bin/termtail [N \| --all]` | read-only redacted Terminal tail (default 25 nonblank lines); --all reads the full snapshot; never types, activates or scrolls |
 | `mini/js/keys.js [--enter] [--front Terminal\|Chrome\|SecurityAgent\|SettingsSheet] [--secret] [--verify-field] [--wake]` | JXA: types stdin as keystrokes, less one trailing newline; `--enter` adds Enter, `--front` types only into that app (Chrome: only while it is frontmost; SecurityAgent: its one focused secure field; SettingsSheet: System Settings frontmost with a focused secure field), `--verify-field` checks the field got every character and clicks Allow (SettingsSheet: OK), `--secret` keeps the text out of every message |
 | `mini/js/click.js <x> <y>` | JXA: click at screen coordinates |
-| `mini/js/terminal.js activate\|front\|history [--all]\|contents\|bottom`, `mini/js/chrome.js activate\|close <url-substring>\|hide\|auth` | JXA: Terminal (activate hides Chrome; bottom is Cmd+End); Chrome hide verifies it is hidden; auth consumes a trusted page program on stdin, never a token argv, and fails safely unless one Linear tab and JavaScript from Apple Events are available |
+| `mini/js/terminal.js activate\|front\|history [--all]\|contents\|bottom\|tty`, `mini/js/chrome.js activate\|close <url-substring>\|hide\|auth` | JXA: Terminal (activate hides Chrome; bottom is Cmd+End; tty names the front tab's tty); Chrome hide verifies it is hidden; auth consumes a trusted page program on stdin, never a token argv, and fails safely unless one Linear tab and JavaScript from Apple Events are available |
 | `mini/bin/dialogs [click <button>]` | lists on-screen windows with buttons, or presses the named button (`mini/js/dialogs.js`) |
 | `mini/bin/front <url-substring>` | brings the Chrome tab whose URL matches to the front (`mini/js/front.js`); exits 1 when none matches |
-| `mini/bin/o` | foreground wrapper for `opencli browser` (e.g. `role`, `mail`); `--private` hides Chrome and selects background for secret-bearing pages; window placement is automatic; caller `--window` options are unsupported |
+| `mini/bin/o`, `o evalfile <session> <file.js> [--private]` | foreground wrapper for `opencli browser` (e.g. `role`, `mail`); `--private` hides Chrome and selects background for secret-bearing pages; window placement is automatic; caller `--window` options are unsupported; `evalfile` runs a file's public JS as one argument, with no shell quoting (Browser) |
 | `mini/bin/secfield <session> <css>` | masks the field, real-clicks it and verifies focus and password type before typing stdin; prints no secret |
 | `mini/bin/shot [out.png]` | screenshots the mini, refused while a Terminal window holds a secret (a pattern in `mini/lib/secrets.zsh`) or cannot be read |
 | `ctl/mini sync [--check]` | run on this Mac or in mini-op: copy `mini/` to the mini's `~/apm/` with its `VERSION` stamp, keeping `~/apm/state/`; `--check` exits 1 unless the mini's `~/apm/VERSION` matches |
 | `host/update <checkout>` | on this Mac: snapshots the checkout's `.mini-op/runbooks/` into the direct-use container's workspace, regular files only (`host/README.md`, Hand over a project) |
 | `ctl/runbook list\|path <name> [--project <name>] [--workspace <dir>]` | in mini-op: `/mini-op`'s runbook lookup, the current project's runbooks before the built-in; details: `ctl/runbook -h` |
 | `ctl/runbook deploy <name> [--project <name>] [--workspace <dir>]` | in mini-op: puts a project runbook's scripts on the mini; details: `ctl/runbook -h` |
-| `ctl/mini exec [secs]`, `mini exec --collect <id>` | public noninteractive stdin runs through `mini/bin/visible` in Terminal; returns complete separate stdout/stderr and original status 0–255; a timeout retains a private job for collect, which never executes it again (`runbooks/visible-operations.md`) |
-| `ctl/mini run [secs] [--to <id>]` | run on this Mac or in mini-op: types stdin into the mini's Terminal with `~/apm/bin/ans` and waits (Waiting and answering); not for secrets: use mini pw |
+| `ctl/mini exec [secs]`, `mini exec --collect <id>` | public noninteractive stdin runs through `mini/bin/visible` in Terminal; returns complete separate stdout/stderr and original status 0–255; a timeout retains a private job for collect, which never executes it again, and lists the mini's dialogs (`mini/bin/dialogs`) so a blocking macOS prompt shows at once (`runbooks/visible-operations.md`) |
+| `ctl/mini run [secs] [--to <id>] [--until-input]` | run on this Mac or in mini-op: types stdin into the mini's Terminal with `~/apm/bin/ans` and waits, in one ssh call (Waiting and answering); not for secrets: use mini pw |
 | `ctl/mini chord <mods> <key code>` | run on this Mac or in mini-op: a held-modifier chord (`mini/lib/chord.applescript`) into the mini's front Terminal; a killed chord gets a separate release of its modifiers (`chord.applescript --release`) and exits 124 (the 10 s timeout) or 1 |
 | `ctl/mini pw [--lock \| --sa \| --settings]` | mini-op only: types the mini's password from `/run/ensemble/secrets/env/mini-password` (Rules) into the mini's front Terminal, the lock screen (`--lock`), the SecurityAgent dialog (`--sa`: clicks Allow, only when its one secure field is focused) or a System Settings password sheet (`--settings`: clicks OK, only while System Settings is frontmost with a focused secure field) |
 | `ctl/mini sudo <command> [args]`, `ctl/mini sudo -v` | mini-op only: runs a command with sudo on the mini, the password from `/run/ensemble/secrets/env/mini-password`; `-v` checks the password only |
@@ -118,21 +118,39 @@ Outside a page: screenshots only with `~/apm/bin/shot`, scp back, then `sips -Z 
 1. Keep one Chrome window: OpenCLI's own, holding session `role` (Linear) and session `mail` (Outlook, opened with `o open … --session mail`). Close any other window.
 2. Drive ordinary pages with `~/apm/bin/o <command> --session <name>` (foreground is enforced), after `~/apm/bin/front <url part>` raises the safe tab; wait with `o wait text|selector …`, not `sleep`. Authentication mail and secret-producing steps use `--private`; never raise them to fix a rendering failure. The private mail-link exchange uses Chrome's existing View › Developer › Allow JavaScript from Apple Events permission (the user enables it); without it, follow fails safely. `--code` uses the masked secfield route.
 3. A React field that stays empty after `o type`: click it with `click.js` and type with `keys.js`.
+4. JS with quotes goes in a file, never through shell quoting: `ssh mini '~/apm/bin/o evalfile role /dev/stdin' < read.js` (or a file on the mini). `evalfile` passes the file's JS to `o eval` as one argument, so it must be public.
 
 ### Waiting and answering
 
-During an interactive install, wait **at most 30 s at a time**, then read `~/apm/bin/termtail [N]` (default 25 nonblank lines, redacted). Never wait 240–600 s through a prompt. Start a public interactive command with `printf '%s\n' '<cmd>' | mini run 30`; on the mini, `ans 30` does the same. Public noninteractive work needing complete stdout/stderr uses `mini exec` instead.
+During an interactive install, wait **at most 30 s at a time**, then read `~/apm/bin/termtail [N]` (default 25 nonblank lines, redacted); with `--until-input` (below), at most 120 s. Never wait 240–600 s through a prompt. Start a public interactive command with `printf '%s\n' '<cmd>' | mini run 30`; on the mini, `ans 30` does the same. Public noninteractive work needing complete stdout/stderr uses `mini exec` instead.
 
 `ans` types a command wrapped to write its exit status atomically to `~/apm/state/done/<id>` (`<id>.tmp` then rename). **Only that marker proves completion.** `termwait <secs> --after <id>` checks it and reads full redacted Terminal contents: three seconds unchanged returns **75**, a “look now” signal, including for a quiet command still doing work. Prompt text never proves completion. Read failures do not count as idle. 0 means the marker held 0; 1 means a nonzero/malformed marker or failure; 124 means the wait limit was reached. Each wait result attempts a redacted tail; read failures print a diagnostic. 75/124 keep the command pending; only a completed marker is consumed. Markers older than a day are cleaned up.
 
+**`--until-input`** (`mini run 120 --until-input`, `ans 120 --until-input`, `termwait <secs> --after <id> --until-input`) waits in one call and returns at the first input the command waits on, never on idle: **75** with a stderr line `termwait: input: <id> …` naming a question prompt (the last nonblank line ends in `[y/N]`, `[Y/n]`, `[y/n]` or `?:`), a password prompt verified as no echo (`stty` of the front tab's tty, or its tmux pane's, shows `-echo` and `icanon`; a `Password:` line with echo on is no event), or a SecurityAgent dialog (a `dialogs` line; one already up when the wait starts counts only once it is still up 10 s later). The marker still wins (0/1 as without the flag); 124 at the limit. It replaces custom polling loops (`ctl/CLAUDE.md` rule 7).
+
+**The wait loop.** Answer each `termwait: input:` line at once, then wait again on the same id until 0 or 1:
+
+- A question: read the prompt, then `printf '%s' '<public answer>' | mini run 120 --to <id> --until-input`.
+- A password prompt: `mini pw`, only when the current runbook step expects that prompt from a named program (sudo, an installer). A prompt from anything else goes to the user.
+- A SecurityAgent dialog: the existing `mini pw --sa` (its one focused secure field, then Allow; never Always Allow), only when the runbook step expects a keychain dialog: the dialog line does not name the program asking. Otherwise hand it to the user.
+- Wait again: `ssh mini '~/apm/bin/termwait 120 --after <id> --until-input'` (a readback). Exit 2 is a usage error (fix the id); 255 or another code besides 0/1/75/124 is a connection failure: the command is untouched, so check the connection and wait again; never retype. If time passed since a password event, recheck with `termwait 1 --after <id> --until-input` and answer only a fresh one.
+
+Residual risk: during an expected step, a look-alike `Password:` prompt with echo off, or a process named SecurityAgent, would still get the password; keep each expected answer to its step.
+
 ```mermaid
 flowchart TD
-  A[mini run 30] --> B{result}
+  A[mini run 120 --until-input] --> B{result}
   B -->|0 or 1 plus exited rc| C[completed marker]
-  B -->|75 or 124| D[termtail]
+  B -->|75 input: prompt| F[mini run --to id]
+  B -->|75 input: password or SecurityAgent| P{runbook expects it?}
+  P -->|yes| Q[mini pw or mini pw --sa]
+  P -->|no| U[the user answers]
+  B -->|124, or 75 without the flag| D[termtail]
   D --> E{input required?}
-  E -->|confirmed prompt| F[mini run 30 --to id]
-  E -->|still working| G[termwait 30 --after id]
+  E -->|confirmed prompt| F
+  E -->|still working| G[termwait --after id --until-input]
+  Q --> G
+  U --> G
   F --> B
   G --> B
 ```
@@ -160,6 +178,7 @@ A project's own gotchas (for ensemble: Outlook, GitHub, Linear, Strata and OpenC
 - **Never type a secret by OS keystrokes after only an OpenCLI (CDP) click.** A CDP click does not move macOS keyboard focus out of Chrome's address bar: on 2026-10-21 the GitHub password went into the omnibox and out as a Google search, and the account password had to be changed. Type secrets with `~/apm/bin/secfield <session> <css>` (secret on stdin): it real-clicks the field, checks `document.hasFocus()` and the active element, and types nothing otherwise.
 - **Screenshots of the mini only through `~/apm/bin/shot`**: it refuses while a Terminal window holds a secret (a pattern in `mini/lib/secrets.zsh`) or cannot be read. install.sh's Claude Code login leaves the full setup-token on screen; a raw `screencapture` there put it in my transcript on 2026-10-21.
 - **Every key chord on the mini: hold the modifier(s), press and release the key, then release the modifier(s) last** (the user, 2026-10-21): `tell application "System Events"` / `key down command` / `delay 0.2` / `key code 9` / `delay 0.2` / `key up command` for Cmd-V; the same for Ctrl-C (`key down control` … `key code 8` … `key up control`). In the Terminal: `ctl/mini chord <mods> <key code>` from this Mac (e.g. `mini chord command 40` clears it, `mini chord control 8` interrupts). JXA's `keyDown("command")` sends nothing useful: use AppleScript's `key down command`. Never a one-shot `keystroke … using … down`: GitHub's device-code boxes got Cmd-V that way as a typed "v", and the code landed one box to the right. Pasting: real click on the field, Escape (closes Chrome's autofill list), then the held Cmd-V. Set the clipboard on the mini with `printf '%s' … | pbcopy`.
+- **Terminal needs Automation for Google Chrome.** The first `chrome.js` call from a Terminal command raises "“Terminal” wants access to control “Google Chrome”" and blocks with no sign in the command's output until someone answers. Grant it once during setup (`runbooks/setup-test-env.md`, 2. Browser, step 4); `mini exec` on a timeout lists the mini's dialogs, so a prompt like it shows at once.
 - **System Settings password prompts are not SecurityAgent** (macOS 26+). A sheet in System Settings asks (e.g. Software Update), so `mini pw --sa` says "no SecurityAgent; typed nothing". Use `mini pw --settings`: it types only while System Settings is frontmost with a focused secure field, checks the field got every character, then clicks OK.
 - **A locked screen eats keystrokes.** The mini's screen locks: screenshots come back all black, `ioreg -n Root -d1 -a` shows `CGSSessionScreenIsLocked` true, and keystrokes never reach Terminal while `mini pw` still reports "sent". Check for a lock before trusting a "sent". Unlock with mini-op's `mini pw --lock` (wakes the display, presses Shift, types the password from `/run/ensemble/secrets/env/mini-password`, reports "unlocked" or "still locked"), check with `~/apm/bin/shot`, then run `nohup caffeinate -dimsu -t 28800 &` on the mini so it stays unlocked through long runs. It ends after 8 hours: restart it before each long session.
 - **The mini can stop at the login window.** With no one logged in (`stat -f%Su /dev/console` prints `root`) nothing reaches a Terminal, and the login window's selected user and focus cannot be checked, so never type there. On 2026-10-24 a reboot alone did not help: auto-login had broken (`/etc/kcpassword` was gone). Run mini-op's `mini-autologin --reboot`: it restores auto-login as root, reboots and waits for the account; if it fails, stop and ask the user to log it in (Screen Sharing: `runbooks/setup-test-env.md` 1.4).

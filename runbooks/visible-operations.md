@@ -10,15 +10,15 @@ Source: WDRC-156. Covers mini-side operations in `mini/`, `ctl/`, all runbooks a
 
 | Operation | Status | Route and reason |
 | --- | --- | --- |
-| `ctl/mini exec`, `mini/bin/visible` | visible now | Terminal shows public commands and output; complete stdout/stderr are captured separately, with an atomic status file; exit codes 0–255 are preserved |
+| `ctl/mini exec`, `mini/bin/visible` | visible now | Terminal shows public commands and output; complete stdout/stderr are captured separately, with an atomic status file; exit codes 0–255 are preserved; a 124 also lists the mini's dialogs |
 | `ctl/mini run`, `mini/bin/ans` new commands and `--to` answers | already visible | Terminal typing and scrolling to the bottom; only a marker proves completion; secret answers require a confirmed no-echo prompt |
-| `mini/bin/termwait`, `mini/bin/termtail`, `visible --collect` | cannot be visible | Reading the screen, completion files and saved results is a machine readback; 75 only asks for inspection after idle, while a marker proves completion; collection must not rerun the already visible command |
+| `mini/bin/termwait`, `mini/bin/termtail`, `visible --collect` | cannot be visible | Reading the screen, completion files and saved results is a machine readback; 75 only asks for inspection after idle (`--until-input`: at a prompt, a verified no-echo password prompt or a SecurityAgent dialog, read from `dialogs` and the prompt tty's `stty`), while a marker proves completion; collection must not rerun the already visible command |
 | `terminal.js activate/front/bottom` | already visible | Activate, verify foreground and scroll to the bottom; keep window position and size |
 | `terminal.js history/contents`, `--all` | cannot be visible | Screen readback and secret checks; redact through termwait rather than printing raw history in Terminal |
 | `keys.js`, `click.js`, `ctl/mini chord`, `chord.applescript` | already visible | Foreground keyboard and pointer actions; secrets only through stdin, `--secret` and a confirmed hidden prompt; page secrets use secfield |
 | `mini/bin/dialogs`, `dialogs.js` listing/clicking | already visible | Read buttons or click in displayed macOS windows; structured readback lets the operator decide |
 | `mini/bin/front`, `front.js`, `chrome.js activate/close` | already visible | Foreground tabs/windows and closing actions; keep secret-bearing pages out of the foreground |
-| `mini/bin/o` ordinary open/bind/state/eval/wait/click/type/tab/close, etc. | visible now | Automatically selects foreground internally and rejects caller window overrides; preserves results and status; read the page before acting |
+| `mini/bin/o` ordinary open/bind/state/eval/evalfile/wait/click/type/tab/close, etc. | visible now | Automatically selects foreground internally and rejects caller window overrides; preserves results and status; read the page before acting |
 | `mini/bin/o --private`, `chrome.js hide` | cannot be visible | Auth mail, key generation/copying and redirects containing codes can expose secrets; verify Chrome is hidden before background work; pipe secret replies to a consumer or private file; leave the secret page before restoring foreground |
 | `mini/bin/secfield`, `page/field.js` | already visible | Mask the field before the real click; verify page/field focus and password type; secrets arrive only on stdin, with no code or password printed |
 | `mini/bin/shot`, screenshot scp transfer/resizing | cannot be visible | Capturing and returning pixels is a read channel; the captured desktop is already visible; refuse screenshots when secrets are present or Terminal cannot be read |
