@@ -668,10 +668,12 @@ test("chord's success and refusal send no release", async (t) => {
   }
 });
 
-// A killed chord never reaches chord.applescript's own release: mini chord sends it separately.
-const RELEASE = { program: "chord.applescript", args: ["--release"] };
+// A killed chord never reaches chord.applescript's own release: mini chord sends it separately,
+// before it prints anything (a gone ssh caller can end the remote shell at its first echo). The
+// release's own stderr line first in the output shows it ran before mini's first line.
+const RELEASE = { program: "chord.applescript", args: ["--release"], stderr: "chord: releasing\n" };
 
-test("chord's timeout releases the chord's modifiers and exits 124", async (t) => {
+test("chord's timeout releases the chord's modifiers first and exits 124", async (t) => {
   const sb = await sandbox(t, [
     { ...RELEASE, stdout: "chord: released command,shift\n" },
     { program: "chord.applescript", shell: HANGS },
@@ -680,7 +682,8 @@ test("chord's timeout releases the chord's modifiers and exits 124", async (t) =
   assert.equal(r.code, 124);
   assert.equal(
     r.stderr,
-    "mini: chord: killed after 10 s: the chord\n" +
+    "chord: releasing\n" +
+      "mini: chord: killed after 10 s: the chord\n" +
       "mini: chord: released command,shift after the timeout\n",
   );
   assert.equal(r.stdout, "");
@@ -703,8 +706,8 @@ test("chord's timeout says so when the release fails or hangs", async (t) => {
     assert.equal(r.code, 124);
     assert.equal(
       r.stderr,
-      "mini: chord: killed after 10 s: the chord\n" +
-        (release.stderr ?? "") +
+      (release.stderr ?? "") +
+        "mini: chord: killed after 10 s: the chord\n" +
         "mini: chord: could not release control; a modifier may still be held\n",
     );
     assert.deepEqual(sb.calls("osascript")[1]?.argv.slice(1), ["--release", "control"]);
@@ -720,7 +723,9 @@ test("a chord killed otherwise releases its modifiers and exits 1", async (t) =>
   assert.equal(r.code, 1);
   assert.equal(
     r.stderr,
-    "mini: chord: the chord exited 137\nmini: chord: released option after the chord exited 137\n",
+    "chord: releasing\n" +
+      "mini: chord: the chord exited 137\n" +
+      "mini: chord: released option after the chord exited 137\n",
   );
   assert.deepEqual(sb.calls("osascript")[1]?.argv.slice(1), ["--release", "option"]);
 });

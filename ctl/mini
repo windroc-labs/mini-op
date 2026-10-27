@@ -181,12 +181,14 @@ chord_mini() {
     usage_error 'mini chord <mods> <key code>'
   local chord='osascript ~/apm/lib/chord.applescript'
   # 0 and 1 mean the chord released its modifiers itself; a killed chord (124: the timeout) never
-  # got there, so its modifiers are released in a separate, also bounded, step.
+  # got there, so its modifiers are released in a separate, also bounded, step. That step runs
+  # before any echo: with the local ssh caller gone, the first echo can end the shell (SIGPIPE).
   on_mini chord "with_timeout 10 $chord $1 $2; rc=\$?
 [ \$rc -le 1 ] && exit \$rc
+with_timeout 5 $chord --release $1 >/dev/null; released=\$?
 if [ \$rc -eq 124 ]; then why='the timeout'; echo 'mini: chord: killed after 10 s: the chord' >&2
 else why=\"the chord exited \$rc\"; echo \"mini: chord: \$why\" >&2; fi
-if with_timeout 5 $chord --release $1 >/dev/null; then echo \"mini: chord: released $1 after \$why\" >&2
+if [ \$released -eq 0 ]; then echo \"mini: chord: released $1 after \$why\" >&2
 else echo 'mini: chord: could not release $1; a modifier may still be held' >&2; fi
 [ \$rc -eq 124 ] && exit 124; exit 1"
 }
