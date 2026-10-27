@@ -45,7 +45,8 @@
     "file": "mini/lib/chord.applescript",
     "reason": "the held-modifier chord program: AppleScript, as JXA's keyDown sends nothing useful (tests/registry/applescript.json)",
     "tests": [
-      "tests/ctl/mini.test.ts"
+      "tests/ctl/mini.test.ts",
+      "tests/mini/lib/chord.test.ts"
     ]
   }
 ]
