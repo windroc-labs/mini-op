@@ -4,7 +4,7 @@
 // typed command writes land in the sandbox's ~/apm as on the mini.
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { Sandbox } from "./sandbox.ts";
+import type { FakeRule, Sandbox } from "./sandbox.ts";
 
 const SCREEN = `{ cat "$FAKE_DIR/screen" 2>/dev/null || print -rn -- 'mini ~ % '; }; print`;
 const TYPE = `print type >> "$FAKE_DIR/events"
@@ -20,13 +20,13 @@ print Terminal`;
 export const SLEEP = `print -r -- "$1" >> "$FAKE_DIR/sleeps"
 clock=$(cat "$FAKE_DIR/clock" 2>/dev/null || print 0); print $(( clock + $1 )) > "$FAKE_DIR/clock"`;
 
-// dialogs: what ~/apm/bin/dialogs lists (termwait --until-input reads it).
+// dialogs: what ~/apm/bin/dialogs lists, or the rule its dialogs.js call follows.
 export type TerminalScene = {
   front?: string;
   lands?: boolean;
   runs?: boolean;
   screen?: string;
-  dialogs?: string;
+  dialogs?: string | FakeRule;
 };
 
 export function fakeTerminal(sb: Sandbox, scene: TerminalScene = {}, sleep = SLEEP): void {
@@ -43,7 +43,14 @@ export function fakeTerminal(sb: Sandbox, scene: TerminalScene = {}, sleep = SLE
     { program: "terminal.js", args: ["contents"], shell: log("contents") + SCREEN },
     { program: "terminal.js", args: ["bottom"], shell: log("bottom") + "print bottom" },
     { program: "keys.js", args: ["--enter"], shell: TYPE },
-    ...(scene.dialogs === undefined ? [] : [{ program: "dialogs.js", stdout: scene.dialogs }]),
+    ...(scene.dialogs === undefined
+      ? []
+      : [
+          {
+            program: "dialogs.js",
+            ...(typeof scene.dialogs === "string" ? { stdout: scene.dialogs } : scene.dialogs),
+          },
+        ]),
   ]);
   sb.fake("sleep", [{ shell: sleep }]);
   sb.fake("date", [

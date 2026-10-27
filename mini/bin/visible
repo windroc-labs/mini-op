@@ -3,7 +3,8 @@ usage='visible [secs]   run a public command from stdin in Terminal; return comp
 and its original exit status (default 60 s). Command and output must contain no secrets.
 visible --collect <id>   collect a completed job without executing it again
 visible --execute <id>   internal Terminal runner, single-use
-On timeout exits 124, retains private ~/apm/state/visible/<id> and prints the collect command.
+On timeout exits 124, retains private ~/apm/state/visible/<id> and prints the collect command,
+then the mini'"'"'s dialogs (~/apm/bin/dialogs), so a blocking macOS prompt shows at once.
 Other failures exit 1; usage errors exit 2. A completed job is removed after collection.'
 usage_error() { print -u2 -r -- 'visible: usage: visible [secs] | --collect <id>'; exit 2; }
 die() { print -u2 -r -- "visible: $1"; exit 1; }
@@ -55,6 +56,12 @@ fi
 if [[ ! -e $job/rc ]]; then
   [[ $mode != run ]] || cat $job/launch.stderr >&2
   print -u2 -r -- "visible: still running or launch uncertain: $id; recover with mini exec --collect $id"
+  source ${0:A:h}/../lib/timeout.zsh || exit 124
+  if ! list=$(with_timeout 10 ~/apm/bin/dialogs </dev/null 2>/dev/null); then
+    print -u2 -r -- 'visible: cannot list dialogs'
+  elif [[ -z $list ]]; then print -u2 -r -- 'visible: no dialogs on the mini'
+  else print -u2 -r -- 'visible: dialogs on the mini:'; print -u2 -r -- "$list"
+  fi
   exit 124
 fi
 rc=$(<$job/rc)

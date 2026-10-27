@@ -25,7 +25,8 @@ pw and sudo send the mini account's password from \$(env_secrets_dir)/mini-passw
 to ssh's stdin only. Exits 0, 1 (refused or failed), 2
 (usage error), 75 (run: look now, command not finished) or 124 (a wait timed out).
 Interactive installs use at most 30 s per wait. exec returns the captured original status.
-mini exec exits 255 on SSH failure; command completion is unknown."
+mini exec exits 255 on SSH failure; command completion is unknown. A mini exec 124 (timeout or
+launch uncertain) also lists the mini's dialogs, so a blocking macOS prompt shows at once."
 source ${0:A:h}/lib/ssh.zsh
 source ${0:A:h}/lib/version.sh
 source ${0:A:h}/lib/secrets.zsh
