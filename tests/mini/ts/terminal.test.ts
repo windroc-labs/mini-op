@@ -7,8 +7,8 @@ const scene = (extra: Scene = {}): Scene => ({
   terminal: [
     {
       tabs: [
-        { history: "h0", contents: "c0" },
-        { history: "h1", contents: "c1" },
+        { history: "h0", contents: "c0", tty: "/dev/ttys000" },
+        { history: "h1", contents: "c1", tty: "/dev/ttys001" },
       ],
       selected: 1,
     },
@@ -54,6 +54,10 @@ test("history and contents read the front window's selected tab; --all reads eve
   assert.equal(jxa.call(["history", "--all"]), "h0\nh1\nh2");
 });
 
+test("tty names the front window's selected tab's tty", () => {
+  assert.equal(Jxa.source("terminal", scene()).call(["tty"]), "/dev/ttys001");
+});
+
 test("bottom presses Cmd+End", () => {
   const jxa = Jxa.source("terminal", scene());
   assert.equal(jxa.call(["bottom"]), "bottom");
@@ -67,10 +71,11 @@ test("other arguments are usage errors", () => {
     ["history", "--some"],
     ["front", "x"],
     ["contents", "--all"],
+    ["tty", "x"],
   ]) {
     assert.throws(
       () => Jxa.source("terminal", scene()).call(argv),
-      /terminal: usage: terminal activate\|front\|history \[--all\]\|contents\|bottom/,
+      /terminal: usage: terminal activate\|front\|history \[--all\]\|contents\|bottom\|tty/,
       argv.join(" "),
     );
   }
@@ -78,4 +83,5 @@ test("other arguments are usage errors", () => {
 
 test("the committed mini/js/terminal.js runs like its source", () => {
   assert.equal(Jxa.compiled("terminal", scene()).call(["history", "--all"]), "h0\nh1\nh2");
+  assert.equal(Jxa.compiled("terminal", scene()).call(["tty"]), "/dev/ttys001");
 });

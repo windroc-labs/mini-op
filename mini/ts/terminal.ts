@@ -1,8 +1,8 @@
-// terminal activate|front|history [--all]|contents|bottom: the mini's Terminal. activate hides
-// Chrome and brings Terminal to the front, failing unless it got there; history and contents read
-// the front window's selected tab (--all: every tab); bottom scrolls to the end (Cmd+End).
+// terminal activate|front|history [--all]|contents|bottom|tty: the mini's Terminal. activate hides
+// Chrome and brings Terminal to the front, failing unless it got there; history, contents and tty
+// read the front window's selected tab (--all: every tab); bottom scrolls to the end (Cmd+End).
 
-const USAGE = "usage: terminal activate|front|history [--all]|contents|bottom";
+const USAGE = "usage: terminal activate|front|history [--all]|contents|bottom|tty";
 
 function fail(message: string): never {
   throw new Error(`terminal: ${message}`);
@@ -45,6 +45,8 @@ function run(argv: string[]): string {
       return front().history();
     case "contents":
       return front().contents();
+    case "tty":
+      return front().tty();
     case "bottom":
       se.keyCode(119, { using: "command down" });
       return "bottom";

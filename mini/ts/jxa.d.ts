@@ -49,6 +49,7 @@ interface JxaSystemEvents {
 interface JxaTerminalTab {
   history(): string;
   contents(): string;
+  tty(): string;
 }
 
 interface JxaTerminalWindow {

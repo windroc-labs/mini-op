@@ -25,6 +25,7 @@ export type Tab = {
   url?: string;
   history?: string;
   contents?: string;
+  tty?: string;
   javascript?: string[];
   javascriptError?: string;
 };
@@ -248,7 +249,11 @@ export class Jxa {
   }
 
   private terminal(): object {
-    const tab = (t: Tab) => ({ history: () => t.history ?? "", contents: () => t.contents ?? "" });
+    const tab = (t: Tab) => ({
+      history: () => t.history ?? "",
+      contents: () => t.contents ?? "",
+      tty: () => t.tty ?? "",
+    });
     return {
       activate: () => this.activate("Terminal"),
       windows: elements(() =>
