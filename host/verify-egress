@@ -2,8 +2,9 @@
 set -uo pipefail
 usage="verify-egress   after host/start, check the direct-use broker container selected by
 windroc.lock=mini-op and windroc.lock.owner=mini-op. Prints only two PASS/FAIL rows: claude -p
-answers, and ssh mini echo ok. Replies and command errors are not printed. Network blocking
-checks belong to egress. Exits 0, 1 (missing/ambiguous session or failed check), or 2 (usage)."
+answers (run through with-secrets --client claude), and ssh mini echo ok. Replies and command
+errors are not printed. Network blocking checks belong to egress. Exits 0, 1 (missing/ambiguous
+session or failed check), or 2 (usage)."
 case $#:${1-} in
   0:) ;;
   1:-h | 1:--help)
@@ -32,7 +33,9 @@ row() {
 }
 in_op() { docker exec "$ids" "$@" 2>/dev/null; }
 
-reply=$(in_op timeout 120 claude -p 'Reply with exactly: ok' </dev/null) && rc=0 || rc=$?
+# The broker hands the Claude token only to a client started through with-secrets.
+reply=$(in_op with-secrets --client claude timeout 120 claude -p 'Reply with exactly: ok' \
+  </dev/null) && rc=0 || rc=$?
 reply=$(printf '%s' "$reply" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
 [[ $rc == 0 && ${reply%.} == ok ]] && r=PASS || r=FAIL
 row "claude -p answers" "$r"

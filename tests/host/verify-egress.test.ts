@@ -14,7 +14,21 @@ const PS = [
   "--filter",
   "label=windroc.lock.owner=mini-op",
 ];
-const CLAUDE = ["exec", ID, "timeout", "120", "claude", "-p", "Reply with exactly: ok"];
+const PROMPT = "Reply with exactly: ok";
+// The broker hands the Claude token only to a client started through with-secrets.
+const CLAUDE = [
+  "exec",
+  ID,
+  "with-secrets",
+  "--client",
+  "claude",
+  "timeout",
+  "120",
+  "claude",
+  "-p",
+  PROMPT,
+];
+const BARE_CLAUDE = ["exec", ID, "timeout", "120", "claude", "-p", PROMPT];
 const SSH = [
   "exec",
   ID,
@@ -96,6 +110,16 @@ test("a failed command or wrong reply fails just its row without exposing replie
       assert.ok(!r.stdout.includes("private"));
     }
   }
+});
+
+test("Claude without with-secrets never counts as an answer", async (t) => {
+  const { sb, r } = await verify(t, [
+    { argv: CLAUDE, stdout: "Not logged in\n", exit: 1 },
+    { argv: BARE_CLAUDE, stdout: "ok\n" },
+  ]);
+  assert.equal(r.code, 1);
+  assert.match(r.stdout.trim().split("\n")[0]!, /^claude -p answers\s+\| FAIL$/);
+  assert.ok(!sb.calls("docker").some((c) => c.argv.join(" ") === BARE_CLAUDE.join(" ")));
 });
 
 test("an uppercase Claude OK. reply passes", async (t) => {
