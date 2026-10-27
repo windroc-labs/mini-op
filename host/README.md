@@ -52,7 +52,7 @@ After start, on this Mac:
 host/verify-egress
 ```
 
-Only `claude -p` and read-only `ssh mini echo ok` are checked, in the running container with both `windroc.lock=mini-op` and `windroc.lock.owner=mini-op`. Both rows must PASS. It never enters a `verifier` owner's container; no direct-use session means an error pointing to `host/start`. Network blocking checks belong to egress.
+Only `claude -p` and read-only `ssh mini echo ok` are checked, in the running container with both `windroc.lock=mini-op` and `windroc.lock.owner=mini-op`. `claude -p` runs through `with-secrets --client claude`, the only client the broker hands the Claude token to. Both rows must PASS. It never enters a `verifier` owner's container; no direct-use session means an error pointing to `host/start`. Network blocking checks belong to egress.
 
 | Action | Command on this Mac |
 | --- | --- |
