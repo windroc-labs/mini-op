@@ -1,7 +1,8 @@
 #!/usr/bin/env zsh
 usage="ans [secs] [--to <id>] [--until-input]   type stdin into the Terminal + Enter, then termwait
 (default 60 s; --until-input: termwait --until-input, which returns 75 at the first prompt or
-SecurityAgent dialog instead of after 3 s idle)
+SecurityAgent dialog instead of after 3 s idle; with --to, the screen's last 3 nonblank lines before
+typing go to ~/apm/state/answered/<id>, so this and later waits skip the question just answered)
 A command is typed as \`{ <stdin>\`, a newline, then \`}; printf '%s\\n' \$? > <marker>.tmp && mv -f
 <marker>.tmp <marker>\`, the marker ~/apm/state/done/<id> with a new <id>, so termwait ends when it
 ends; trailing newlines are dropped, and an unbalanced \`}\` in stdin closes the group early: no
@@ -50,6 +51,12 @@ before=$(hist) || {
   killed 5 'reading Terminal; typed nothing'
   print -u2 -r -- 'ans: cannot read Terminal; typed nothing'; exit 1
 }
+if (( answer && $#until )); then
+  answered=~/apm/state/answered
+  mkdir -p $answered && for f in $answered/<->-<->-<->(N.mh+24); do rm -f -- "${f:?}"; done
+  rm -f -- "${answered:?}/${id:?}"
+  last=$(~/apm/bin/termtail 3 2>/dev/null) && (umask 077; print -r -- "$last" > $answered/$id)
+fi
 keys=(osascript -l JavaScript ~/apm/js/keys.js --enter)
 if (( answer )) && [[ -n $input && $input != $'\n' && $input != $'\r\n' ]]; then keys+=(--secret); fi
 print -rn -- "$text" | with_timeout 15 $keys >/dev/null || {

@@ -344,7 +344,7 @@ test("--until-input reaches termwait for new commands and --to answers", async (
 });
 
 test("--to --until-input does not re-report the question it just answered with Enter", async (t) => {
-  const { r } = await ans(t, "\n", ["3", "--to", "1761200000-4242-17", "--until-input"], {
+  const { sb, r } = await ans(t, "\n", ["3", "--to", "1761200000-4242-17", "--until-input"], {
     runs: false,
     lands: false,
     screen: "Proceed? [Y/n] ",
@@ -352,6 +352,19 @@ test("--to --until-input does not re-report the question it just answered with E
   });
   assert.equal(r.code, 124, r.stderr);
   assert.match(r.stderr, /termwait: still running: 1761200000-4242-17 \(after 3 s\)/);
+  const file = path.join(sb.home, "apm/state/answered/1761200000-4242-17");
+  assert.equal(fs.readFileSync(file, "utf8"), "Proceed? [Y/n] \n");
+  assert.equal(fs.statSync(file).mode & 0o077, 0);
+});
+
+test("only --to --until-input records the answered screen", async (t) => {
+  for (const args of [
+    ["3", "--until-input"],
+    ["3", "--to", "1761200000-4242-17"],
+  ]) {
+    const { sb } = await ans(t, "echo hi\n", args, { runs: false, dialogs: "" });
+    assert.ok(!fs.existsSync(path.join(sb.home, "apm/state/answered")), args.join(" "));
+  }
 });
 
 test("bad arguments and empty commands are refused before typing", async (t) => {

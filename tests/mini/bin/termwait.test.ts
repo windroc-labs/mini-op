@@ -267,8 +267,7 @@ test("-h prints the usage to stdout and touches nothing", async (t) => {
 });
 
 // --until-input scenes: the screen, the front tab's tty, its stty modes and the dialogs listing.
-// The fake clock starts at ID's epoch plus the scene's age (0: ans's own wait for a command it just
-// typed). A file named <name>.<n> wins over <name> once n seconds have passed.
+// A file named <name>.<n> wins over <name> once n seconds have passed.
 const AT = (name: string) =>
   `f=$FAKE_DIR/${name}.$(( $(cat "$FAKE_DIR/clock") - $(cat "$FAKE_DIR/start") )); [[ -e $f ]] || f=$FAKE_DIR/${name}`;
 const TTY = "/dev/ttys001";
@@ -281,7 +280,8 @@ type Scene = {
   // "FAIL" at a second makes that second's read fail.
   dialogs?: Record<string, string> | null;
   finish?: string;
-  age?: number;
+  // the last 3 nonblank lines ans --to recorded when it answered
+  answered?: string;
   // seconds after which the screen changes to this text
   later?: [number, string];
 };
@@ -290,8 +290,11 @@ async function inputSandbox(t: Parameters<typeof Sandbox.create>[0]) {
   const { sb, done } = await sandbox(t);
   const wait = async (args: string[], scene: Scene = {}) => {
     fakeTerminal(sb, { screen: scene.screen ?? "mini ~ % " }, FINISHING_SLEEP);
-    const start = String(Number(ID.split("-")[0]) + (scene.age ?? 0));
-    for (const name of ["clock", "start"]) fs.writeFileSync(path.join(sb.dir, name), start);
+    for (const name of ["clock", "start"]) fs.writeFileSync(path.join(sb.dir, name), "0");
+    if (scene.answered !== undefined) {
+      fs.mkdirSync(path.join(sb.home, "apm/state/answered"), { recursive: true });
+      fs.writeFileSync(path.join(sb.home, "apm/state/answered", ID), `${scene.answered}\n`);
+    }
     if (scene.later)
       fs.writeFileSync(path.join(sb.dir, `screen.${scene.later[0]}`), scene.later[1]);
     if (scene.finish !== undefined) fs.writeFileSync(path.join(sb.dir, "finish"), scene.finish);
@@ -500,29 +503,42 @@ test("--until-input never returns the idle 75", async (t) => {
   assert.equal(sleeps(sb).length, 5);
 });
 
-test("--until-input: a question on screen when a later wait starts counts once the screen changes", async (t) => {
+test("--until-input: the question ans --to answered is no event until the screen changes", async (t) => {
   const answered = await inputSandbox(t);
   const r = await answered.wait(["3", "--after", ID, "--until-input"], {
-    screen: "Proceed? [Y/n] ",
-    age: 100,
+    screen: "Installing\n\nProceed? [Y/n] \n\n",
+    answered: "Installing\nProceed? [Y/n] ",
   });
   assert.equal(r.code, 124, r.stderr);
   assert.equal(r.stderr, STILL(3));
   const { sb, wait } = await inputSandbox(t);
   const next = await wait(["30", "--after", ID, "--until-input"], {
-    screen: "Proceed? [Y/n] ",
-    age: 100,
-    later: [2, "Proceed? [Y/n] \nInstalling\nOverwrite config? [y/N] "],
+    screen: "Installing\nProceed? [Y/n] ",
+    answered: "Installing\nProceed? [Y/n] ",
+    later: [2, "Proceed? [Y/n] \nProceed? [Y/n] "],
   });
   assert.equal(next.code, 75, next.stderr);
   assert.equal(next.stderr, PROMPT);
   assert.deepEqual(sleeps(sb), ["1", "1"]);
 });
 
+test("--until-input: a next question already up at the first read returns 75 at once", async (t) => {
+  for (const answered of ["Proceed? [y/N] ", undefined]) {
+    const { sb, wait } = await inputSandbox(t);
+    const r = await wait(["30", "--after", ID, "--until-input"], {
+      screen: "Proceed? [y/N] y\nOverwrite config? [y/N] ",
+      ...(answered === undefined ? {} : { answered }),
+    });
+    assert.equal(r.code, 75, r.stderr);
+    assert.equal(r.stderr, PROMPT);
+    assert.deepEqual(sleeps(sb), []);
+  }
+});
+
 test("--until-input: a 1 s recheck still reads the prompt after slow reads", async (t) => {
   const { sb, wait } = await inputSandbox(t);
   fs.writeFileSync(path.join(sb.dir, "slow"), "");
-  const r = await wait(["1", "--after", ID, "--until-input"], { screen: "Password:", age: 30 });
+  const r = await wait(["1", "--after", ID, "--until-input"], { screen: "Password:" });
   assert.equal(r.code, 75, r.stderr);
   assert.equal(r.stderr, PASSWORD);
 });
