@@ -17,7 +17,7 @@ Replace `<root>` with that verified absolute path in every call, quote paths as 
 
 ## Run
 
-1. Read the runtime operator rules (`<root>/ctl/CLAUDE.md` in a checkout, `<root>/CLAUDE.md` in the image) and follow its hard rules and routes. Then read these sections of `<root>/README.md`: Rules, Driving the mini (with Browser and Waiting and answering), Scripts and Gotchas. The paths they name are relative to `<root>/`.
+1. Read the runtime operator rules (`<root>/ctl/CLAUDE.md` in a checkout, `<root>/CLAUDE.md` in the image) and follow its hard rules and routes. Then read these sections of `<root>/README.md`: Rules, Driving the mini (with Browser and Waiting and answering), Scripts and Gotchas. The paths they name are relative to `<root>/`. Work visibly per `<root>/runbooks/visible-operations.md`: a session you start on the mini, even with `--display none`, is attached in its Terminal before you send it work.
 2. Run `<root>/ctl/mini sync --check`; if it fails, run `<root>/ctl/mini sync`.
 3. Call mini-op's tools only by their absolute path under `<root>/ctl/`, never by a bare name, a path relative to the working directory or a file in the home directory.
 4. Find the runbook. The first of these that gives one wins:
