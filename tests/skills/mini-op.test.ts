@@ -45,7 +45,14 @@ test("the skill discovers and verifies a separate absolute runtime root", () => 
   assert.match(text, /retain the client's current project directory/);
   assert.match(text, /separately installed mini-op CLI/);
   assert.match(text, /never by a bare name/);
-  for (const named of ["ctl/mini", "ctl/runbook", "README.md", "mini/", "runbooks/", "runbooks/visible-operations.md"]) {
+  for (const named of [
+    "ctl/mini",
+    "ctl/runbook",
+    "README.md",
+    "mini/",
+    "runbooks/",
+    "runbooks/visible-operations.md",
+  ]) {
     assert.ok(text.includes(ROOT + named), named);
     assert.ok(fs.existsSync(path.join(REPO, named)), named);
   }
