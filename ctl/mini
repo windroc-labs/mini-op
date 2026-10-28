@@ -10,7 +10,9 @@ mini run [secs] [--to <id>] [--until-input]
 mini pw [--lock | --sa | --settings]
                               type the mini account's password into the mini's front Terminal, its
                               lock screen (only while locked), its SecurityAgent dialog (one
-                              focused secure field; Allow once the field holds the whole password)
+                              focused secure field; Allow once the field holds the whole password;
+                              a repeat dialog within 5 s gets the same, at most 2 in all; stdout
+                              says how many)
                               or a System Settings password sheet (macOS 26+; System Settings
                               frontmost, its focused field secure; OK once it holds the password)
 mini sudo <command> [args]    run <command> with sudo on the mini (stdin /dev/null); mini sudo -v
@@ -156,7 +158,7 @@ pw_mini() {
   file=$(password_file pw 'typed nothing') || exit 1
   case $1 in
     --lock) on_mini pw "$lock" < $file ;;
-    --sa) step=$(timed pw 25 'typing the password' "$keys --front SecurityAgent --secret --verify-field") ;;
+    --sa) step=$(timed pw 40 'typing the password' "$keys --front SecurityAgent --secret --verify-field") ;;
     --settings) step=$(timed pw 25 'typing the password' "$keys --front SettingsSheet --secret --verify-field") ;;
     *) step=$(timed pw 15 'typing the password' "$keys --front Terminal --secret --enter") ;;
   esac
