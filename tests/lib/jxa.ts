@@ -40,6 +40,10 @@ export type Scene = {
   stdin?: string;
   // keystroke() throws an Error with this message.
   keystrokeError?: string;
+  // Change the scene as a dialog button is clicked or time passes (a dialog closing, another
+  // opening).
+  onClick?: (button: string, scene: Scene) => void;
+  onDelay?: (seconds: number, scene: Scene) => void;
 };
 
 export type JxaEvent =
@@ -181,7 +185,10 @@ export class Jxa {
         () =>
           (w.buttons ?? []).map((button) => ({
             name: () => button,
-            click: () => harness.events.push({ type: "click", process: p.name, button }),
+            click: () => {
+              harness.events.push({ type: "click", process: p.name, button });
+              harness.scene.onClick?.(button, harness.scene);
+            },
           })),
         (name) => {
           throw new Error(`Can't get button "${name}".`);
@@ -328,7 +335,10 @@ export class Jxa {
         if (!app) throw new Error(`the harness has no application ${name}`);
         return app();
       },
-      delay: (seconds: number) => this.delays.push(seconds),
+      delay: (seconds: number) => {
+        this.delays.push(seconds);
+        scene.onDelay?.(seconds, scene);
+      },
       ObjC: {
         import: (framework: string) => this.imports.push(framework),
         unwrap: (value: { string?: string }) => value.string,

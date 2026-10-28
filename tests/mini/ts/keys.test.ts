@@ -2,25 +2,43 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "node:test";
-import { Jxa, type Field, type Scene } from "../../lib/jxa.ts";
+import { Jxa, type Field, type Process, type Scene, type Window } from "../../lib/jxa.ts";
 import { REPO } from "../../lib/repo.ts";
 
 const SECRET = "canary-keys-7f3a";
 const keys = (scene: Scene) => Jxa.source("keys", scene);
 
+const dialog = (field: Field): Window => ({
+  buttons: ["Always Allow", "Deny", "Allow"],
+  fields: [{ subrole: "AXSecureTextField", ...field }],
+});
+
 function agent(field: Field, front = "SecurityAgent"): Scene {
-  return {
-    front,
-    processes: [
-      {
-        name: "SecurityAgent",
-        windows: [
-          { buttons: ["Cancel", "Allow"], fields: [{ subrole: "AXSecureTextField", ...field }] },
-        ],
-      },
-    ],
-  };
+  return { front, processes: [{ name: "SecurityAgent", windows: [dialog(field)] }] };
 }
+
+// A SecurityAgent that asks `asks` times in a row: each click closes its dialog and, on the next
+// delay, the next one opens with `next` as its field.
+function asking(asks: number, next: Field = { focused: true }): Scene {
+  const scene = agent({ focused: true });
+  const sa = scene.processes?.[0] as Process;
+  let left = asks - 1;
+  let opening = false;
+  scene.onClick = () => {
+    sa.windows = [];
+    opening = left > 0;
+  };
+  scene.onDelay = () => {
+    if (!opening) return;
+    opening = false;
+    left--;
+    sa.windows = [dialog({ ...next })];
+  };
+  return scene;
+}
+
+const SA = ["--front", "SecurityAgent", "--secret", "--verify-field"];
+const ALLOW = { type: "click", process: "SecurityAgent", button: "Allow" };
 
 const clicks = (jxa: Jxa) => jxa.events.filter((e) => e.type === "click");
 const presses = (jxa: Jxa) =>
@@ -95,15 +113,64 @@ test("--front Chrome types only while Google Chrome is frontmost, activating not
 });
 
 test("SecurityAgent success types one character, then the rest, then clicks Allow once", () => {
-  const jxa = keys({ ...agent({ focused: true }), stdin: `${SECRET}\n` });
-  const r = jxa.osascript(["--front", "SecurityAgent", "--secret", "--verify-field"]);
+  const jxa = keys({ ...asking(1), stdin: `${SECRET}\n` });
+  const r = jxa.osascript(SA);
   assert.equal(r.code, 0, r.stderr);
-  assert.equal(r.stdout, `keys: typed the secret (${SECRET.length} characters); clicked Allow\n`);
+  assert.equal(
+    r.stdout,
+    `keys: typed the secret (${SECRET.length} characters); clicked Allow; answered 1 SecurityAgent dialog\n`,
+  );
   assert.deepEqual(
     presses(jxa).map((e) => (e.type === "keystroke" ? e.text.length : -1)),
     [1, SECRET.length - 1],
   );
-  assert.deepEqual(clicks(jxa), [{ type: "click", process: "SecurityAgent", button: "Allow" }]);
+  assert.deepEqual(clicks(jxa), [ALLOW]);
+  assert.deepEqual(jxa.delays.slice(2), Array(10).fill(0.5), "waits 5 s for a repeat");
+});
+
+test("a repeat SecurityAgent dialog gets the same answer, and a third does not", () => {
+  for (const asks of [2, 3]) {
+    const jxa = keys({ ...asking(asks), stdin: `${SECRET}\n` });
+    const r = jxa.osascript(SA);
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(
+      r.stdout,
+      `keys: typed the secret (${SECRET.length} characters); clicked Allow; answered 2 SecurityAgent dialogs\n`,
+    );
+    assert.equal(jxa.typed(), SECRET + SECRET);
+    assert.deepEqual(clicks(jxa), [ALLOW, ALLOW]);
+  }
+});
+
+test("a dialog still up after Allow, or a repeat it cannot fill, stops without typing more", () => {
+  const up = keys({ ...agent({ focused: true }), stdin: SECRET });
+  const r = up.osascript(SA);
+  assert.equal(r.code, 1);
+  assert.match(
+    r.stderr,
+    /keys: SecurityAgent dialog still up 5 s after Allow \(answered 1\); typed no more/,
+  );
+  assert.equal(up.typed(), SECRET);
+  assert.deepEqual(clicks(up), [ALLOW]);
+  const short = keys({ ...asking(2, { focused: true, accepts: 3 }), stdin: SECRET });
+  const s = short.osascript(SA);
+  assert.equal(s.code, 1);
+  assert.match(
+    s.stderr,
+    new RegExp(
+      `keys: answered 1 SecurityAgent dialog; the repeat: field has 3 characters, expected ${SECRET.length}; did not click Allow`,
+    ),
+  );
+  assert.ok(!(s.stdout + s.stderr).includes(SECRET));
+  assert.deepEqual(clicks(short), [ALLOW]);
+});
+
+test("a repeat dialog without its focused secure field is not answered", () => {
+  const jxa = keys({ ...asking(2, { focused: false }), stdin: SECRET });
+  const value = jxa.call(SA);
+  assert.match(String(value), /; answered 1 SecurityAgent dialog$/);
+  assert.equal(jxa.typed(), SECRET);
+  assert.deepEqual(clicks(jxa), [ALLOW]);
 });
 
 test("--verify-field length mismatch does not click Allow", () => {
@@ -248,6 +315,15 @@ test("only keys and private browser auth read stdin", () => {
       fs.readFileSync(path.join(dir, f), "utf8").includes("fileHandleWithStandardInput"),
     );
   assert.deepEqual(readers, ["chrome.ts", "keys.ts"]);
+});
+
+test("the committed mini/js/keys.js answers a repeat SecurityAgent dialog like its source", () => {
+  const jxa = Jxa.compiled("keys", { ...asking(2), stdin: "pw" });
+  const value = jxa.call(SA);
+  assert.equal(
+    value,
+    "keys: typed the secret (2 characters); clicked Allow; answered 2 SecurityAgent dialogs",
+  );
 });
 
 test("the committed mini/js/keys.js runs like its source", () => {

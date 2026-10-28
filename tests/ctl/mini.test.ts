@@ -387,13 +387,13 @@ test("pw types the password into the Terminal from stdin only", async (t) => {
   onlyOnStdin(sb, r);
 });
 
-test("pw --sa types into SecurityAgent with --verify-field", async (t) => {
-  const sb = await sandbox(t, [
-    { program: "keys.js", stdout: "keys: typed the secret (12 characters); clicked Allow\n" },
-  ]);
+test("pw --sa types into SecurityAgent with --verify-field and reports the dialogs", async (t) => {
+  const answered =
+    "keys: typed the secret (12 characters); clicked Allow; answered 2 SecurityAgent dialogs\n";
+  const sb = await sandbox(t, [{ program: "keys.js", stdout: answered }]);
   const r = await sb.run(["zsh", MINI, "pw", "--sa"]);
   assert.equal(r.code, 0, r.stderr);
-  assert.equal(r.stdout, "keys: typed the secret (12 characters); clicked Allow\n");
+  assert.equal(r.stdout, answered);
   const keys = sb.calls("osascript");
   assert.deepEqual(
     keys.map((c) => c.argv.slice(-4)),
@@ -486,7 +486,7 @@ test("pw --lock exits 1 while still locked", async (t) => {
 test("pw's typing that runs out of time exits 124 with its killed line", async (t) => {
   for (const [args, secs] of [
     [["pw"], 15],
-    [["pw", "--sa"], 25],
+    [["pw", "--sa"], 40],
     [["pw", "--settings"], 25],
     [["pw", "--lock"], 15],
   ] as const) {
